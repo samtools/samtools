@@ -763,75 +763,35 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_n
 }
 
 
-/* Get the position of the coordinates from the read name. */
-static inline int get_coordinate_positions_colons(const char *qname, int *xpos, int *ypos) {
+/* Get coordinates from the standard Illumina style read names.
+   Returned values are of the x and y coordinates and a section of
+   the read name to test (t) for string equality e.g. lane and tile part. */
+
+static int get_coordinates_colons(md_param_t *param, const char *qname, int *t_beg, int *t_end, long *x_coord, long *y_coord, long *warnings) {
     int sep = 0;
     int pos = 0;
+    int xpos = 0, ypos = 0;
+    char *end;
 
     while (qname[pos]) {
         if (qname[pos] == ':') {
             sep++;
 
             if (sep == 2) {
-                *xpos = pos + 1;
+                xpos = pos + 1;
             } else if (sep == 3) {
-                *ypos = pos + 1;
+                ypos = pos + 1;
             } else if (sep == 4) { // HiSeq style names
-                *xpos = *ypos;
-                *ypos = pos + 1;
+                xpos = ypos;
+                ypos = pos + 1;
             } else if (sep == 5) { // Newer Illumina format
-                *xpos = pos + 1;
+                xpos = pos + 1;
             } else if (sep == 6) {
-                *ypos = pos + 1;
+                ypos = pos + 1;
             }
         }
 
         pos++;
-    }
-
-    return sep;
-}
-
-/* Get the position of the coordinates from the read name.
-   Positions returned are of the x and y coordinate and an optional section of
-   the read name to test (t) for string equality e.g. lane and tile part. */
-static inline int get_coordinate_positions_regex(md_param_t *param, const char *qname, int *t_beg, int *t_end, int *xpos, int *ypos) {
-    regmatch_t matches[5];
-    size_t max_matches = 5;
-
-    if (!param->rgx_t)
-        max_matches = 4;
-
-    if (regexec(param->rgx, qname, max_matches, matches, 0))
-        return -1;
-
-    *xpos = matches[param->rgx_x].rm_so;
-    *ypos = matches[param->rgx_y].rm_so;
-
-    if (param->rgx_t) {
-        *t_beg = matches[param->rgx_t].rm_so;
-        *t_end = matches[param->rgx_t].rm_eo;
-    } else {
-        *t_beg = *t_end = 0;
-    }
-
-    if (*xpos == -1 || *ypos == -1 || *t_beg == -1)
-        return -1;
-
-    return 7; // 3, 4, 6 and 7 are successes in the previous function
-}
-
-
-static int get_coordinate_positions(md_param_t *param, const char *qname, int *beg, int *end, int *xpos, int *ypos, long *warnings) {
-    int ret = 0;
-    int seps;
-
-    if (param->rgx == NULL) {
-        seps = get_coordinate_positions_colons(qname, xpos, ypos);
-        *beg = 0;
-        *end = *xpos;
-    } else {
-        seps = get_coordinate_positions_regex(param, qname, beg, end, xpos, ypos);
     }
 
     /* The most current Illumina read format at time of writing is:
@@ -842,111 +802,166 @@ static int get_coordinate_positions(md_param_t *param, const char *qname, int *b
        Older name formats have fewer elements.
     */
 
-    if (!(seps == 3 || seps == 4 || seps == 6 || seps == 7)) {
+    if (!(sep == 3 || sep == 4 || sep == 6 || sep == 7)) {
         (*warnings)++;
 
         if (*warnings <= BMD_WARNING_MAX) {
             fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", qname);
         }
 
-        ret = 1;
+        return 1;
+    } else {
+        *x_coord = strtol(qname + xpos, &end, 10);
+
+        if ((qname + xpos) == end) {
+            (*warnings)++;
+
+            if (*warnings <= BMD_WARNING_MAX) {
+                fprintf(stderr, "[markdup] warning: cannot decipher x coordinate in %s .\n", qname);
+            }
+
+            return 1;
+        }
+
+        *y_coord = strtol(qname + ypos, &end, 10);
+
+        if ((qname + ypos) == end) {
+            (*warnings)++;
+
+            if (*warnings <= BMD_WARNING_MAX) {
+                fprintf(stderr, "[markdup] warning: cannot decipher y coordinate in %s .\n", qname);
+            }
+
+            return 1;
+        }
+
+        *t_beg = 0;
+        *t_end = xpos;
     }
 
-    return ret;
+    return 0;
+}
+
+/* Get the coordinates from the read name.
+   Returned values are of the x and y coordinates and an optional section of
+   the read name to test (t) for string equality e.g. lane and tile part. */
+
+static inline int get_coordinates_regex(md_param_t *param, const char *qname, int *t_beg, int *t_end, long *x_coord, long *y_coord, long *warnings) {
+    regmatch_t matches[5];
+    size_t max_matches = 5;
+    int xpos, ypos, xend, yend, xlen, ylen;
+    char coord[255];
+    char *end;
+
+    if (!param->rgx_t)
+        max_matches = 4;
+
+    if (regexec(param->rgx, qname, max_matches, matches, 0))
+        return -1;
+
+    xpos = matches[param->rgx_x].rm_so;
+    ypos = matches[param->rgx_y].rm_so;
+
+    if (param->rgx_t) {
+        *t_beg = matches[param->rgx_t].rm_so;
+        *t_end = matches[param->rgx_t].rm_eo;
+    } else {
+        *t_beg = *t_end = 0;
+    }
+
+    if (xpos == -1 || ypos == -1 || *t_beg == -1)
+        return -1;
+
+    xend = matches[param->rgx_x].rm_eo;
+    yend = matches[param->rgx_y].rm_eo;
+
+    if ((xlen = xend - xpos) > 254) {
+        (*warnings)++;
+
+        if (*warnings <= BMD_WARNING_MAX) {
+            fprintf(stderr, "[markdup] warning: x coordinate string longer than allowed qname length in %s (%d long).\n", qname, xlen);
+        }
+
+        return 1;
+    }
+
+    strncpy(coord, qname + xpos, xlen);
+    coord[xlen] = '\0';
+    *x_coord = strtol(coord, &end, 10);
+
+    if (coord == end) {
+        (*warnings)++;
+
+        if (*warnings <= BMD_WARNING_MAX) {
+            fprintf(stderr, "[markdup] warning: cannot decipher x coordinate in %s (%s).\n", qname, coord);
+        }
+
+        return 1;
+    }
+
+    if ((ylen = yend - ypos) > 254) {
+        (*warnings)++;
+
+        if (*warnings <= BMD_WARNING_MAX) {
+            fprintf(stderr, "[markdup] warning: y coordinate string longer than allowed qname length in %s (%d long).\n", qname, ylen);
+        }
+
+        return 1;
+    }
+
+    strncpy(coord, qname + ypos, ylen);
+    coord[ylen] = '\0';
+    *y_coord = strtol(coord, &end, 10);
+
+    if (coord == end) {
+        (*warnings)++;
+
+        if (*warnings <= BMD_WARNING_MAX) {
+            fprintf(stderr, "[markdup] warning: cannot decipher y coordinate in %s (%s).\n", qname, coord);
+        }
+
+        return 1;
+    }
+
+    return 0;
 }
 
 
 static int get_coordinates(md_param_t *param, const char *name, int *t_beg, int *t_end, long *x_coord, long *y_coord, long *warnings) {
     int ret = 1;
-    int xpos = 0, ypos = 0;
-    long x = 0, y = 0;
-    char *end;
 
-    if (get_coordinate_positions(param, name, t_beg, t_end, &xpos, &ypos, warnings)) {
-        return ret;
+    if (param->rgx == NULL) {
+        ret = get_coordinates_colons(param, name, t_beg, t_end, x_coord, y_coord, warnings);
+    } else {
+        ret = get_coordinates_regex(param, name, t_beg, t_end, x_coord, y_coord, warnings);
     }
-
-    x = strtol(name + xpos, &end, 10);
-
-    if ((name + xpos) == end) {
-        (*warnings)++;
-
-        if (*warnings <= BMD_WARNING_MAX) {
-            fprintf(stderr, "[markdup] warning: can not decipher X coordinate in %s .\n", name);
-        }
-
-        return ret;
-    }
-
-    y = strtol(name + ypos, &end, 10);
-
-    if ((name + ypos) == end) {
-        (*warnings)++;
-
-        if (*warnings <= BMD_WARNING_MAX) {
-            fprintf(stderr, "[markdup] warning: can not decipher y coordinate in %s .\n", name);
-        }
-
-        return ret;
-    }
-
-    *x_coord = x;
-    *y_coord = y;
-    ret = 0;
 
     return ret;
 }
 
 
-/* Using the coordinates from the Illumina read name, see whether the duplicated read is
+/* Using the coordinates from the read name, see whether the duplicated read is
    close enough (set by max_dist) to the original to be counted as optical.*/
 
-static int optical_duplicate(md_param_t *param, bam1_t *ori, bam1_t *dup, long max_dist, long *warnings) {
+static int is_optical_duplicate(md_param_t *param, bam1_t *ori, bam1_t *dup, long max_dist, long *warnings) {
     int ret = 0;
     char *original, *duplicate;
-    int oxpos = 0, oypos = 0, dxpos = 0, dypos = 0;
+    long ox, oy, dx, dy;
     int o_beg = 0, o_end = 0, d_beg = 0, d_end = 0;
-
 
     original  = bam_get_qname(ori);
     duplicate = bam_get_qname(dup);
 
-    if (get_coordinate_positions(param, original, &o_beg, &o_end, &oxpos, &oypos, warnings)) {
+    if (get_coordinates(param, original, &o_beg, &o_end, &ox, &oy, warnings)) {
         return ret;
     }
 
-    if (get_coordinate_positions(param, duplicate, &d_beg, &d_end, &dxpos, &dypos, warnings)) {
+    if (get_coordinates(param, duplicate, &d_beg, &d_end, &dx, &dy, warnings)) {
         return ret;
     }
 
     if (strncmp(original + o_beg, duplicate + d_beg, o_end - o_beg) == 0) {
-        // the initial parts match, look at the numbers
-        long ox, oy, dx, dy, xdiff, ydiff;
-        char *end;
-
-        ox = strtol(original + oxpos, &end, 10);
-
-        if ((original + oxpos) == end) {
-            (*warnings)++;
-
-            if (*warnings <= BMD_WARNING_MAX) {
-                fprintf(stderr, "[markdup] warning: can not decipher X coordinate in %s .\n", original);
-            }
-
-            return ret;
-        }
-
-        dx = strtol(duplicate + dxpos, &end, 10);
-
-        if ((duplicate + dxpos) == end) {
-            (*warnings)++;
-
-            if (*warnings <= BMD_WARNING_MAX) {
-                fprintf(stderr, "[markdup] warning: can not decipher X coordinate in %s.\n", duplicate);
-            }
-
-            return ret;
-        }
+        long xdiff, ydiff;
 
         if (ox > dx) {
             xdiff = ox - dx;
@@ -956,30 +971,6 @@ static int optical_duplicate(md_param_t *param, bam1_t *ori, bam1_t *dup, long m
 
         if (xdiff <= max_dist) {
             // still might be optical
-
-            oy = strtol(original + oypos, &end, 10);
-
-            if ((original + oypos) == end) {
-                (*warnings)++;
-
-                if (*warnings <= BMD_WARNING_MAX) {
-                    fprintf(stderr, "[markdup] warning: can not decipher Y coordinate in %s.\n", original);
-                }
-
-                return ret;
-            }
-
-            dy = strtol(duplicate + dypos, &end, 10);
-
-            if ((duplicate + dypos) == end) {
-                (*warnings)++;
-
-                if (*warnings <= BMD_WARNING_MAX) {
-                    fprintf(stderr, "[markdup] warning: can not decipher Y coordinate in %s.\n", duplicate);
-                }
-
-                return ret;
-            }
 
             if (oy > dy) {
                 ydiff = oy - dy;
@@ -1060,7 +1051,7 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
     }
 
     if (param->opt_dist) { // mark optical duplicates
-        if (optical_duplicate(param, ori, dup, param->opt_dist, warn)) {
+        if (is_optical_duplicate(param, ori, dup, param->opt_dist, warn)) {
             bam_aux_update_str(dup, "dt", 3, "SQ");
             dup_type = 'O';
             (*optical)++;
