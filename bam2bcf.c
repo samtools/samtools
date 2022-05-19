@@ -73,12 +73,12 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
     if (ref_base >= 0) {
         is_indel = 0;
     } else is_indel = 1;
-    if (_n == 0) return -1;
+    if (_n <= 0) return -1;
     // enlarge the bases array if necessary
     if (bca->max_bases < _n) {
         bca->max_bases = _n;
         kroundup32(bca->max_bases);
-        bca->bases = (uint16_t*)realloc(bca->bases, 2 * bca->max_bases);
+        bca->bases = (uint16_t*)realloc(bca->bases, 2 * (size_t) bca->max_bases);
     }
     // fill the bases array
     for (i = n = 0; i < _n; ++i) {
