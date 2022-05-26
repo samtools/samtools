@@ -937,11 +937,47 @@ block compression.
 CRAM output only; defaults to 0 (off).  Permits use of lzma in CRAM
 block compression.
 .TP
+.BI use_fqz= 0|1
+CRAM \(>= 3.1 output only; enables and disables the fqzcomp quality
+compression method.  This is on by default for version 3.1 and above
+only when the small and archive profiles are in use.
+.TP
+.BI use_tok= 0|1
+CRAM \(>= 3.1 output only; enables and disables the namne tokeniser
+compression method.  This is on by default for version 3.1 and above.
+.TP
 .BI lossy_names= 0|1
 CRAM output only; defaults to 0 (off).  If 1, templates with all
 members within the same CRAM slice will have their read names
 removed.  New names will be automatically generated during decoding.
 Also see the \fBname_prefix\fR option.
+.TP
+.B fast, normal, small, archive
+CRAM output only.  Set the CRAM compression profile.  This is a
+simplified way of setting many output options at once.  It changes the
+following options according to the profile in use.  The "normal"
+profile is the default.
+
+.TS
+lb l l l l .
+Option	\fBfast\fR	\fBnormal\fR	\fBsmall\fR	\fBarchive\fR
+level	1	5	6	7
+use_bzip2	off	off	on	on
+use_lzma	off	off	off	on if level>7
+use_tok(*)	off	on	on	on
+use_fqz(*)	off	off	on	on
+use_arith(*)	off	off	off	on
+seqs_per_slice	10000	10000	25000	100000
+.TE
+
+(*) \fBuse_tok\fR, \fBuse_fqz\fR and \fBuse_arith\fR are only
+enabled for CRAM version 3.1 and above.
+
+The \fBlevel\fR listed is only the default value, and will not be set
+if it has been explicitly changed already.  Additionally
+\fBbases_per_slice\fR is set to \fB500*seqs_per_slice\fR unless previously
+explicitly set.
+
 .RE
 .PP
 For example:
@@ -949,6 +985,8 @@ For example:
 samtools view --input-fmt-option decode_md=0
     --output-fmt cram,version=3.0 --output-fmt-option embed_ref
     --output-fmt-option seqs_per_slice=2000 -o foo.cram foo.bam
+
+samtools view -O cram,small -o bar.cram bar.bam
 .EE
 .PP
 The \fB--write-index\fR option enables automatic index creation while
