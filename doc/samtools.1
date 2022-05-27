@@ -1081,6 +1081,7 @@ refid	int	Integer reference number (0 based)
 rlen	int	Alignment length: no. reference bases
 rname	string	Reference name
 rnext	string	Mate's reference name
+sclen	int	Number of soft-clipped bases
 seq	string	Sequence
 tlen	int	Template length (insert size)
 [XX]	int / string	XX tag value
@@ -1093,7 +1094,10 @@ equivalent to \fBflag & 1024\fR.
 "qlen" and "rlen" are measured using the CIGAR string to count the
 number of query (sequence) and reference bases consumed.  Note "qlen"
 may not exactly match the length of the "seq" field if the sequence is
-"*".
+"*".  "sclen" is the number of soft-clipped bases.  When combined in
+"qlen-sclen" it can give the number of sequence bases used in the
+alignment, distinguishing between global alignment and local alignment
+length.
 
 "endpos" is the (1-based inclusive) position of the rightmost mapped base
 of the read, as measured using the CIGAR string, and for mapped reads
