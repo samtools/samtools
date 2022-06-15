@@ -256,9 +256,9 @@ Minimum mapping quality for an alignment to be used [0]
 Minimum base quality for a base to be considered. [13]
 
 Note base-quality 0 is used as a filtering mechanism for overlap
-removal.  Hence using \fB--min-BQ 0\fR will disable the overlap
-removal code and act as if the \fB--ignore-overlaps\fR option has
-been set.
+removal which marks bases as having quality zero and lets the base
+quality filter remove them.  Hence using \fB--min-BQ 0\fR will make
+the overlapping bases reappear, albeit with quality zero.
 .TP
 .BI -r,\ --region \ STR
 Only generate pileup in region. Requires the BAM files to be indexed.
@@ -277,8 +277,19 @@ Required flags: include reads with any of the mask bits set [null]
 Filter flags: skip reads with any of the mask bits set
 [UNMAP,SECONDARY,QCFAIL,DUP]
 .TP
-.B -x,\ --ignore-overlaps
-Disable read-pair overlap detection.
+.B -x,\ --ignore-overlaps-removal, --disable-overlap-removal
+Overlap detection and removal is enabled by default.  This option
+turns it off.
+
+When enabled, where the ends of a read-pair overlap the overlapping
+region will have one base selected and the duplicate base nullified by
+setting its phred score to zero.  It will then be discarded by the
+\fB--min-BQ\fR option unless this is zero.
+
+The quality values of the retained base within an overlap will be the
+summation of the two bases if they agree, or 0.8 times the higher of
+the two bases if they disagree, with the base nucleotide also being
+the higher confident call.
 .TP
 .B -X
 Include customized index file as a part of arguments. See
