@@ -946,7 +946,8 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  --ff, --excl-flags STR|INT  filter flags: skip reads with any of the mask bits set\n"
 "                                            [%s]\n", tmp_filter);
     fprintf(fp,
-"  -x, --ignore-overlaps   disable read-pair overlap detection\n"
+"  -x, --ignore-overlaps-removal, --disable-overlap-removal\n"
+"                          disable read-pair overlap detection and removal\n"
 "  -X, --customized-index  use customized index files\n" // -X flag for index filename
 "\n"
 "Output options:\n"
@@ -1032,7 +1033,9 @@ int bam_mpileup(int argc, char *argv[])
         {"min-mq", required_argument, NULL, 'q'},
         {"min-BQ", required_argument, NULL, 'Q'},
         {"min-bq", required_argument, NULL, 'Q'},
-        {"ignore-overlaps", no_argument, NULL, 'x'},
+        // NB: old "--ignore-overlaps" auto-completes to this
+        {"ignore-overlaps-removal",  no_argument, NULL, 'x'},
+        {"disable-overlap-removal",  no_argument, NULL, 'x'},
         {"output-mods", no_argument, NULL, 'M'},
         {"output-BP", no_argument, NULL, 'O'},
         {"output-bp", no_argument, NULL, 'O'},
