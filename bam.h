@@ -31,4 +31,9 @@ int bam_remove_B(bam1_t *b);
 
 const char *bam_get_library(sam_hdr_t *header, const bam1_t *b);
 
+hts_pos_t unclipped_start(bam1_t *b);
+hts_pos_t unclipped_other_start(hts_pos_t op, char *cigar);
+hts_pos_t unclipped_end(bam1_t *b);
+hts_pos_t unclipped_other_end(int64_t op, char *cigar);
+
 #endif

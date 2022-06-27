@@ -46,6 +46,7 @@ Copyright (c) 2009,2018 The Broad Institute.  MIT license.
 #include "htslib/klist.h"
 #include "htslib/kstring.h"
 #include "tmp_file.h"
+#include "bam.h"
 
 
 typedef struct {
@@ -205,123 +206,6 @@ static int key_equal(key_data_t a, key_data_t b) {
 KHASH_INIT(reads, key_data_t, in_hash_t, 1, hash_key, key_equal) // read map hash
 KLIST_INIT(read_queue, read_queue_t, __free_queue_element) // the reads buffer
 KHASH_MAP_INIT_STR(duplicates, dup_map_t) // map of duplicates for supplementary dup id
-
-
-/* Calculate the mate's unclipped start based on position and cigar string from MC tag. */
-
-static hts_pos_t unclipped_other_start(hts_pos_t op, char *cigar) {
-    char *c = cigar;
-    int64_t clipped = 0;
-
-    while (*c && *c != '*') {
-        long num = 0;
-
-        if (isdigit((int)*c)) {
-            num = strtol(c, &c, 10);
-        } else {
-            num = 1;
-        }
-
-        if (*c == 'S' || *c == 'H') { // clips
-            clipped += num;
-        } else {
-            break;
-        }
-
-        c++;
-    }
-
-    return op - clipped + 1;
-}
-
-
-/* Calculate the current read's start based on the stored cigar string. */
-
-static hts_pos_t unclipped_start(bam1_t *b) {
-    uint32_t *cigar = bam_get_cigar(b);
-    int64_t clipped = 0;
-    uint32_t i;
-
-    for (i = 0; i < b->core.n_cigar; i++) {
-        char c = bam_cigar_opchr(cigar[i]);
-
-        if (c == 'S' || c == 'H') { // clips
-            clipped += bam_cigar_oplen(cigar[i]);
-        } else {
-            break;
-        }
-    }
-
-    return b->core.pos - clipped + 1;
-}
-
-
-/* Calculate the mate's unclipped end based on start position and cigar string from MC tag.*/
-
-static hts_pos_t unclipped_other_end(int64_t op, char *cigar) {
-    char *c = cigar;
-    int64_t refpos = 0;
-    int skip = 1;
-
-    while (*c && *c != '*') {
-        long num = 0;
-
-        if (isdigit((int)*c)) {
-            num = strtol(c, &c, 10);
-        } else {
-            num = 1;
-        }
-
-        switch (*c) {
-            case 'M':
-            case 'D':
-            case 'N':
-            case '=':
-            case 'X':
-                refpos += num;
-                skip = 0; // ignore initial clips
-            break;
-
-            case 'S':
-            case 'H':
-                if (!skip) {
-                refpos += num;
-            }
-            break;
-        }
-
-        c++;
-   }
-
-    return  op + refpos;
-}
-
-
-/* Calculate the current read's end based on the stored cigar string. */
-
-static hts_pos_t unclipped_end(bam1_t *b) {
-    uint32_t *cigar = bam_get_cigar(b);
-    hts_pos_t end_pos, clipped = 0;
-    int32_t i;
-
-    end_pos = bam_endpos(b);
-
-    // now get the clipped end bases (if any)
-    // if we get to the beginning of the cigar string
-    // without hitting a non-clip then the results are meaningless
-    for (i = b->core.n_cigar - 1; i >= 0; i--) {
-        char c = bam_cigar_opchr(cigar[i]);
-
-        if (c == 'S' || c == 'H') { // clips
-            clipped += bam_cigar_oplen(cigar[i]);
-        } else {
-            break;
-        }
-    }
-
-    return end_pos + clipped;
-}
-
 
 /* The Bob Jenkins one_at_a_time hash to reduce the key to a 32 bit value. */
 
