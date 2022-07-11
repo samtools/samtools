@@ -1,6 +1,10 @@
 Release a.b
 -----------
 
+ * The dict command can now read BWA's .alt file and add AH:* tags
+   indicating reference sequences that represent alternate loci.
+
+
 Release 1.15.1 (7th April 2022)
 -------------------------------
 
