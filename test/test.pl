@@ -824,6 +824,7 @@ sub test_dict
     test_cmd($opts,out=>'dat/dict.out',cmd=>"$$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://example.com/hf37d5.fa.gz $$opts{tmp}/dict.fa.gz");
     test_cmd($opts,out=>'dat/dict.out',cmd=>"cat $$opts{path}/dat/dict.fa | $$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://example.com/hf37d5.fa.gz");
     test_cmd($opts,out=>'dat/dict.alias.out',cmd=>"$$opts{bin}/samtools dict -AH < $$opts{path}/dat/dict.alias.fa");
+    test_cmd($opts,out=>'dat/dict.alt.out',cmd=>"$$opts{bin}/samtools dict -H -l $$opts{path}/dat/dict.alt < $$opts{path}/dat/dict.alias.fa");
 }
 
 sub test_index
