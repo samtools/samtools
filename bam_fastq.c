@@ -77,7 +77,7 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  -t           copy RG, BC and QT tags to the %s header line\n",
     fq ? "FASTQ" : "FASTA");
     fprintf(to,
-"  -T TAGLIST   copy arbitrary tags to the %s header line\n",
+"  -T TAGLIST   copy arbitrary tags to the %s header line, '*' for all\n",
     fq ? "FASTQ" : "FASTA");
     if (fq) fprintf(to,
 "  -v INT       default quality score if not given in file [1]\n"
@@ -349,17 +349,21 @@ void set_sam_opts(samFile *fp, bam2fq_state_t *state,
 
     hts_set_opt(fp, FASTQ_OPT_BARCODE, opts->barcode_tag);
 
-    kstring_t tag_list = {0,0};
-    if (state->copy_tags)
-        kputs("RG,BC,QT", &tag_list);
-    if (opts->extra_tags) {
+    if (opts->extra_tags && *opts->extra_tags == '*')
+        hts_set_opt(fp, FASTQ_OPT_AUX, NULL);
+    else {
+        kstring_t tag_list = {0,0};
+        if (state->copy_tags)
+            kputs("RG,BC,QT", &tag_list);
+        if (opts->extra_tags) {
+            if (tag_list.l)
+                kputc(',', &tag_list);
+            kputs(opts->extra_tags, &tag_list);
+        }
         if (tag_list.l)
-            kputc(',', &tag_list);
-        kputs(opts->extra_tags, &tag_list);
+            hts_set_opt(fp, FASTQ_OPT_AUX, tag_list.s);
+        ks_free(&tag_list);
     }
-    if (tag_list.l)
-        hts_set_opt(fp, FASTQ_OPT_AUX, tag_list.s);
-    ks_free(&tag_list);
 }
 
 // Open a file as normal or gzipped based on filename.
