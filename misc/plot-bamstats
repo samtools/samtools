@@ -413,7 +413,8 @@ sub parse_bamcheck1
     }
     if ( $i==0 ) { return; }
 
-    $$opts{dat}{SN}{'error rate:'} = sprintf "%e", get_value($opts,'SN','mismatches:') / get_value($opts,'SN','bases mapped (cigar):');
+    my $bases_mapped_cigar = get_value($opts,'SN','bases mapped (cigar):');
+    $$opts{dat}{SN}{'error rate:'} = $bases_mapped_cigar ? sprintf "%e", get_value($opts,'SN','mismatches:') / $bases_mapped_cigar : 0;
     update_average_length($opts);
     update_average_quality($opts);
     update_average_isize($opts);
