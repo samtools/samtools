@@ -113,7 +113,7 @@ ubuntu_task:
 rocky_task:
   name: rockylinux-gcc
   container:
-    image: rockylinux:latest
+    image: rockylinux:9
     cpu: 2
     memory: 1G
 
@@ -125,9 +125,9 @@ rocky_task:
   # NB: we could consider building a docker image with these
   # preinstalled and specifying that instead, to speed up testing.
   install_script: |
-    yum install -y autoconf automake make gcc perl-Data-Dumper zlib-devel \
-        bzip2 bzip2-devel xz-devel curl-devel openssl-devel ncurses-devel \
-        git diffutils
+    yum install -y autoconf automake make gcc perl-Data-Dumper perl-FindBin \
+        zlib-devel bzip2 bzip2-devel xz-devel curl-devel openssl-devel \
+        ncurses-devel git diffutils
 
   << : *COMPILE
   << : *TEST
