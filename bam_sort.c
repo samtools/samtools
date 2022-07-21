@@ -630,7 +630,7 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
     }
 
     // If there are no RG lines in the file and we are overriding add one
-    if (is_rg && override && kl_begin(hdr_lines) == NULL) {
+    if (is_rg && override && hdr_lines->size == 0) {
         kstring_t new_id = {0, 0, NULL};
         kstring_t line = {0, 0, NULL};
         kstring_t empty = {0, 0, NULL};
