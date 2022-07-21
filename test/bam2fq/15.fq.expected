@@ -1,0 +1,144 @@
+@ref1_grp1_p001/1	MD:Z:10	NM:i:0	RG:Z:grp1	BC:Z:ACGT	H0:i:1	aa:A:!	ab:A:~	fa:f:3.14159	za:Z:Hello world!	ha:H:DEADBEEF	ba:B:c,-128,0,127	bb:B:C,0,127,255	bc:B:s,-32768,0,32767	bd:B:S,0,32768,65535	be:B:i,-2147483648,0,2147483647	bf:B:I,0,2147483648,4294967295	bg:B:f,2.71828,6.626e-34,2.9979e+09
+CGAGCTCGGT
++
+!!!!!!!!!!
+@ref1_grp1_p001/2	MD:Z:10	NM:i:0	RG:Z:grp1
+GTCGACTCTA
++
+----------
+@ref1_grp1_p002/1	MD:Z:10	NM:i:0	RG:Z:grp1	BC:Z:AATTCCGG	H0:i:1	aa:A:a	ab:A:z	fa:f:4.3597e-18	za:Z:Another string	ha:H:2000AD
+CTCGGTACCC
++
+##########
+@ref1_grp1_p002/2	MD:Z:10	NM:i:0	RG:Z:grp1
+GCAGGTCGAC
++
+//////////
+@ref1_grp1_p003/1	MD:Z:10	NM:i:0	fa:f:1.66e-27	RG:Z:grp1
+GTACCCGGGG
++
+%%%%%%%%%%
+@ref1_grp1_p003/2	MD:Z:10	NM:i:0	RG:Z:grp1
+GCCTGCAGGT
++
+1111111111
+@ref1_grp1_p004/1	MD:Z:10	NM:i:0	fa:f:1.38e-23	za:Z:xRG:Z:grp2	RG:Z:grp1
+CCGGGGATCC
++
+''''''''''
+@ref1_grp1_p004/2	MD:Z:10	NM:i:0	RG:Z:grp1
+GCATGCCTGC
++
+3333333333
+@ref1_grp1_p005/1	MD:Z:10	NM:i:0	RG:Z:grp1	ia:i:40000
+GGATCCTCTA
++
+))))))))))
+@ref1_grp1_p005/2	MD:Z:10	NM:i:0	RG:Z:grp1
+GCTTGCATGC
++
+5555555555
+@ref1_grp1_p006/1	MD:Z:10	NM:i:0	RG:Z:grp1	ia:i:255
+CCTCTAGAGT
++
+++++++++++
+@ref1_grp1_p006/2	MD:Z:10	NM:i:0	RG:Z:grp1
+TCAAGCTTGC
++
+7777777777
+@ref1_grp2_p001/1	MD:Z:8	NM:i:0	RG:Z:grp2	BC:Z:TGCA	H0:i:1	aa:A:A	ab:A:Z	fa:f:6.67e-11	za:Z:!"$%^&*()	ha:H:CAFE
+AGCTCGGTAC
++
+""""""""""
+@ref1_grp2_p001/2	MD:Z:10	NM:i:0	RG:Z:grp2
+AGGTCGACTC
++
+..........
+@ref1_grp2_p002/1	MD:Z:10	NM:i:0	fa:f:6.022e+23	RG:Z:grp2
+CGGTACCCGG
++
+$$$$$$$$$$
+@ref1_grp2_p002/2	MD:Z:10	NM:i:0	RG:Z:grp2
+CTGCAGGTCG
++
+0000000000
+@ref1_grp2_p003/1	MD:Z:10	NM:i:0	RG:Z:grp2	ia:i:4294967295
+ACCCGGGGAT
++
+&&&&&&&&&&
+@ref1_grp2_p003/2	MD:Z:10	NM:i:0	RG:Z:grp2
+ATGCCTGCAG
++
+2222222222
+@ref1_grp2_p004/1	MD:Z:10	NM:i:0	RG:Z:grp2	ia:i:-2147483648
+GGGGATCCTC
++
+((((((((((
+@ref1_grp2_p004/2	MD:Z:10	NM:i:0	RG:Z:grp2
+TTGCATGCCT
++
+4444444444
+@ref1_grp2_p005/1	MD:Z:10	NM:i:0	RG:Z:grp2	ia:i:-1000
+ATCCTCTAGA
++
+**********
+@ref1_grp2_p005/2	MD:Z:10	NM:i:0	RG:Z:grp2
+AAGCTTGCAT
++
+6666666666
+@ref1_grp2_p006/1	MD:Z:10	NM:i:0	RG:Z:grp2	ia:i:-1
+TCTAGAGTCG
++
+,,,,,,,,,,
+@ref1_grp2_p006/2	MD:Z:10	NM:i:0	RG:Z:grp2
+ACTCAAGCTT
++
+8888888888
+@ref2_grp3_p001/1	MD:Z:15	NM:i:0	RG:Z:grp3
+GTGACACTATAGAAT
++
+~~~~~~~~~~~~~~~
+@ref2_grp3_p001/2	MD:Z:0T0A0A1C0A0T0G0G0T0C0A1A0G0	NM:i:13	RG:Z:grp3
+CTGTTTCCTGTGTGA
++
+|||||||||||||||
+@ref2_grp3_p002/1	MD:Z:15	NM:i:0	RG:Z:grp3
+CTGTTTCCTGTGTGA
++
+{{{{{{{{{{{{{{{
+@ref2_grp3_p002/2	MD:Z:15	NM:i:0	RG:Z:grp3
+CGCCAAGCTATTTAG
++
+}}}}}}}}}}}}}}}
+@ref2_grp3_p003/1	MD:Z:1T0T0C0T0A0T0A0G0T0G0T0C0A0C0	NM:i:14	RG:Z:grp3
+ACGTMRWSYKVHDBN
++
+0123456789abcd!
+@ref2_grp3_p003/2	MD:Z:0A0T0T0C0T0A0T0A0G0T0G0T1A0C0	NM:i:14	RG:Z:grp3
+ACGTMRWSYKVHDBN
++
+0123456789abcd!
+@ref12_grp1_p001/1	MD:Z:10	NM:i:0	RG:Z:grp1
+TGCAGGCATG
++
+AAAAAAAAAA
+@ref12_grp1_p001/2	MD:Z:10	NM:i:0	RG:Z:grp1
+CACTATAGAA
++
+BBBBBBBBBB
+@ref12_grp2_p001/1	MD:Z:10	NM:i:0	RG:Z:grp2
+CAAGCTTGAG
++
+AAAAAAAAAA
+@ref12_grp2_p001/2	MD:Z:10	NM:i:0	RG:Z:grp2
+ATTTAGGTGA
++
+BBBBBBBBBB
+@unaligned_grp3_p001/1	RG:Z:grp3
+CACTCGTTCATGACG
++
+0123456789abcde
+@unaligned_grp3_p001/2	RG:Z:grp3
+GAAAGTGAGGAGGTG
++
+edcba9876543210

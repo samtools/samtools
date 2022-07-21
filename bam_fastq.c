@@ -349,7 +349,7 @@ void set_sam_opts(samFile *fp, bam2fq_state_t *state,
 
     hts_set_opt(fp, FASTQ_OPT_BARCODE, opts->barcode_tag);
 
-    if (opts->extra_tags && *opts->extra_tags == '*')
+    if (opts->extra_tags && (*opts->extra_tags == '*' || *opts->extra_tags == '\0'))
         hts_set_opt(fp, FASTQ_OPT_AUX, NULL);
     else {
         kstring_t tag_list = {0,0};
