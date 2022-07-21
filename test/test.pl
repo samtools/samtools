@@ -3166,6 +3166,10 @@ sub test_merge
     system("$$opts{bin}/samtools index $$opts{tmp}/merge.bed.1.bam") == 0 or die "failed to index merge.bed.1.bam: $?";
     system("$$opts{bin}/samtools index $$opts{tmp}/merge.bed.2.bam") == 0 or die "failed to index merge.bed.2.bam: $?";
     test_cmd($opts, out=>'merge/merge.bed.expected.sam', cmd => "$$opts{bin}/samtools merge${threads} --no-PG -O SAM -L $$opts{path}/merge/merge.bed - $$opts{tmp}/merge.bed.1.bam $$opts{tmp}/merge.bed.2.bam");
+
+    # -r (RG from filename) option with no initial RG header
+    test_cmd($opts, out=>'merge/rg_from_r_mode.expected.sam', cmd => "$$opts{bin}/samtools merge${threads} --no-PG -r -O SAM - $$opts{path}/merge/test_no_pg_rg_co.sam");
+
 }
 
 sub test_sort
