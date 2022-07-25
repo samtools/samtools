@@ -3008,6 +3008,11 @@ sub test_bam2fq
 
     # Test single ended output with dual-indexing
     test_cmd($opts, out=>'dat/empty.expected', out_map=>{'0.fq' => 'bam2fq/14.0.fq.expected', 'i1.fq' => 'bam2fq/14.i1.fq.expected', 'i2.fq' => 'bam2fq/14.i2.fq.expected', '0.fq' => 'bam2fq/14.0.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --index-format 'i8n1i8' --i1 $$opts{path}/i1.fq --i2 $$opts{path}/i2.fq -0 $$opts{path}/0.fq $$opts{path}/dat/bam2fq.014.sam");
+
+    # -T flag, all tags mode
+    test_cmd($opts, out=>'bam2fq/15.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -T '*' $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'bam2fq/15.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -T '' $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'bam2fq/15.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -T '*' $$opts{path}/dat/bam2fq.001.sam");
 }
 
 sub test_depad
