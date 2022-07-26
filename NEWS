@@ -3,7 +3,11 @@ Release a.b
 
 New work and changes:
 
- * samtools import now outputs query grouped to the header.
+ * samtools reference command added.  This subcommand extracts the embedded
+   reference out of a CRAM file.
+   (PR#1649, addresses #723.  Requested by Torsten Seemann)
+
+  * samtools import now outputs query grouped to the header.
    (PR#1633, thanks to Nils Homer)
 
  * Made samtools view read error messages more generic.  Former error message
@@ -47,6 +51,11 @@ New work and changes:
    the output index filename via out.index or the new -o option is currently
    only applicable when there is only one alignment file to be indexed.)
    
+ * Allow samtools fastq -T "*".
+   This allows all tags from SAM records to be written to fastq headers. This is
+   a counterpart to samtools import -T "*".
+   (PR#1679.  Thanks to cjw85)
+
 Bug Fixes:
 
  * Re-enable --reference option for samtools depth.  The reference is not used
@@ -55,6 +64,12 @@ Bug Fixes:
 
  * Fix regex coordinate bug in samtools markdup.
    (PR#1657, fixes #1642.  Reported by Randy Harr).
+
+ * Fix divide by zero in plot-bamstats -m, on unmapped data.
+   (PR#1678, fixes #1675.  Thanks to Shane McCarthy)
+
+ * Fix missing RG headers when using samtools merge -r.
+   (PR#1683, addresses htslib#1479.  Reported by Alex Leonard)
 
 Documentation:
 
