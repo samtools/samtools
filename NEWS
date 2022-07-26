@@ -7,7 +7,7 @@ New work and changes:
    reference out of a CRAM file.
    (PR#1649, addresses #723.  Requested by Torsten Seemann)
 
-  * samtools import now outputs query grouped to the header.
+  * samtools import now adds grouped by query-name to the header.
    (PR#1633, thanks to Nils Homer)
 
  * Made samtools view read error messages more generic.  Former error message
@@ -16,11 +16,11 @@ New work and changes:
    confusing error messages.
    (PR#1645, addresses some of the issues in #1640.  Reported by Jian-Guo Zhou)
 
- * Add bedcov option -c to report read count.
-   (PR#1644, fixes #1629.  Reported by Natchaphon Rajudom)
-
  * Make samtools view -p also clear mqual, tlen and cigar.
    (PR#1647, fixes #1606.  Reported by eboyden)
+
+ * Add bedcov option -c to report read count.
+   (PR#1644, fixes #1629.  Reported by Natchaphon Rajudom)
 
  * Add UMI/barcode handling to samtools markdup.
    (PR#1630, fixes #1358 and #1514.  Reported by Gert Hulselmans and Poshi)
