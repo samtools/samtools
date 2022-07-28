@@ -843,6 +843,15 @@ sub test_index
     test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai ref2");
     test_cmd($opts,out=>'dat/test_input_1_ab.X.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -O sam - -X -cp -R ref2 $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_a.bam.bai $$opts{tmp}/test_input_1_b.bam.bai");
 
+    # Check -o option
+    cmd("$$opts{bin}/samtools index${threads} -o $$opts{tmp}/test_input_1_b_opt.bam.bai $$opts{path}/dat/test_input_1_b.bam");
+    test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b_opt.bam.bai ref2");
+
+    # Check indexing multiple alignment files
+    test_cmd($opts,out=>'dat/empty.expected',cmd=>"$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam",want_fail=>1);
+    test_cmd($opts,out=>'dat/test_input_1_a.bam.bai.expected',cmd=>"$$opts{bin}/samtools index${threads} -M $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam && cat $$opts{path}/dat/test_input_1_a.bam.bai",binary=>1);
+    test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_b.bam.bai ref2");
+
     # Check auto-indexing
     cmd("$$opts{bin}/samtools view${threads} --write-index -o $$opts{path}/dat/auto_indexed.tmp.bam $$opts{path}/dat/mpileup.1.sam");
     test_cmd($opts,out=>"dat/auto_indexed.tmp.bam.csi", cmd=>"$$opts{bin}/samtools index${threads} -c $$opts{path}/dat/auto_indexed.tmp.bam $$opts{tmp}/auto_indexed.csi && cat $$opts{tmp}/auto_indexed.csi", binary=>1);

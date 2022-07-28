@@ -233,6 +233,8 @@ samtools index
 
 Index a coordinate-sorted SAM, BAM or CRAM file for fast random access.
 Note for SAM this only works if the file has been BGZF compressed first.
+(Starting from Samtools 1.16, this command can also be given several
+alignment filenames, which are indexed individually.)
 
 This index is needed when
 .I region
