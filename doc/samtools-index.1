@@ -43,16 +43,12 @@ samtools index \- indexes SAM/BAM/CRAM files
 .
 .SH SYNOPSIS
 .PP
-.B samtools index
+.B samtools index -M
 .RB [ -bc ]
 .RB [ -m
 .IR INT ]
-.RB [ -o
-.IR out.index ]
-.I FILE
+.I FILE FILE
 .RI [ FILE ...]
-.br
-(Samtools 1.16 or later)
 .PP
 .B samtools index
 .RB [ -bc ]
@@ -60,8 +56,6 @@ samtools index \- indexes SAM/BAM/CRAM files
 .IR INT ]
 .IR aln.sam | aln.bam | aln.cram
 .RI [ out.index ]
-.br
-(All versions)
 
 .SH DESCRIPTION
 .PP
@@ -82,18 +76,6 @@ When only one alignment file is being indexed, the output index filename
 can be specified via
 .B -o
 or as shown in the second synopsis.
-
-To be precise: when two filename arguments are given, the second filename
-is interpreted as specifying
-.I out.index
-if that file either does not exist or already contains index data.
-Otherwise the command is interpreted as specifying two alignment files
-to be indexed individually.
-(Samtools versions earlier than 1.16
-.B always
-interpret the second filename as specifying
-.I out.index
-and thus accept only the second synopsis.)
 
 When no output filename is specified, for a CRAM file
 .IR aln.cram ,
@@ -132,6 +114,12 @@ as the fixed value used by the BAI format.
 .BI "-m " INT
 Create a CSI index, with a minimum interval size of 2^INT.
 .TP
+.B -M
+Interpret all filename arguments as alignment files to be indexed individually.
+(Without
+.BR -M ,
+filename arguments are interpreted solely as per the second synopsis.)
+.TP
 .BI "-o " FILE
 Write the output index to
 .IR FILE .
@@ -139,19 +127,6 @@ Write the output index to
 .TP
 .BI "-@, --threads " INT
 Number of input/output compression threads to use in addition to main thread [0].
-
-.SH CAVEATS
-
-Allowing more than one alignment file to be specified was added in Samtools 1.16.
-Earlier versions understood only the second synopsis and did not check that exactly
-one or two filename arguments are provided. Thus using
-.B samtools index ex1.bam ex2.bam
-or
-.B samtools index *.bam
-with earlier versions will result in
-.BR "loss of data" ,
-as the second BAM filename is misinterpreted as the output index filename and
-its contents will be overwritten.
 
 .SH AUTHOR
 .PP

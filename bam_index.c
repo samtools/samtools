@@ -44,12 +44,13 @@ DEALINGS IN THE SOFTWARE.  */
 static void index_usage(FILE *fp)
 {
     fprintf(fp,
-"Usage: samtools index [-bc] [-m INT] [-o <out.index>] <in.bam>...\n"
+"Usage: samtools index -M [-bc] [-m INT] <in1.bam> <in2.bam>...\n"
 "   or: samtools index [-bc] [-m INT] <in.bam> [out.index]\n"
 "Options:\n"
 "  -b       Generate BAI-format index for BAM files [default]\n"
 "  -c       Generate CSI-format index for BAM files\n"
 "  -m INT   Set minimum interval size for CSI indices to 2^INT [%d]\n"
+"  -M       Interpret all filename arguments as files to be indexed\n"
 "  -o FILE  Write index to FILE [alternative to <out.index> as an argument]\n"
 "  -@ INT   Sets the number of threads [none]\n", BAM_LIDX_SHIFT);
 }
@@ -74,15 +75,17 @@ int bam_index(int argc, char *argv[])
 {
     int csi = 0;
     int min_shift = BAM_LIDX_SHIFT;
+    int multiple = 0;
     int n_threads = 0;
     int n_files, c, i, ret;
     const char *fn_idx = NULL;
 
-    while ((c = getopt(argc, argv, "bcm:o:@:")) >= 0)
+    while ((c = getopt(argc, argv, "bcm:Mo:@:")) >= 0)
         switch (c) {
         case 'b': csi = 0; break;
         case 'c': csi = 1; break;
         case 'm': csi = 1; min_shift = atoi(optarg); break;
+        case 'M': multiple = 1; break;
         case 'o': fn_idx = optarg; break;
         case '@': n_threads = atoi(optarg); break;
         default:
@@ -101,6 +104,11 @@ int bam_index(int argc, char *argv[])
     if (n_files == 2 && !fn_idx && nonexistent_or_index(argv[optind+1])) {
         n_files = 1;
         fn_idx = argv[optind+1];
+    }
+
+    if (n_files > 1 && !multiple) {
+        print_error("index", "use -M to enable indexing more than one alignment file");
+        return EXIT_FAILURE;
     }
 
     if (fn_idx && n_files > 1) {

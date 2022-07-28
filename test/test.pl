@@ -848,7 +848,8 @@ sub test_index
     test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b_opt.bam.bai ref2");
 
     # Check indexing multiple alignment files
-    test_cmd($opts,out=>'dat/test_input_1_a.bam.bai.expected',cmd=>"$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam && cat $$opts{path}/dat/test_input_1_a.bam.bai",binary=>1);
+    test_cmd($opts,out=>'dat/empty.expected',cmd=>"$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam",want_fail=>1);
+    test_cmd($opts,out=>'dat/test_input_1_a.bam.bai.expected',cmd=>"$$opts{bin}/samtools index${threads} -M $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam && cat $$opts{path}/dat/test_input_1_a.bam.bai",binary=>1);
     test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_b.bam.bai ref2");
 
     # Check auto-indexing

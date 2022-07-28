@@ -5,7 +5,7 @@ Release a.b
    indicating reference sequences that represent alternate loci.
 
  * The "samtools index" command can now accept multiple alignment filenames
-   on the command line, and will index each of them separately. (Specifying
+   with the new -M option, and will index each of them separately. (Specifying
    the output index filename via out.index or the new -o option is currently
    only applicable when there is only one alignment file to be indexed.)
 
