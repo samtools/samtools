@@ -1105,7 +1105,8 @@ Similarly a double backslash is used to get a literal backslash.  For
 example \fBab\\"c\\\\d\fR is the string \fBab"c\\d\fR.
 
 Comparison operators are evaluated as a match being 1 and a mismatch
-being 0, thus "(2 > 1) + (3 < 5)" evaluates as 2.
+being 0, thus "(2 > 1) + (3 < 5)" evaluates as 2.  All comparisons
+involving undefined (null) values are deemed to be false.
 
 The variables are where the file format specifics are accessed from
 the expression.  The variables correspond to SAM fields, for example
@@ -1178,29 +1179,57 @@ for alignments with many mismatches and \fB[RG]=~"grp[ABC]-"\fR will
 match the read-group string.
 
 If no comparison is used with an auxiliary tag it is taken simply to
-be a test for the existence of that tag.  So "[NM]" will return any
+be a test for the existence of that tag.  So \fB[NM]\fR will return any
 record containing an NM tag, even if that tag is zero (\fBNM:i:0\fR).
+In htslib <= 1.15 negating this with \fB![NM]\fR gave misleading
+results as it was true if the tag did not exist or did exist but was
+zero.  Now this is strictly does-not-exist.  An explicit
+\fBexists([NM])\fR and \fB!exists([NM])\fR function has also been added
+to make this intention clear.
 
-If you need to check specifically for a non-zero value then use \fB[NM]
-&& [NM]!=0\fR.
+Similarly in htslib <= 1.15 using \fB[NM]!=0\fR was true both when the
+tag existed and was not zero as well as when the tag did not exist.
+From 1.16 onwards all comparison operators are only true for tags that
+exist, so \fB[NM]!=0\fR works as expected.
 
 Some simple functions are available to operate on strings.  These
 treat the strings as arrays of bytes, permitting their length,
-minimum, maximum and average values to be computed.
+minimum, maximum and average values to be computed.  These are useful
+for processing Quality Scores.
 
 .TS
 lb l .
-length	Length of the string (excluding nul char)
-min	Minimum byte value in the string
-max	Maximum byte value in the string
-avg	Average byte value in the string
+length(x)	Length of the string (excluding nul char)
+min(x)	Minimum byte value in the string
+max(x)	Maximum byte value in the string
+avg(x)	Average byte value in the string
 .TE
 
 Note that "avg" is a floating point value and it may be NAN for empty
 strings.  This means that "avg(qual)" does not produce an error for
-records that have both seq and qual of "*".  This value will fail any
+records that have both seq and qual of "*".  NAN values will fail any
 conditional checks, so e.g. "avg(qual) > 20" works and will not report
-these records.
+these records.  NAN also fails all equality, < and > comparisons, and
+returns zero when given as an argument to the \fBexists\fR function.
+It can be negated with \fB!x\fR in which case it becomes true.
+
+Functions that operate on both strings and numerics:
+
+.TS
+lb l .
+exists(x)	True if the value exists (or is explicitly true).
+default(x,d)	Value \fBx\fR if it exists or \fBd\fR if not.
+.TE
+
+Functions that apply only to numeric values:
+
+.TS
+lb l .
+sqrt(x)	Square root of \fBx\fR
+log(x)	Natural logarithm of \fBx\fR
+pow(x, y)	Power function, \fBx\fR to the power of \fBy\fR
+exp(x)	Base-e exponential, equivalent to \fBpow(e,x)\fR
+.TE
 
 .PP
 .SH ENVIRONMENT VARIABLES
