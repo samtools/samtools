@@ -75,6 +75,7 @@ typedef struct {
     char *barcode;
     regex_t *bc_rgx;
     int read_groups;
+    int json;
 } md_param_t;
 
 typedef struct {
@@ -1428,6 +1429,36 @@ static void write_stats(FILE *fp, const char *title,  const char *title_con, sta
 }
 
 
+static void write_json_stats(FILE *fp, const char *offset, const char *group_name, stats_block_t *stats, const char *end) {
+    unsigned long  els;
+
+    els = estimate_library_size(stats->pair, stats->duplicate, stats->optical);
+
+    if (group_name) {
+        fprintf(fp, "%s\"READ GROUP\": \"%s\",\n", offset, group_name);
+    }
+
+    fprintf(fp, "%s\"READ\": %ld,\n", offset, stats->reading);
+    fprintf(fp, "%s\"WRITTEN\": %ld,\n", offset, stats->writing);
+    fprintf(fp, "%s\"EXCLUDED\": %ld,\n", offset, stats->excluded);
+    fprintf(fp, "%s\"EXAMINED\": %ld,\n", offset, stats->examined);
+    fprintf(fp, "%s\"PAIRED\": %ld,\n", offset, stats->pair);
+    fprintf(fp, "%s\"SINGLE\": %ld,\n", offset, stats->single);
+    fprintf(fp, "%s\"DUPLICATE PAIR\": %ld,\n", offset, stats->duplicate);
+    fprintf(fp, "%s\"DUPLICATE SINGLE\": %ld,\n", offset, stats->single_dup);
+    fprintf(fp, "%s\"DUPLICATE PAIR OPTICAL\": %ld,\n", offset, stats->optical);
+    fprintf(fp, "%s\"DUPLICATE SINGLE OPTICAL\": %ld,\n", offset, stats->single_optical);
+    fprintf(fp, "%s\"DUPLICATE NON PRIMARY\": %ld,\n", offset, stats->np_duplicate);
+    fprintf(fp, "%s\"DUPLICATE NON PRIMARY OPTICAL\": %ld,\n", offset, stats->np_opt_duplicate);
+    fprintf(fp, "%s\"DUPLICATE PRIMARY TOTAL\": %ld,\n", offset, stats->single_dup + stats->duplicate);
+    fprintf(fp, "%s\"DUPLICATE TOTAL\": %ld,\n", offset, stats->single_dup + stats->duplicate + stats->np_duplicate);
+    fprintf(fp, "%s\"ESTIMATED_LIBRARY_SIZE\": %ld", offset, els);
+
+    if (end) {
+        fprintf(fp, "%s", end);
+    }
+}
+
 
 /* Compare the reads near each other (coordinate sorted) and try to spot the duplicates.
    Generally the highest quality scoring is chosen as the original and all others the duplicates.
@@ -2071,50 +2102,6 @@ static int bam_mark_duplicates(md_param_t *param) {
     if (bc_warnings) {
         fprintf(stderr, "[markdup] warning: number of failed attempts to get barcodes = %ld\n", bc_warnings);
     }
-#ifdef DONT
-    if (param->do_stats) {
-        FILE *fp;
-        int file_open = 0;
-        unsigned long els;
-
-        if (param->stats_file) {
-            if (NULL == (fp = fopen(param->stats_file, "w"))) {
-                fprintf(stderr, "[markdup] warning: cannot write stats to %s.\n", param->stats_file);
-                fp = stderr;
-            } else {
-                file_open = 1;
-            }
-        } else {
-            fp = stderr;
-        }
-
-        els = estimate_library_size(stats.pair, stats.duplicate, stats.optical);
-
-        fprintf(fp,
-                "COMMAND: %s\n"
-                "READ: %ld\n"
-                "WRITTEN: %ld\n"
-                "EXCLUDED: %ld\n"
-                "EXAMINED: %ld\n"
-                "PAIRED: %ld\n"
-                "SINGLE: %ld\n"
-                "DUPLICATE PAIR: %ld\n"
-                "DUPLICATE SINGLE: %ld\n"
-                "DUPLICATE PAIR OPTICAL: %ld\n"
-                "DUPLICATE SINGLE OPTICAL: %ld\n"
-                "DUPLICATE NON PRIMARY: %ld\n"
-                "DUPLICATE NON PRIMARY OPTICAL: %ld\n"
-                "DUPLICATE PRIMARY TOTAL: %ld\n"
-                "DUPLICATE TOTAL: %ld\n"
-                "ESTIMATED_LIBRARY_SIZE: %ld\n", param->arg_list, stats.reading, stats.writing, stats.excluded, stats.examined, stats.pair, stats.single,
-                                stats.duplicate, stats.single_dup, stats.optical, stats.single_optical, stats.np_duplicate, stats.np_opt_duplicate,
-                                stats.single_dup + stats.duplicate, stats.single_dup + stats.duplicate + stats.np_duplicate, els);
-
-        if (file_open) {
-            fclose(fp);
-        }
-    }
-#endif
 
     if (param->do_stats) {
         FILE *fp;
@@ -2152,19 +2139,55 @@ static int bam_mark_duplicates(md_param_t *param) {
             }
         }
 
-        write_stats(fp, "COMMAND: ", param->arg_list, &total);
-        fprintf(fp, "\n");
+        if (!param->json) {
+            write_stats(fp, "COMMAND: ", param->arg_list, &total);
+            fprintf(fp, "\n");
 
-        if (param->read_groups) {
-            if (stat_array[0].reading) {
-                write_stats(fp, "READ GROUP: ", "ungrouped", stat_array);
-                fprintf(fp, "\n");
+            if (param->read_groups) {
+                if (stat_array[0].reading) {
+                    write_stats(fp, "READ GROUP: ", "ungrouped", stat_array);
+                    fprintf(fp, "\n");
+                }
+
+                for (i = 0; i < num_groups; i++) {
+                    write_stats(fp, "READ GROUP: ", sam_hdr_line_name(header, "RG", i), stat_array + i + 1);
+                    fprintf(fp, "\n");
+                }
+            }
+        } else {
+            char space4[]  = "    ";
+            char space8[]  = "        ";
+            char space12[] = "            ";
+
+            fprintf(fp, "{\n");
+            fprintf(fp, "%s\"COMMAND\": \"%s\",\n", space4, param->arg_list);
+            write_json_stats(fp, space4, NULL, &total, param->read_groups ? ",\n" : "\n");
+
+            if (param->read_groups) {
+                fprintf(fp, "%s\"READ GROUPS\": [\n", space4);
+
+                if (stat_array[0].reading) {
+                    fprintf(fp, "%s{\n", space8);
+                    write_json_stats(fp, space12, "ungrouped", stat_array, "\n");
+                    fprintf(fp, "%s},\n", space8);
+                }
+
+                for (i = 0; i < num_groups; i++) {
+                    fprintf(fp, "%s{\n", space8);
+
+                    write_json_stats(fp, space12,  sam_hdr_line_name(header, "RG", i), stat_array + i + 1, "\n");
+
+                    if (i < num_groups -1 ) {
+                        fprintf(fp, "%s},\n", space8);
+                    } else {
+                        fprintf(fp, "%s}\n", space8);
+                    }
+                }
+
+                fprintf(fp, "%s]\n", space4);
             }
 
-            for (i = 0; i < num_groups; i++) {
-                write_stats(fp, "READ GROUP: ", sam_hdr_line_name(header, "RG", i), stat_array + i + 1);
-                fprintf(fp, "\n");
-            }
+            fprintf(fp, "}\n");
         }
 
         if (file_open) {
@@ -2225,6 +2248,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  -S                 Mark supplementary alignments of duplicates as duplicates (slower).\n");
     fprintf(stderr, "  -s                 Report stats.\n");
     fprintf(stderr, "  -f NAME            Write stats to named file.  Implies -s.\n");
+    fprintf(stderr, "  --json             Output stats in JSON.  Also implies -s\n");
     fprintf(stderr, "  -T PREFIX          Write temporary files to PREFIX.samtools.nnnn.nnnn.tmp.\n");
     fprintf(stderr, "  -d INT             Optical distance (if set, marks with dt tag)\n");
     fprintf(stderr, "  -c                 Clear previous duplicate settings and tags.\n");
@@ -2265,7 +2289,7 @@ int bam_markdup(int argc, char **argv) {
     char *regex = NULL, *bc_regex = NULL;
     char *regex_order = "txy";
     md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL, 0};
+                        1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL, 0, 0};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -2279,6 +2303,7 @@ int bam_markdup(int argc, char **argv) {
         {"barcode-name", no_argument, NULL, 1007},
         {"barcode-rgx", required_argument, NULL, 1008},
         {"use-read-groups", no_argument, NULL, 1009},
+        {"json", no_argument, NULL, 1010},
         {NULL, 0, NULL, 0}
     };
 
@@ -2314,6 +2339,7 @@ int bam_markdup(int argc, char **argv) {
             case 1007: bc_name = 1; break;
             case 1008: bc_name = 1, bc_regex = optarg; break;
             case 1009: param.read_groups = 1; break;
+            case 1010: param.json = 1; param.do_stats = 1; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
