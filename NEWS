@@ -50,7 +50,8 @@ New work and changes:
    with the new -M option, and will index each of them separately. (Specifying
    the output index filename via out.index or the new -o option is currently
    only applicable when there is only one alignment file to be indexed.)
-   
+   (PR#1674.  Thanks to John Marshall)
+
  * Allow samtools fastq -T "*".
    This allows all tags from SAM records to be written to fastq headers. This is
    a counterpart to samtools import -T "*".
@@ -63,7 +64,7 @@ Bug Fixes:
    (PR#1646, fixes #1643.  Reported by Randy Harr)
 
  * Fix regex coordinate bug in samtools markdup.
-   (PR#1657, fixes #1642.  Reported by Randy Harr).
+   (PR#1657, fixes #1642.  Reported by Randy Harr)
 
  * Fix divide by zero in plot-bamstats -m, on unmapped data.
    (PR#1678, fixes #1675.  Thanks to Shane McCarthy)
@@ -79,6 +80,10 @@ Documentation:
 
  * Add "sclen" filter expression keyword documentation.
    (PR#1661, see also htslib#1441)
+
+ * Extend FILTER EXPRESSION man page section to match the changes made in
+   HTSlib.
+   (PR#1687, samtools/htslib#1478)
 
 Release 1.15.1 (7th April 2022)
 -------------------------------
