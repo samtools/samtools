@@ -172,6 +172,13 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
             ret = -1;
             goto err;
         }
+        if (fp_in[i]->format.format == text_format) {
+            // Unknown text format, so take a punt on it being very long
+            // lines of fastq or fasta.  Htslib will automatically flip from
+            // one to the other based on content so we don't need to be
+            // specific.
+            fp_in[i]->format.format = fasta_format;
+        }
         if (opts->p.pool)
             hts_set_thread_pool(fp_in[i], &opts->p);
         ids[n++] = i;
