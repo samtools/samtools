@@ -50,7 +50,7 @@ New work and changes:
    with the new -M option, and will index each of them separately. (Specifying
    the output index filename via out.index or the new -o option is currently
    only applicable when there is only one alignment file to be indexed.)
-   (PR#1674.  Thanks to John Marshall)
+   (PR#1674.  Reported by Abigail Ramsøe and Nicola Romanò.  Thanks to John Marshall)
 
  * Allow samtools fastq -T "*".
    This allows all tags from SAM records to be written to fastq headers. This is
