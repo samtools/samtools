@@ -86,6 +86,7 @@ ID	Indel size distribution
 IC	Indels per cycle
 COV	Coverage (depth) distribution
 GCD	GC-depth
+MAPQ    Mapping qualities
 .TE
 
 Not all sections will be reported as some depend on the data being
@@ -367,6 +368,9 @@ of GC content.  Subsequent columns list the coverage depth at 10th,
 25th, 50th, 75th and 90th GC percentiles for this specific GC
 percentage, revealing any GC bias in mapping.  These columns are
 averaged depths, so are floating point with no maximum value.
+
+MAPQ reports the mapping qualities for the mapped reads, ignoring the
+duplicates, supplementary, secondary and failing quality reads.
 
 .SH OPTIONS
 .TP 8
