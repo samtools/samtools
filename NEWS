@@ -26,13 +26,8 @@ New work and changes:
    (PR#1630, fixes #1358 and #1514.  Reported by Gert Hulselmans and Poshi)
 
  * Add a new template coordinate sort order to samtools sort and
-   samtools merge.  Sort order is:
-     1. the earlier unclipped 5' coordinate of the read pair.
-     2. the higher unclipped 5' coordinate of the read pair.
-     3. library (from read group).
-     4. the molecular identifier.
-     5. read name.
-     6. if R1 has the lower coordinates of the pair.
+   samtools merge.  This is useful when working with unique molecular
+   identifiers (UMIs).
    (PR#1605, fixes #1591.  Thanks to Nils Homer)
 
  * Rename mpileup --ignore-overlaps to --ignore-overlaps-removal
