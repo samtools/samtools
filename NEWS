@@ -50,7 +50,8 @@ New work and changes:
    with the new -M option, and will index each of them separately. (Specifying
    the output index filename via out.index or the new -o option is currently
    only applicable when there is only one alignment file to be indexed.)
-   (PR#1674.  Reported by Abigail Ramsøe and Nicola Romanò.  Thanks to John Marshall)
+   (PR#1674.  Reported by Abigail RamsÃ¸e and Nicola RomanÃ².
+    Thanks to John Marshall)
 
  * Allow samtools fastq -T "*".
    This allows all tags from SAM records to be written to fastq headers. This is
@@ -84,6 +85,12 @@ Documentation:
  * Extend FILTER EXPRESSION man page section to match the changes made in
    HTSlib.
    (PR#1687, samtools/htslib#1478)
+
+Non user-visible changes and build improvements:
+
+ * Ensure generated test files are ignored (by git) and cleaned (by make
+   testclean)
+   (PR#1692, Thanks to John Marshall)
 
 Release 1.15.1 (7th April 2022)
 -------------------------------
