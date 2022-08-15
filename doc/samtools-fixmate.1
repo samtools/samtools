@@ -88,6 +88,13 @@ Do not add a @PG line to the header of the output file.
 .TP
 .BI "-@, --threads " INT
 Number of input/output compression threads to use in addition to main thread [0].
+.TP
+.BI "-z " FLAGs ", --sanitize " FLAGs
+Perform basic sanitizing of records.  \fIFLAGs\fR is a comma-separated
+list of keywords, defined in the
+.IR samtools-view (1)
+man page.  By default all FLAGs are enabled.  Use \fB-z off\fR to
+disable this.
 
 .SH AUTHOR
 .PP

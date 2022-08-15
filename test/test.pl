@@ -3267,13 +3267,14 @@ sub test_fixmate
 
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
     test_cmd($opts,out=>'fixmate/1_coord_sort.sam.expected', err=>'fixmate/1_coord_sort.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/1_coord_sort.sam -", expect_fail=>1);
-    test_cmd($opts,out=>'fixmate/2_isize_overflow.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/2_isize_overflow.sam -");
+    test_cmd($opts,out=>'fixmate/2_isize_overflow.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/2_isize_overflow.sam -");
     test_cmd($opts,out=>'fixmate/3_reverse_read_pp_lt.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/3_reverse_read_pp_lt.sam -");
     test_cmd($opts,out=>'fixmate/4_reverse_read_pp_equal.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/4_reverse_read_pp_equal.sam -");
     test_cmd($opts,out=>'fixmate/5_ct.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/5_ct.sam -");
     test_cmd($opts,out=>'fixmate/6_ct_replace.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/6_ct_replace.sam -");
-    test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
-    test_cmd($opts,out=>'fixmate/8_isize_overflow_64bit.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/8_isize_overflow_64bit.sam -");
+    test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
+    test_cmd($opts,out=>'fixmate/8_isize_overflow_64bit.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/8_isize_overflow_64bit.sam -");
+    test_cmd($opts,out=>'fixmate/sanitize.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/sanitize.sam -");
 }
 
 sub test_reference
