@@ -88,7 +88,10 @@ static int dump_ref(sam_hdr_t *h, hts_itr_t *iter, int ref_id,
     // (was ~20%).
     if (verbose) {
         int n4[8] = {0};
-        for (j = 0; j < (ref_len&~7); j+=8) {
+        for (j = 0; j < ref_len && (((uintptr_t) &ref[j] & 7) != 0); j++)
+            N += ref[j] == 'N';
+        uint64_t fast_end = ((ref_len - j) & ~7) + j;
+        for (; j < fast_end; j+=8) {
             uint64_t i64 = *(uint64_t *)&ref[j];
             if (!haszero(i64 ^ 0x4e4e4e4e4e4e4e4eUL)) // 'N' <-> 0
                 continue;
