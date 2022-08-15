@@ -68,6 +68,9 @@ Bug Fixes:
  * Fix missing RG headers when using samtools merge -r.
    (PR#1683, addresses htslib#1479.  Reported by Alex Leonard)
 
+ * Fix a possible unaligned access in samtools reference.
+   (PR#1696)
+
 Documentation:
 
  * Add documentation on CRAM compression profiles and some of the newer options
