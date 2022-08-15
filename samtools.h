@@ -59,4 +59,25 @@ void release_autoflush(htsFile *fp);
  */
 char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header);
 
+
+/* BAM sanitizer options */
+#define FIX_POS   2
+#define FIX_MQUAL 4
+#define FIX_UNMAP 8
+#define FIX_CIGAR 16
+#define FIX_AUX   32
+
+// default for position sorted data
+#define FIX_ON (FIX_MQUAL|FIX_UNMAP|FIX_CIGAR|FIX_AUX)
+#define FIX_ALL 255
+
+// Parses a comma-separated list of "pos", "mqual", "unmap", "cigar", and "aux"
+// keywords for the bam sanitizer.
+int bam_sanitize_options(const char *str);
+
+// Sanitize a BAM record, using FIX_* bit flags as defined above.
+// Returns 0 on success,
+//        <0 on failure.
+int bam_sanitize(sam_hdr_t *h, bam1_t *b, int flags);
+
 #endif

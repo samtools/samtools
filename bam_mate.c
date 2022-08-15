@@ -253,8 +253,291 @@ static int add_mate_score(bam1_t *src, bam1_t *dest)
     return 0;
 }
 
+// Completely delete the CIGAR field
+static void clear_cigar(bam1_t *b) {
+    memmove(bam_get_cigar(b), bam_get_seq(b),
+            b->data + b->l_data - bam_get_seq(b));
+    b->l_data -= 4*b->core.n_cigar;
+    b->core.n_cigar = 0;
+}
+
+// Trim a CIGAR field to end on reference position "end".  Remaining bases
+// are turned to soft clips.
+static int bam_trim(bam1_t *b, hts_pos_t end) {
+    hts_pos_t pos = b->core.pos;
+    int n_cigar = b->core.n_cigar, i;
+    uint32_t new_cigar_a[1024];
+    uint32_t *new_cigar = new_cigar_a;
+    uint32_t *cigar = bam_get_cigar(b);
+
+    // Find end of alignment or end of ref
+    int op = 0, oplen = 0;
+    for (i = 0; i < n_cigar; i++) {
+        op = bam_cigar_op(cigar[i]);
+        oplen = bam_cigar_oplen(cigar[i]);
+        if (!(bam_cigar_type(op) & 2))
+            continue;
+        pos += oplen;
+        if (pos > end)
+            break;
+    }
+
+    if (i == n_cigar)
+        // looks fine already
+        return 0;
+
+    int old_i = i, j = 0;
+    // At worst we grow by 1 element (eg 100M -> 70M30S)
+    if (n_cigar-i >= 1024-1) {
+        new_cigar = malloc(4*(n_cigar-i+1));
+        if (!new_cigar)
+            return -1;
+    }
+
+    // We fill out to new_cigar from here on.
+    if (pos-oplen < end) {
+        // Partial CIGAR op?  Split existing tag.
+        cigar[old_i++] = bam_cigar_gen(end - (pos-oplen), op);
+        new_cigar[j++] = bam_cigar_gen(pos-end, BAM_CSOFT_CLIP);
+    } else if (pos > end) {
+        // entirely off the chromosome; this will trigger CIGAR *, MQUAL 0
+        b->core.flag |= BAM_FUNMAP;
+        b->core.flag &= ~BAM_FPROPER_PAIR;
+    } else {
+        // CIGAR op started on the trim junction
+        new_cigar[j++] = bam_cigar_gen(oplen, BAM_CSOFT_CLIP);
+    }
+
+    // Replace trailing elements.
+    for (i++; i < n_cigar; i++) {
+        op = bam_cigar_op(cigar[i]);
+        oplen = bam_cigar_oplen(cigar[i]);
+        if (op == BAM_CHARD_CLIP) {
+            new_cigar[j++] = cigar[i];
+        } else {
+            new_cigar[j-1] =
+                bam_cigar_gen(bam_cigar_oplen(new_cigar[j-1]) + oplen,
+                              BAM_CSOFT_CLIP);
+        }
+    }
+
+    // We now have cigar[0..old_i-1] for existing CIGAR
+    // and new_cigar[0..j-1] for new CIGAR trailing component.
+
+    if (old_i+j == n_cigar) {
+        // Fits and no data move needed
+        memcpy(&cigar[old_i], new_cigar, j*4);
+    } else {
+        uint8_t *seq_old = bam_get_seq(b);
+        uint8_t *aux_end = b->data + b->l_data;
+        int nshift;
+        if (old_i+j < n_cigar) {
+            // Smaller, and can move data down
+            nshift = -4*(n_cigar - (old_i+j));
+        } else {
+            // Bigger, so grow BAM and move data up
+            nshift = 4*(old_i+j - n_cigar);
+            // FIXME: make htslib's sam_realloc_bam_data public
+            if (b->l_data + nshift > b->m_data) {
+                uint8_t *new_data = realloc(b->data, b->l_data + nshift);
+                if (!new_data) {
+                    if (new_cigar != new_cigar_a)
+                        free(new_cigar);
+                    return -1;
+                }
+                b->m_data = b->l_data + nshift;
+                if (b->data != new_data) {
+                    b->data = new_data;
+                    seq_old = bam_get_seq(b);
+                    aux_end = b->data + b->l_data;
+                    cigar = bam_get_cigar(b);
+                }
+            }
+        }
+        memmove(seq_old+nshift, seq_old, aux_end - seq_old);
+        b->l_data += nshift;
+        memcpy(&cigar[old_i], new_cigar, j*4);
+        b->core.n_cigar = old_i+j;
+    }
+
+    if (new_cigar != new_cigar_a)
+        free(new_cigar);
+
+    return 0;
+}
+
+// Copied from htslib/sam.c.
+// Replace with sam tag iterator when this is merged.
+static inline int aux_type2size(uint8_t type)
+{
+    switch (type) {
+    case 'A': case 'c': case 'C':
+        return 1;
+    case 's': case 'S':
+        return 2;
+    case 'i': case 'I': case 'f':
+        return 4;
+    case 'd':
+        return 8;
+    case 'Z': case 'H': case 'B':
+        return type;
+    default:
+        return 0;
+    }
+}
+
+// Copied from htslib/sam.c.
+// Replace with sam tag iterator when this is merged.
+static inline uint8_t *skip_aux(uint8_t *s, uint8_t *end)
+{
+    int size;
+    uint32_t n;
+    if (s >= end) return end;
+    size = aux_type2size(*s); ++s; // skip type
+    switch (size) {
+    case 'Z':
+    case 'H':
+        while (s < end && *s) ++s;
+        return s < end ? s + 1 : end;
+    case 'B':
+        if (end - s < 5) return NULL;
+        size = aux_type2size(*s); ++s;
+        n = le_to_u32(s);
+        s += 4;
+        if (size == 0 || end - s < size * n) return NULL;
+        return s + size * n;
+    case 0:
+        return NULL;
+    default:
+        if (end - s < size) return NULL;
+        return s + size;
+    }
+}
+
+// Parses a comma-separated list of "pos", "mqual", "unmap", "cigar", and "aux"
+// keywords for the bam sanitizer.
+int bam_sanitize_options(const char *str) {
+    int opt = 0;
+
+    while (str && *str) {
+        const char *str_start;
+        while(*str && *str == ',')
+            str++;
+
+        for (str_start = str; *str && *str != ','; str++);
+        int len = str - str_start;
+        if (strncmp(str_start, "all", 3) == 0 || *str_start == '*')
+            opt = FIX_ALL;
+        else if (strncmp(str_start, "none", 4) == 0 ||
+                 strncmp(str_start, "off", 3) == 0)
+            opt = 0;
+        else if (strncmp(str_start, "on", 2) == 0)
+            // default for position sorted data
+            opt = FIX_MQUAL | FIX_UNMAP | FIX_CIGAR | FIX_AUX;
+        else if (strncmp(str_start, "pos", 3) == 0)
+            opt |= FIX_POS;
+        else if (strncmp(str_start, "mqual", 5) == 0)
+            opt |= FIX_MQUAL;
+        else if (strncmp(str_start, "unmap", 5) == 0)
+            opt |= FIX_UNMAP;
+        else if (strncmp(str_start, "cigar", 5) == 0)
+            opt |= FIX_CIGAR;
+        else if (strncmp(str_start, "aux", 3) == 0)
+            opt |= FIX_AUX;
+        else {
+            print_error("sanitize", "Unrecognised keyword %.*s\n",
+                        len, str_start);
+            return -1;
+        }
+    }
+
+    return opt;
+}
+
+int bam_sanitize(sam_hdr_t *h, bam1_t *b, int flags) {
+    if ((flags & FIX_POS) && b->core.tid < 0) {
+        // RNAME * => pos 0. NB can break alignment chr/pos sort order
+        b->core.pos = -1;
+        if (flags & FIX_UNMAP)
+            b->core.flag |= BAM_FUNMAP;
+    }
+
+    if ((flags & FIX_CIGAR) && !(b->core.flag & BAM_FUNMAP)) {
+        // Mapped => unmapped correction
+        if (b->core.pos < 0 && (flags & FIX_UNMAP)) {
+            b->core.flag |= BAM_FUNMAP;
+        } else {
+            hts_pos_t cur_end, rlen = sam_hdr_tid2len(h, b->core.tid);
+            if (b->core.pos >= rlen && (flags & FIX_UNMAP)) {
+                b->core.flag |= BAM_FUNMAP;
+                if (flags & FIX_POS)
+                    b->core.tid = b->core.pos = -1;
+            } else if ((cur_end = bam_endpos(b)) > rlen) {
+                if (bam_trim(b, rlen) < 0)
+                    return -1;
+            }
+        }
+    }
+
+    if (b->core.flag & BAM_FUNMAP) {
+        // Unmapped -> cigar/qual correctoins
+        if ((flags & FIX_CIGAR) && b->core.n_cigar > 0)
+            clear_cigar(b);
+
+        if (flags & FIX_MQUAL)
+            b->core.qual = 0;
+
+        // Remove NM, MD, CG, SM tags.
+        if (flags & FIX_AUX) {
+// Slow equivalent.  Replace with https://github.com/samtools/htslib/pull/1354
+// once complete.
+//            uint8_t *tag;
+//            char *tags[] = {"NM", "MD", "CG", "SM"};
+//            int i;
+//            for (i = 0; i < sizeof(tags)/sizeof(*tags); i++) {
+//                if ((tag = bam_aux_get(b, tags[i])))
+//                    // Sanitizer deliberate ignores errors as we always want to
+//                    // fix things.
+//                    (void)bam_aux_del(b, tag);
+//            }
+
+            uint8_t *s_from, *s_to, *end = b->data + b->l_data;
+            s_from = s_to = bam_get_aux(b);
+#define XTAG(a) (((a)[0]<<8) + (a)[1])
+            while (s_from < end) {
+                int x = (int)s_from[0]<<8 | s_from[1];
+                uint8_t *s = skip_aux(s_from+2, end);
+                if (s == NULL) {
+                    print_error("view", "malformed aux data for record \"%s\"",
+                                bam_get_qname(b));
+                    // As we're sanitizing things, we gloss over erroneous
+                    // data here and trim at this point.  However it's
+                    // unlikely this will change anything as most cases
+                    // the record will have failed in sam_read1 already.
+                    break;
+                }
+
+                if (x != XTAG("NM") && x != XTAG("MD") &&
+                    x != XTAG("CG") && x != XTAG("SM")) {
+                    // Keep all bar the above tags.  Note CG shouldn't
+                    // exist anyway, but cull just incase.
+                    if (s_to != s_from) memmove(s_to, s_from, s - s_from);
+                    s_to += s - s_from;
+                }
+                s_from = s;
+            }
+            b->l_data = s_to - b->data;
+        }
+    }
+
+    return 0;
+}
+
 // currently, this function ONLY works if each read has one hit
-static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int proper_pair_check, int add_ct, int do_mate_scoring, char *arg_list, int no_pg)
+static int bam_mating_core(samFile *in, samFile *out, int remove_reads,
+                           int proper_pair_check, int add_ct,
+                           int do_mate_scoring, char *arg_list, int no_pg,
+                           int sanitize_flags)
 {
     sam_hdr_t *header;
     bam1_t *b[2] = { NULL, NULL };
@@ -289,6 +572,8 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
     curr = 0; has_prev = 0;
     while ((result = sam_read1(in, header, b[curr])) >= 0) {
         bam1_t *cur = b[curr], *pre = b[1-curr];
+        if (bam_sanitize(header, cur, sanitize_flags) < 0)
+            goto fail;
         if (cur->core.flag & BAM_FSECONDARY)
         {
             if ( !remove_reads ) {
@@ -301,17 +586,11 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
             if (sam_write1(out, header, cur) < 0) goto write_fail;
             continue; // pass supplementary alignments through unchanged (TODO:make them match read they came from)
         }
-        if (cur->core.tid < 0 || cur->core.pos < 0) // If unmapped set the flag
-        {
-            cur->core.flag |= BAM_FUNMAP;
-        }
         if ((cur->core.flag&BAM_FUNMAP) == 0) // If mapped calculate end
         {
             cur_end = bam_endpos(cur);
-
-            // Check cur_end isn't past the end of the contig we're on, if it is set the UNMAP'd flag
-            if (cur_end > sam_hdr_tid2len(header, cur->core.tid)) cur->core.flag |= BAM_FUNMAP;
         }
+
         if (has_prev) { // do we have a pair of reads to examine?
             if (strcmp(bam_get_qname(cur), bam_get_qname(pre)) == 0) { // identical pair name
                 pre->core.flag |= BAM_FPAIRED;
@@ -357,11 +636,6 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
                 }
                 has_prev = 0;
             } else { // unpaired?  clear bad info and write it out
-                if (pre->core.tid < 0 || pre->core.pos < 0 || pre->core.flag&BAM_FUNMAP) { // If unmapped
-                    pre->core.flag |= BAM_FUNMAP;
-                    pre->core.tid = -1;
-                    pre->core.pos = -1;
-                }
                 pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
                 pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
                 if ( !remove_reads || !(pre->core.flag&BAM_FUNMAP) ) {
@@ -415,6 +689,8 @@ void usage(FILE* where)
 "  -c           Add template cigar ct tag\n"
 "  -m           Add mate score tag\n"
 "  -u           Uncompressed output\n"
+"  -z, --sanitize FLAG[,FLAG]\n"
+"               Sanitize alignment fields [defaults to all types]\n"
 "  --no-PG      do not add a PG line\n");
 
     sam_global_opt_help(where, "-.O..@-.");
@@ -430,7 +706,8 @@ int bam_mating(int argc, char *argv[])
 {
     htsThreadPool p = {NULL, 0};
     samFile *in = NULL, *out = NULL;
-    int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0, res = 1, mate_score = 0, no_pg = 0;
+    int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0, res = 1,
+        mate_score = 0, no_pg = 0, sanitize_flags = FIX_ALL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     char wmode[4] = {'w', 'b', 0, 0};
     static const struct option lopts[] = {
@@ -442,17 +719,21 @@ int bam_mating(int argc, char *argv[])
 
     // parse args
     if (argc == 1) { usage(stdout); return 0; }
-    while ((c = getopt_long(argc, argv, "rpcmO:@:u", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "rpcmO:@:uz:", lopts, NULL)) >= 0) {
         switch (c) {
-            case 'r': remove_reads = 1; break;
-            case 'p': proper_pair_check = 0; break;
-            case 'c': add_ct = 1; break;
-            case 'm': mate_score = 1; break;
-            case 'u': wmode[2] = '0'; break;
-            case 1: no_pg = 1; break;
-            default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
-                      /* else fall-through */
-            case '?': usage(stderr); goto fail;
+        case 'r': remove_reads = 1; break;
+        case 'p': proper_pair_check = 0; break;
+        case 'c': add_ct = 1; break;
+        case 'm': mate_score = 1; break;
+        case 'u': wmode[2] = '0'; break;
+        case 1: no_pg = 1; break;
+        default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+            /* else fall-through */
+        case '?': usage(stderr); goto fail;
+        case 'z':
+            if ((sanitize_flags = bam_sanitize_options(optarg)) < 0)
+                exit(1);
+            break;
         }
     }
     if (optind+1 >= argc) { usage(stderr); goto fail; }
@@ -481,7 +762,8 @@ int bam_mating(int argc, char *argv[])
     }
 
     // run
-    res = bam_mating_core(in, out, remove_reads, proper_pair_check, add_ct, mate_score, arg_list, no_pg);
+    res = bam_mating_core(in, out, remove_reads, proper_pair_check, add_ct,
+                          mate_score, arg_list, no_pg, sanitize_flags);
 
     // cleanup
     sam_close(in);

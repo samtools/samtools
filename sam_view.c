@@ -89,6 +89,7 @@ typedef struct samview_settings {
     char *fn_in, *fn_idx_in, *fn_out, *fn_fai, *fn_un_out, *fn_out_idx, *fn_un_out_idx;
     int fetch_pairs, nreglist;
     hts_reglist_t *reglist;
+    int sanitize;
 } samview_settings_t;
 
 // Copied from htslib/sam.c.
@@ -692,6 +693,10 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
 // Common code for processing and writing a record
 static inline int process_one_record(samview_settings_t *conf, bam1_t *b,
                                      int *write_error) {
+    if (conf->sanitize)
+        if (bam_sanitize(conf->header, b, conf->sanitize) < 0)
+            return -1;
+
     if (!process_aln(conf->header, b, conf)) {
         if (!conf->is_count) {
             change_flag(b, conf);
@@ -851,6 +856,7 @@ int main_samview(int argc, char *argv[])
         {"unoutput", required_argument, NULL, 'U'},
         {"use-index", no_argument, NULL, 'M'},
         {"with-header", no_argument, NULL, 'h'},
+        {"sanitize", required_argument, NULL, 'z'},
     };
 
     /* parse command-line options */
@@ -867,7 +873,7 @@ int main_samview(int argc, char *argv[])
 
     char *tmp;
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:pP",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:pPz:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -915,6 +921,12 @@ int main_samview(int argc, char *argv[])
         case 'l': settings.library = strdup(optarg); break;
         case 'p': settings.unmap = 1; break;
         case 'P': settings.fetch_pairs = 1; settings.multi_region = 1; break;
+        case 'z':
+            if ((settings.sanitize = bam_sanitize_options(optarg)) < 0) {
+                ret = 1;
+                goto view_end;
+            }
+            break;
         case LONGOPT('L'):
             settings.multi_region = 1;
             // fall through
@@ -1417,6 +1429,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "               Comma-separated read tags to preserve (repeatable) [null].\n"
 "               Equivalent to \"-x ^STR\"\n"
 "  -B, --remove-B             Collapse the backward CIGAR operation\n"
+"  -z, --sanitize FLAGS       Perform sanitity checking and fixing on records.\n"
+"                             FLAGS is comma separated (see manual). [off]\n"
 "\n"
 "General options:\n"
 "  -?, --help   Print long help, including note about region specification\n"
