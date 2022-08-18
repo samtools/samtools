@@ -252,6 +252,12 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
         hdr_out = sam_hdr_init();
     }
 
+    // Add a version line with the sort order to the output header
+    if (sam_hdr_add_line(hdr_out, "HD", "VN", SAM_FORMAT_VERSION, "SO", "unsorted", "GO", "query", NULL) < 0) {
+        fprintf(stderr, "Could not set SO and GO in the header.\n");
+        goto err;
+    }
+
     // Read group
     if (opts->rg_line) {
         if (*opts->rg_line != '@')

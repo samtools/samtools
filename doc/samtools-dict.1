@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-dict 1 "7 April 2022" "samtools-1.15.1" "Bioinformatics tools"
+.TH samtools-dict 1 "18 August 2022" "samtools-1.16" "Bioinformatics tools"
 .SH NAME
 samtools dict \- create a sequence dictionary file from a fasta file
 .\"
@@ -65,6 +65,16 @@ to the AN tag.
 .B -H,\ --no-header
 Do not print the @HD header line.
 .TP
+.BI "-l, --alt " FILE
+Add an AH tag to each sequence listed in the specified
+.IR bwa (1)-style
+.B .alt
+file.
+These files use SAM records to represent alternate locus sequences
+(as named in the
+.B QNAME
+field) and their mappings to the primary assembly.
+.TP
 .BI -o,\ --output \ FILE
 Output to
 .I FILE
@@ -86,6 +96,7 @@ Written by Shane McCarthy from the Sanger Institute.
 .SH SEE ALSO
 .IR samtools (1),
 .IR bcftools (1),
+.IR bwa (1),
 .IR sam (5),
 .IR tabix (1)
 .PP

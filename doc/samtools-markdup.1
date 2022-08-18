@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-markdup 1 "7 April 2022" "samtools-1.15.1" "Bioinformatics tools"
+.TH samtools-markdup 1 "18 August 2022" "samtools-1.16" "Bioinformatics tools"
 .SH NAME
 samtools markdup \- mark duplicate alignments in a coordinate sorted file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2021 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2022 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -64,6 +64,9 @@ samtools markdup
 .RB [ --no-multi-dup ]
 .RB [ --read-coords ]
 .RB [ --coords-order ]
+.RB [ --barcode-tag ]
+.RB [ --barcode-name ]
+.RB [ --barcode-rgx ]
 .I in.algsort.bam out.bam
 
 .SH DESCRIPTION
@@ -142,6 +145,15 @@ The order of the elements captured in the regular expression. Default is txy
 where t is a part of the read name selected for string comparison and x/y the
 coordinates used for optical duplicate detection.  Valid orders are: txy, tyx,
 xyt, yxt, xty, ytx, xy and yx.
+.TP
+.BI "--barcode-tag " TAG
+Duplicates must now also match the barcode tag.
+.TP
+.B --barcode-name
+Use the UMI/barcode embedded in the read name (eigth colon delimited part).
+.TP
+.BI "--barcode-rgx " REGEX
+Regex for barcode in the readname (alternative to --barcode-name).
 .TP
 .B --no-PG
 Do not add a PG line to the output file.
@@ -230,13 +242,13 @@ To use the regex to obtain coordinates from reads, two or three values have to
 be captured.  To mimic the normal behaviour and match a read name of the format
 \fImachine:run:flowcell:lane:tile:x:y\fR use:
 .EX 4
---read-coords '(\w+:[0-9]+:[0-9]+:[0-9]+:[0-9]+):([0-9]+):([0-9]+)'
+--read-coords '([!-9;-?A-~]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+):([0-9]+):([0-9]+)'
 --coords-order txy
 .EE
 
 To match only the coordinates of \fIx:y:randomstuff\fR use:
 .EX 4
---read-coords '^([[:digit:]]):([[:digit:]])'
+--read-coords '^([[:digit:]]+):([[:digit:]]+)'
 --coords-order xy
 .EE
 

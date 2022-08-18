@@ -1,7 +1,7 @@
 /*  bam2depth.c -- depth subcommand.
 
     Copyright (C) 2011, 2012 Broad Institute.
-    Copyright (C) 2012-2016, 2018, 2019-2021 Genome Research Ltd.
+    Copyright (C) 2012-2016, 2018, 2019-2022 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk> (to 2020)
     Author: James Bonfield <jkb@sanger.ac.uk> (2021 rewrite)
@@ -724,7 +724,7 @@ static void usage_exit(FILE *fp, int exit_status)
     fprintf(fp, "  -H           Print a file header\n");
     fprintf(fp, "  -J           Include reads with deletions in depth computation\n");
     fprintf(fp, "  -s           Do not count overlapping reads within a template\n");
-    sam_global_opt_help(fp, "-.---@-.");
+    sam_global_opt_help(fp, "-.--.@-.");
     exit(exit_status);
 }
 
@@ -756,7 +756,7 @@ int main_depth(int argc, char *argv[])
         {"min-mq", required_argument, NULL, 'Q'},
         {"min-BQ", required_argument, NULL, 'q'},
         {"min-bq", required_argument, NULL, 'q'},
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', '-', '@'),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '@'),
         {NULL, 0, NULL, 0}
     };
 

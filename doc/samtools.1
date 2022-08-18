@@ -1,9 +1,9 @@
 '\" t
-.TH samtools 1 "7 April 2022" "samtools-1.15.1" "Bioinformatics tools"
+.TH samtools 1 "18 August 2022" "samtools-1.16" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
-.\" Copyright (C) 2008-2011, 2013-2021 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2022 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -98,6 +98,8 @@ samtools mpileup -C50 -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 samtools phase input.bam
 .PP
 samtools quickcheck in1.bam in2.cram
+.PP
+samtools reference -o ref.fa in.cram
 .PP
 samtools reheader in.header.sam in.bam > out.bam
 .PP
@@ -231,6 +233,8 @@ samtools index
 
 Index a coordinate-sorted SAM, BAM or CRAM file for fast random access.
 Note for SAM this only works if the file has been BGZF compressed first.
+(Starting from Samtools 1.16, this command can also be given several
+alignment filenames, which are indexed individually.)
 
 This index is needed when
 .I region
@@ -296,6 +300,16 @@ option).
 Consider using
 .B samtools collate
 instead if you need name collated data without a full lexicographical sort.
+
+Note that if the sorted output file is to be indexed with
+.BR "samtools index" ,
+the default coordinate sort must be used.
+Thus the
+.B -n
+and
+.B -t
+options are incompatible with
+.BR "samtools index" .
 
 .TP \"-------- collate
 .B collate
@@ -460,6 +474,17 @@ heterozygous consensus in a Bayesian manner, derived from the "Gap5"
 consensus algorithm.  A simpler base frequency counting method is also
 available.
 
+
+.TP \"-------- reference
+.B reference
+samtools reference
+.RB [ options ]
+.I in.bam
+
+Generate a reference from a SAM, BAM or CRAM file based on the
+contents of the SEQuence field and the MD:Z: auxiliary tags, or from
+the embedded reference blocks within a CRAM file (provided it was
+constructed using the \fBembed_ref=1\fR option).
 
 .TP \"-------- coverage
 .B coverage
@@ -937,11 +962,47 @@ block compression.
 CRAM output only; defaults to 0 (off).  Permits use of lzma in CRAM
 block compression.
 .TP
+.BI use_fqz= 0|1
+CRAM \(>= 3.1 output only; enables and disables the fqzcomp quality
+compression method.  This is on by default for version 3.1 and above
+only when the small and archive profiles are in use.
+.TP
+.BI use_tok= 0|1
+CRAM \(>= 3.1 output only; enables and disables the namne tokeniser
+compression method.  This is on by default for version 3.1 and above.
+.TP
 .BI lossy_names= 0|1
 CRAM output only; defaults to 0 (off).  If 1, templates with all
 members within the same CRAM slice will have their read names
 removed.  New names will be automatically generated during decoding.
 Also see the \fBname_prefix\fR option.
+.TP
+.B fast, normal, small, archive
+CRAM output only.  Set the CRAM compression profile.  This is a
+simplified way of setting many output options at once.  It changes the
+following options according to the profile in use.  The "normal"
+profile is the default.
+
+.TS
+lb l l l l .
+Option	\fBfast\fR	\fBnormal\fR	\fBsmall\fR	\fBarchive\fR
+level	1	5	6	7
+use_bzip2	off	off	on	on
+use_lzma	off	off	off	on if level>7
+use_tok(*)	off	on	on	on
+use_fqz(*)	off	off	on	on
+use_arith(*)	off	off	off	on
+seqs_per_slice	10000	10000	25000	100000
+.TE
+
+(*) \fBuse_tok\fR, \fBuse_fqz\fR and \fBuse_arith\fR are only
+enabled for CRAM version 3.1 and above.
+
+The \fBlevel\fR listed is only the default value, and will not be set
+if it has been explicitly changed already.  Additionally
+\fBbases_per_slice\fR is set to \fB500*seqs_per_slice\fR unless previously
+explicitly set.
+
 .RE
 .PP
 For example:
@@ -949,6 +1010,8 @@ For example:
 samtools view --input-fmt-option decode_md=0
     --output-fmt cram,version=3.0 --output-fmt-option embed_ref
     --output-fmt-option seqs_per_slice=2000 -o foo.cram foo.bam
+
+samtools view -O cram,small -o bar.cram bar.bam
 .EE
 .PP
 The \fB--write-index\fR option enables automatic index creation while
@@ -1042,7 +1105,8 @@ Similarly a double backslash is used to get a literal backslash.  For
 example \fBab\\"c\\\\d\fR is the string \fBab"c\\d\fR.
 
 Comparison operators are evaluated as a match being 1 and a mismatch
-being 0, thus "(2 > 1) + (3 < 5)" evaluates as 2.
+being 0, thus "(2 > 1) + (3 < 5)" evaluates as 2.  All comparisons
+involving undefined (null) values are deemed to be false.
 
 The variables are where the file format specifics are accessed from
 the expression.  The variables correspond to SAM fields, for example
@@ -1081,6 +1145,7 @@ refid	int	Integer reference number (0 based)
 rlen	int	Alignment length: no. reference bases
 rname	string	Reference name
 rnext	string	Mate's reference name
+sclen	int	Number of soft-clipped bases
 seq	string	Sequence
 tlen	int	Template length (insert size)
 [XX]	int / string	XX tag value
@@ -1093,7 +1158,10 @@ equivalent to \fBflag & 1024\fR.
 "qlen" and "rlen" are measured using the CIGAR string to count the
 number of query (sequence) and reference bases consumed.  Note "qlen"
 may not exactly match the length of the "seq" field if the sequence is
-"*".
+"*".  "sclen" is the number of soft-clipped bases.  When combined in
+"qlen-sclen" it can give the number of sequence bases used in the
+alignment, distinguishing between global alignment and local alignment
+length.
 
 "endpos" is the (1-based inclusive) position of the rightmost mapped base
 of the read, as measured using the CIGAR string, and for mapped reads
@@ -1111,29 +1179,57 @@ for alignments with many mismatches and \fB[RG]=~"grp[ABC]-"\fR will
 match the read-group string.
 
 If no comparison is used with an auxiliary tag it is taken simply to
-be a test for the existence of that tag.  So "[NM]" will return any
+be a test for the existence of that tag.  So \fB[NM]\fR will return any
 record containing an NM tag, even if that tag is zero (\fBNM:i:0\fR).
+In htslib <= 1.15 negating this with \fB![NM]\fR gave misleading
+results as it was true if the tag did not exist or did exist but was
+zero.  Now this is strictly does-not-exist.  An explicit
+\fBexists([NM])\fR and \fB!exists([NM])\fR function has also been added
+to make this intention clear.
 
-If you need to check specifically for a non-zero value then use \fB[NM]
-&& [NM]!=0\fR.
+Similarly in htslib <= 1.15 using \fB[NM]!=0\fR was true both when the
+tag existed and was not zero as well as when the tag did not exist.
+From 1.16 onwards all comparison operators are only true for tags that
+exist, so \fB[NM]!=0\fR works as expected.
 
 Some simple functions are available to operate on strings.  These
 treat the strings as arrays of bytes, permitting their length,
-minimum, maximum and average values to be computed.
+minimum, maximum and average values to be computed.  These are useful
+for processing Quality Scores.
 
 .TS
 lb l .
-length	Length of the string (excluding nul char)
-min	Minimum byte value in the string
-max	Maximum byte value in the string
-avg	Average byte value in the string
+length(x)	Length of the string (excluding nul char)
+min(x)	Minimum byte value in the string
+max(x)	Maximum byte value in the string
+avg(x)	Average byte value in the string
 .TE
 
 Note that "avg" is a floating point value and it may be NAN for empty
 strings.  This means that "avg(qual)" does not produce an error for
-records that have both seq and qual of "*".  This value will fail any
+records that have both seq and qual of "*".  NAN values will fail any
 conditional checks, so e.g. "avg(qual) > 20" works and will not report
-these records.
+these records.  NAN also fails all equality, < and > comparisons, and
+returns zero when given as an argument to the \fBexists\fR function.
+It can be negated with \fB!x\fR in which case it becomes true.
+
+Functions that operate on both strings and numerics:
+
+.TS
+lb l .
+exists(x)	True if the value exists (or is explicitly true).
+default(x,d)	Value \fBx\fR if it exists or \fBd\fR if not.
+.TE
+
+Functions that apply only to numeric values:
+
+.TS
+lb l .
+sqrt(x)	Square root of \fBx\fR
+log(x)	Natural logarithm of \fBx\fR
+pow(x, y)	Power function, \fBx\fR to the power of \fBy\fR
+exp(x)	Base-e exponential, equivalent to \fBpow(e,x)\fR
+.TE
 
 .PP
 .SH ENVIRONMENT VARIABLES
@@ -1257,6 +1353,7 @@ for further authorship.
 .IR samtools-mpileup (1),
 .IR samtools-phase (1),
 .IR samtools-quickcheck (1),
+.IR samtools-reference (1),
 .IR samtools-reheader (1),
 .IR samtools-rmdup (1),
 .IR samtools-sort (1),

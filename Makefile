@@ -1,6 +1,6 @@
 # Makefile for samtools, utilities for the Sequence Alignment/Map format.
 #
-#    Copyright (C) 2008-2021 Genome Research Ltd.
+#    Copyright (C) 2008-2022 Genome Research Ltd.
 #    Portions copyright (C) 2010-2012 Broad Institute.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -35,7 +35,7 @@ LZ4_CPPFLAGS = -I$(LZ4DIR)
 LZ4_LDFLAGS  = -L$(LZ4DIR)
 
 
-AOBJS=      bam.o bam_aux.o bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
+AOBJS=      bam_aux.o bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
             bam_cat.o bam_md.o bam_plbuf.o bam_reheader.o bam_sort.o \
             bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
             bamtk.o bam2bcf.o sample.o \
@@ -44,7 +44,7 @@ AOBJS=      bam.o bam_aux.o bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
             bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o \
             bam_ampliconclip.o amplicon_stats.o bam_import.o bam_samples.o \
-            bam_consensus.o consensus_pileup.o
+            bam_consensus.o consensus_pileup.o reference.o
 LZ4OBJS  =  $(LZ4DIR)/lz4.o
 
 prefix      = /usr/local
@@ -138,7 +138,7 @@ print-version:
 .c.o:
 	$(CC) $(CFLAGS) $(ALL_CPPFLAGS) -c -o $@ $<
 
-LIBST_OBJS = sam_opts.o sam_utils.o bedidx.o
+LIBST_OBJS = sam_opts.o sam_utils.o bedidx.o bam.o
 
 
 samtools: $(AOBJS) $(LZ4OBJS) libst.a $(HTSLIB)
@@ -173,7 +173,7 @@ bam_cat.o: bam_cat.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) 
 bam_color.o: bam_color.c config.h $(htslib_sam_h)
 bam_fastq.o: bam_fastq.c config.h $(htslib_sam_h) $(htslib_klist_h) $(htslib_kstring_h) $(htslib_bgzf_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h)
 bam_import.o: bam_import.c config.h $(htslib_sam_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h)
-bam_index.o: bam_index.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_khash_h) $(samtools_h) $(sam_opts_h)
+bam_index.o: bam_index.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_khash_h) $(samtools_h) $(sam_opts_h)
 bam_lpileup.o: bam_lpileup.c config.h $(bam_plbuf_h) $(bam_lpileup_h) splaysort.h
 bam_mate.o: bam_mate.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_kstring_h) $(htslib_sam_h) $(samtools_h)
 bam_md.o: bam_md.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_kstring_h) $(htslib_thread_pool_h) $(sam_opts_h) $(samtools_h)
@@ -184,7 +184,7 @@ bam_quickcheck.o: bam_quickcheck.c config.h $(htslib_hts_h) $(htslib_sam_h)
 bam_reheader.o: bam_reheader.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_cram_h) $(samtools_h)
 bam_rmdup.o: bam_rmdup.c config.h $(htslib_sam_h) $(sam_opts_h) $(samtools_h) $(bam_h) $(htslib_khash_h)
 bam_rmdupse.o: bam_rmdupse.c config.h $(bam_h) $(htslib_sam_h) $(htslib_khash_h) $(htslib_klist_h) $(samtools_h)
-bam_sort.o: bam_sort.c config.h $(htslib_ksort_h) $(htslib_hts_os_h) $(htslib_khash_h) $(htslib_klist_h) $(htslib_kstring_h) $(htslib_sam_h) $(htslib_hts_endian_h) $(sam_opts_h) $(samtools_h) $(bedidx_h) $(htslib_cram_h)
+bam_sort.o: bam_sort.c config.h $(htslib_ksort_h) $(htslib_hts_os_h) $(htslib_khash_h) $(htslib_klist_h) $(htslib_kstring_h) $(htslib_sam_h) $(htslib_hts_endian_h) $(sam_opts_h) $(samtools_h) $(bedidx_h) $(htslib_cram_h) $(bam_h)
 bam_split.o: bam_split.c config.h $(htslib_sam_h) $(htslib_khash_h) $(htslib_kstring_h) $(htslib_cram_h) $(htslib_thread_pool_h) $(sam_opts_h) $(samtools_h)
 bam_stat.o: bam_stat.c config.h $(htslib_sam_h) $(samtools_h) $(sam_opts_h)
 bam_tview.o: bam_tview.c config.h $(bam_tview_h) $(htslib_faidx_h) $(htslib_sam_h) $(htslib_bgzf_h) $(samtools_h) $(sam_opts_h)
@@ -197,10 +197,11 @@ bedcov.o: bedcov.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_thread_
 bedidx.o: bedidx.c config.h $(bedidx_h) $(htslib_ksort_h) $(htslib_kseq_h) $(htslib_khash_h)
 consensus_pileup.o: consensus_pileup.c config.h $(htslib_sam_h) $(consensus_pileup_h)
 cut_target.o: cut_target.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(samtools_h) $(sam_opts_h)
-dict.o: dict.c config.h $(htslib_kseq_h) $(htslib_hts_h)
+dict.o: dict.c config.h $(htslib_khash_h) $(htslib_kseq_h) $(htslib_hts_h) $(samtools_h)
 faidx.o: faidx.c config.h $(htslib_faidx_h) $(htslib_hts_h) $(htslib_hfile_h) $(htslib_kstring_h) $(samtools_h)
 padding.o: padding.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_faidx_h) $(sam_opts_h) $(samtools_h)
 phase.o: phase.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_kstring_h) $(sam_opts_h) $(samtools_h) $(htslib_hts_os_h) $(htslib_kseq_h) $(htslib_khash_h) $(htslib_ksort_h)
+reference.o: reference.c config.h $(htslib_sam_h) $(htslib_cram_h) $(samtools_h) $(sam_opts_h)
 sam_opts.o: sam_opts.c config.h $(sam_opts_h)
 sam_utils.o: sam_utils.c config.h $(samtools_h)
 sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_kstring_h) $(htslib_thread_pool_h) $(htslib_hts_expr_h) $(samtools_h) $(sam_opts_h) $(bam_h) $(bedidx_h)
@@ -208,7 +209,7 @@ sample.o: sample.c config.h $(sample_h) $(htslib_khash_h)
 stats_isize.o: stats_isize.c config.h $(stats_isize_h) $(htslib_khash_h)
 stats.o: stats.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) $(htslib_hts_defs_h) $(samtools_h) $(htslib_khash_h) $(htslib_kstring_h) $(stats_isize_h) $(sam_opts_h) $(bedidx_h)
 amplicon_stats.o: amplicon_stats.c config.h $(htslib_sam_h) $(htslib_khash_h) $(samtools_h) $(sam_opts_h) bam_ampliconclip.h
-bam_markdup.o: bam_markdup.c config.h $(htslib_thread_pool_h) $(htslib_sam_h) $(sam_opts_h) $(samtools_h) $(htslib_khash_h) $(htslib_klist_h) $(htslib_kstring_h) $(tmp_file_h)
+bam_markdup.o: bam_markdup.c config.h $(htslib_thread_pool_h) $(htslib_sam_h) $(sam_opts_h) $(samtools_h) $(htslib_khash_h) $(htslib_klist_h) $(htslib_kstring_h) $(tmp_file_h) $(bam_h)
 tmp_file.o: tmp_file.c config.h $(tmp_file_h) $(htslib_sam_h)
 bam_ampliconclip.o: bam_ampliconclip.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_hts_h) $(htslib_hfile_h) $(htslib_kstring_h) $(htslib_sam_h) $(samtools_h) bam_ampliconclip.h
 bam_samples.o: bam_samples.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_kseq_h) $(samtools_h)
@@ -324,8 +325,9 @@ install: $(PROGRAMS) $(MISC_PROGRAMS)
 
 testclean:
 	-rm -f test/*.new test/*.tmp test/*/*.new test/*/*.tmp test/*/*.tmp.*
-	-cd test/dat && rm -f test_input_*.bam.bai
+	-cd test/dat && rm -f test_input_*.bam.bai view.*.bam.bai
 	-cd test/mpileup && rm -f FAIL-*.out* PASS-*.out* anomalous.[bc]*am indels.[bc]*am mpileup.*.[cs]*am mpileup.*.crai overlap50.[bc]*am expected/1.out xx#depth*.bam*
+	-cd test/reference && rm -f mpileup.*.fai
 
 mostlyclean: testclean
 	-rm -f *.o misc/*.o test/*.o test/*/*.o version.h $(LZ4OBJS)

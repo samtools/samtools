@@ -1,3 +1,4 @@
+@HD	VN:1.6	SO:unsorted	GO:query
 @CO	Reverse with: samtools fastq -1 R1.fastq -2 R2.fastq 
 @RG	ID:rgid
 ref1_grp1_p001	77	*	0	0	*	*	0	0	CGAGCTCGGT	!!!!!!!!!!	RG:Z:rgid

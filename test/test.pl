@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2013-2021 Genome Research Ltd.
+#    Copyright (C) 2013-2022 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -34,6 +34,8 @@ use IO::Handle;
 
 my $opts = parse_params();
 
+test_reference($opts);
+test_reference($opts, threads=>2);
 test_bgzip($opts);
 test_faidx($opts);
 test_fqidx($opts);
@@ -822,6 +824,7 @@ sub test_dict
     test_cmd($opts,out=>'dat/dict.out',cmd=>"$$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://example.com/hf37d5.fa.gz $$opts{tmp}/dict.fa.gz");
     test_cmd($opts,out=>'dat/dict.out',cmd=>"cat $$opts{path}/dat/dict.fa | $$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://example.com/hf37d5.fa.gz");
     test_cmd($opts,out=>'dat/dict.alias.out',cmd=>"$$opts{bin}/samtools dict -AH < $$opts{path}/dat/dict.alias.fa");
+    test_cmd($opts,out=>'dat/dict.alt.out',cmd=>"$$opts{bin}/samtools dict -H -l $$opts{path}/dat/dict.alt < $$opts{path}/dat/dict.alias.fa");
 }
 
 sub test_index
@@ -839,6 +842,15 @@ sub test_index
     cmd("$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai");
     test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai ref2");
     test_cmd($opts,out=>'dat/test_input_1_ab.X.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -O sam - -X -cp -R ref2 $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_a.bam.bai $$opts{tmp}/test_input_1_b.bam.bai");
+
+    # Check -o option
+    cmd("$$opts{bin}/samtools index${threads} -o $$opts{tmp}/test_input_1_b_opt.bam.bai $$opts{path}/dat/test_input_1_b.bam");
+    test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b_opt.bam.bai ref2");
+
+    # Check indexing multiple alignment files
+    test_cmd($opts,out=>'dat/empty.expected',cmd=>"$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam",want_fail=>1);
+    test_cmd($opts,out=>'dat/test_input_1_a.bam.bai.expected',cmd=>"$$opts{bin}/samtools index${threads} -M $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam && cat $$opts{path}/dat/test_input_1_a.bam.bai",binary=>1);
+    test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_b.bam.bai ref2");
 
     # Check auto-indexing
     cmd("$$opts{bin}/samtools view${threads} --write-index -o $$opts{path}/dat/auto_indexed.tmp.bam $$opts{path}/dat/mpileup.1.sam");
@@ -960,7 +972,7 @@ sub test_usage
         next if ($subcommand =~ /^(help|version)$/);
         # Under msys the isatty function fails to recognise the terminal.
         # Skip these tests for now.
-        next if ($^O =~ /^msys/ && $subcommand =~ /^(dict|sort|stats|view|fasta|fastq|samples)$/);
+        next if ($^O =~ /^msys/ && $subcommand =~ /^(dict|sort|stats|view|fasta|fastq|samples|reference|head)$/);
         test_usage_subcommand($opts,%args,subcmd=>$subcommand);
     }
 }
@@ -3005,6 +3017,11 @@ sub test_bam2fq
 
     # Test single ended output with dual-indexing
     test_cmd($opts, out=>'dat/empty.expected', out_map=>{'0.fq' => 'bam2fq/14.0.fq.expected', 'i1.fq' => 'bam2fq/14.i1.fq.expected', 'i2.fq' => 'bam2fq/14.i2.fq.expected', '0.fq' => 'bam2fq/14.0.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --index-format 'i8n1i8' --i1 $$opts{path}/i1.fq --i2 $$opts{path}/i2.fq -0 $$opts{path}/0.fq $$opts{path}/dat/bam2fq.014.sam");
+
+    # -T flag, all tags mode
+    test_cmd($opts, out=>'bam2fq/15.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -T '*' $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'bam2fq/15.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -T '' $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'bam2fq/15.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -T '*' $$opts{path}/dat/bam2fq.001.sam");
 }
 
 sub test_depad
@@ -3163,6 +3180,10 @@ sub test_merge
     system("$$opts{bin}/samtools index $$opts{tmp}/merge.bed.1.bam") == 0 or die "failed to index merge.bed.1.bam: $?";
     system("$$opts{bin}/samtools index $$opts{tmp}/merge.bed.2.bam") == 0 or die "failed to index merge.bed.2.bam: $?";
     test_cmd($opts, out=>'merge/merge.bed.expected.sam', cmd => "$$opts{bin}/samtools merge${threads} --no-PG -O SAM -L $$opts{path}/merge/merge.bed - $$opts{tmp}/merge.bed.1.bam $$opts{tmp}/merge.bed.2.bam");
+
+    # -r (RG from filename) option with no initial RG header
+    test_cmd($opts, out=>'merge/rg_from_r_mode.expected.sam', cmd => "$$opts{bin}/samtools merge${threads} --no-PG -r -O SAM - $$opts{path}/merge/test_no_pg_rg_co.sam");
+
 }
 
 sub test_sort
@@ -3196,6 +3217,9 @@ sub test_sort
 
     # Tag sort (FI)
     test_cmd($opts, out=>"sort/tag.fi.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t FI -m 10M $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
+
+    # TemplateCoordinate sort
+    test_cmd($opts, out=>"sort/template-coordinate.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} --template-coordinate -m 10M $$opts{path}/sort/template-coordinate.sort.sam -O SAM -o -");
 }
 
 sub test_collate
@@ -3250,6 +3274,33 @@ sub test_fixmate
     test_cmd($opts,out=>'fixmate/6_ct_replace.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/6_ct_replace.sam -");
     test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
     test_cmd($opts,out=>'fixmate/8_isize_overflow_64bit.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/8_isize_overflow_64bit.sam -");
+}
+
+sub test_reference
+{
+    my ($opts,%args) = @_;
+
+    # Build a CRAM file with some missing data in the middle
+    cmd("$$opts{bin}/samtools view -e 'pos<1000||pos>1200' -O cram,embed_ref=1 -T test/dat/mpileup.ref.fa -o $$opts{path}/reference/mpileup.1.tmp.cram test/dat/mpileup.1.sam");
+
+    # MD:Z mode
+    my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
+    test_cmd($opts,out=>'reference/mpileup.MD.fa.expected', cmd=>"$$opts{bin}/samtools reference${threads} test/reference/mpileup.1.tmp.cram");
+
+    # Embedded reference mode
+    test_cmd($opts,out=>'reference/mpileup.embed.fa.expected', cmd=>"$$opts{bin}/samtools reference${threads} -e test/reference/mpileup.1.tmp.cram");
+
+    # Region queries.
+    # Produce a region fasta file using faidx, and then supply this as
+    # the expected output to the reference command.
+    cmd("$$opts{bin}/samtools faidx test/reference/mpileup.MD.fa.expected");
+    cmd("$$opts{bin}/samtools faidx test/reference/mpileup.MD.fa.expected 17:1000-1500 > test/reference/mpileup.MD.fa.reg.tmp.expected");
+    cmd("$$opts{bin}/samtools faidx test/reference/mpileup.embed.fa.expected");
+    cmd("$$opts{bin}/samtools faidx test/reference/mpileup.embed.fa.expected 17:1000-1500 > test/reference/mpileup.embed.fa.reg.tmp.expected");
+    cmd("$$opts{bin}/samtools index test/reference/mpileup.1.tmp.cram");
+
+    test_cmd($opts,out=>'reference/mpileup.MD.fa.reg.tmp.expected', cmd=>"$$opts{bin}/samtools reference${threads} -r 17:1000-1500 test/reference/mpileup.1.tmp.cram");
+    test_cmd($opts,out=>'reference/mpileup.embed.fa.reg.tmp.expected', cmd=>"$$opts{bin}/samtools reference${threads} -r 17:1000-1500 -e test/reference/mpileup.1.tmp.cram");
 }
 
 sub test_calmd
@@ -3406,6 +3457,10 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/11_optical_dup_regex.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t -O sam --read-coords '^([0-9]+):([0-9]+):([[:print:]]+)' --coords-order xyt --no-PG $$opts{path}/markdup/11_optical_dup_regex.sam -");
     test_cmd($opts, out=>'markdup/11_optical_dup_regex.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t -O sam --read-coords '^([0-9]+):([0-9]+)' --coords-order xy --no-PG $$opts{path}/markdup/11_optical_dup_regex.sam -");
     test_cmd($opts, out=>'markdup/12_optical_chain_regex.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t -O sam --read-coords '([[:digit:]]+):([[:digit:]]+)\$' --coords-order xy --no-PG $$opts{path}/markdup/12_optical_chain_regex.sam -");
+    test_cmd($opts, out=>'markdup/13_optical_barcode_tag.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-tag BX -O sam --no-PG $$opts{path}/markdup/13_optical_barcode_tag.sam -");
+    test_cmd($opts, out=>'markdup/14_optical_barcode_name.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-name -O sam --no-PG $$opts{path}/markdup/14_optical_barcode_name.sam -");
+    test_cmd($opts, out=>'markdup/15_optical_barcode_rgx_name.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-rgx '^([!-9;-?A-~]+):[0-9]+:' --read-coords '^[!-9;-?A-~]+:([0-9]+):([0-9]+)' --coords-order xy -O sam --no-PG $$opts{path}/markdup/15_optical_barcode_rgx_name.sam -");
+    test_cmd($opts, out=>'markdup/16_optical_barcode_rgx_name_test_2.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-rgx '^([!-9;-?A-~]+):[0-9]+:' --read-coords '^[!-9;-?A-~]+:([0-9]{4})([0-9]{4})' --coords-order xy -O sam --no-PG $$opts{path}/markdup/16_optical_barcode_rgx_name_test_2.sam -");
 }
 
 sub test_bedcov
@@ -3415,6 +3470,7 @@ sub test_bedcov
     test_cmd($opts,out=>'bedcov/bedcov.expected',cmd=>"$$opts{bin}/samtools bedcov $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_j.expected',cmd=>"$$opts{bin}/samtools bedcov -j $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_gG.expected',cmd=>"$$opts{bin}/samtools bedcov -g512 -G2048 $$opts{path}/bedcov/bedcov_gG.bed $$opts{path}/bedcov/bedcov.bam");
+    test_cmd($opts,out=>'bedcov/bedcov_c.expected',cmd=>"$$opts{bin}/samtools bedcov -c $$opts{path}/bedcov/bedcov_gG.bed $$opts{path}/bedcov/bedcov.bam");
 }
 
 sub test_split

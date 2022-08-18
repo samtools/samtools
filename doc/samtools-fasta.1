@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-fasta 1 "7 April 2022" "samtools-1.15.1" "Bioinformatics tools"
+.TH samtools-fasta 1 "18 August 2022" "samtools-1.16" "Bioinformatics tools"
 .SH NAME
 samtools fasta / fastq \- converts a SAM/BAM/CRAM file to FASTA or FASTQ
 .\"
@@ -141,6 +141,9 @@ Copy RG, BC and QT tags to the FASTQ header line, if they exist.
 .B -T TAGLIST
 Specify a comma-separated list of tags to copy to the FASTQ header line, if
 they exist.
+\fBTAGLIST\fR can be blank or \fB*\fR to indicate all tags should be copied to
+the output.
+If using \fB*\fR, be careful to quote it to avoid unwanted shell expansion.
 .TP 8
 .B -1 FILE
 Write reads with the READ1 FLAG set (and READ2 not set) to FILE instead of

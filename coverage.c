@@ -55,8 +55,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "sam_opts.h"
 
-const char *VERSION = "0.1";
-
 typedef struct {  // auxiliary data structure to hold stats on coverage
     unsigned long long n_covered_bases;
     unsigned long long summed_coverage;
@@ -254,7 +252,7 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
         fprintf(file_out, full_utf ? VERTICAL_LINE : "|");
         fputc(' ', file_out);
         switch (i) {
-            case 9: fprintf(file_out, "Number of reads: %i", stats[tid].n_selected_reads); break;
+            case 9: fprintf(file_out, "Number of reads: %u", stats[tid].n_selected_reads); break;
             case 8: if (stats[tid].n_reads - stats[tid].n_selected_reads > 0) fprintf(file_out, "    (%i filtered)", stats[tid].n_reads - stats[tid].n_selected_reads); break;
             case 7: fprintf(file_out, "Covered bases:   %sbp", readable_bps(stats[tid].n_covered_bases, buf)); break;
             case 6: fprintf(file_out, "Percent covered: %.4g%%",
