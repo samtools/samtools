@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.16 (18th August 2022)
+-------------------------------
+
 New work and changes:
 
  * samtools reference command added.  This subcommand extracts the embedded
