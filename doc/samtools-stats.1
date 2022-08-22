@@ -82,11 +82,11 @@ IS	Insert sizes
 RL	Read lengths
 FRL	Read lengths for first fragments only
 LRL	Read lengths for last fragments only
+MAPQ	Mapping qualities
 ID	Indel size distribution
 IC	Indels per cycle
 COV	Coverage (depth) distribution
 GCD	GC-depth
-MAPQ    Mapping qualities
 .TE
 
 Not all sections will be reported as some depend on the data being
@@ -336,6 +336,9 @@ observed length (up to the maximum specified by the \fB-l\fR option).
 Columns are read length and frequency.  FRL and LRL contains the same
 information separated into first and last fragments.
 
+MAPQ reports the mapping qualities for the mapped reads, ignoring the
+duplicates, supplementary, secondary and failing quality reads.
+
 ID reports the distribution of indel sizes, with one row per observed
 size. The columns are size, frequency of insertions at that size and
 frequency of deletions at that size.
@@ -368,9 +371,6 @@ of GC content.  Subsequent columns list the coverage depth at 10th,
 25th, 50th, 75th and 90th GC percentiles for this specific GC
 percentage, revealing any GC bias in mapping.  These columns are
 averaged depths, so are floating point with no maximum value.
-
-MAPQ reports the mapping qualities for the mapped reads, ignoring the
-duplicates, supplementary, secondary and failing quality reads.
 
 .SH OPTIONS
 .TP 8

@@ -1199,9 +1199,9 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
         stats->max_len_1st = read_len;
     if ( order == READ_ORDER_LAST && stats->max_len_2nd < read_len )
         stats->max_len_2nd = read_len;
-    if ( ( bam_line->core.flag & (BAM_FUNMAP|BAM_FSECONDARY|BAM_FSUPPLEMENTARY|BAM_FQCFAIL|BAM_FDUP) ) == 0 ) {
+    if ( ( bam_line->core.flag & (BAM_FUNMAP|BAM_FSECONDARY|BAM_FSUPPLEMENTARY|BAM_FQCFAIL|BAM_FDUP) ) == 0 )
         stats->mapping_qualities[bam_line->core.qual]++;
-        }
+
     int i;
     int gc_count = 0;
 
