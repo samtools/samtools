@@ -2174,13 +2174,9 @@ KSORT_INIT(sort, bam1_tag, bam1_lt)
 
 typedef struct {
     size_t buf_len;
-    const char *prefix;
     bam1_tag *buf;
     const sam_hdr_t *h;
-    char *tmpfile_name;
-    int index;
     int error;
-    int no_save;
     int large_pos;
     int minimiser_kmer;
 } worker_t;
@@ -2513,10 +2509,7 @@ static inline void worker_minhash(worker_t *w) {
 static void *worker(void *data)
 {
     worker_t *w = (worker_t*)data;
-    char *name;
-    size_t name_len;
     w->error = 0;
-    w->tmpfile_name = NULL;
 
     switch (g_sam_order) {
         case Coordinate:
@@ -2532,45 +2525,12 @@ static void *worker(void *data)
             ks_mergesort(sort, w->buf_len, w->buf, 0);
     }
 
-    if (w->no_save)
-        return 0;
-
-    name_len = strlen(w->prefix) + 30;
-    name = (char*)calloc(name_len, 1);
-    if (!name) { w->error = errno; return 0; }
-    const int MAX_TRIES = 1000;
-    int tries = 0;
-    for (;;) {
-        if (tries) {
-            snprintf(name, name_len, "%s.%.4d-%.3d.bam",
-                     w->prefix, w->index, tries);
-        } else {
-            snprintf(name, name_len, "%s.%.4d.bam", w->prefix, w->index);
-        }
-
-        if (write_buffer(name, w->large_pos ? "wzx1" : "wbx1",
-                         w->buf_len, w->buf, w->h, 0, NULL, 0, NULL, 1, 0) == 0) {
-            break;
-        }
-        if (errno == EEXIST && tries < MAX_TRIES) {
-            tries++;
-        } else {
-            w->error = errno;
-            break;
-        }
-    }
-
-    if (w->error) {
-        free(name);
-    } else {
-        w->tmpfile_name = name;
-    }
     return 0;
 }
 
-static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
-                       const sam_hdr_t *h, int n_threads, buf_region *in_mem,
-                       int large_pos, int minimiser_kmer, char **fns, size_t fns_size)
+static int sort_blocks(size_t k, bam1_tag *buf, const sam_hdr_t *h,
+                       int n_threads, buf_region *in_mem,
+                       int large_pos, int minimiser_kmer)
 {
     int i;
     size_t pos, rest;
@@ -2591,49 +2551,26 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
     for (i = 0; i < n_threads; ++i) {
         w[i].buf_len = rest / (n_threads - i);
         w[i].buf = &buf[pos];
-        w[i].prefix = prefix;
         w[i].h = h;
-        w[i].index = n_files + i;
-        w[i].tmpfile_name = NULL;
         w[i].large_pos = large_pos;
         w[i].minimiser_kmer = minimiser_kmer;
-        if (in_mem) {
-            w[i].no_save = 1;
-            in_mem[i].from = pos;
-            in_mem[i].to = pos + w[i].buf_len;
-        } else {
-            w[i].no_save = 0;
-        }
+        in_mem[i].from = pos;
+        in_mem[i].to = pos + w[i].buf_len;
         pos += w[i].buf_len; rest -= w[i].buf_len;
         pthread_create(&tid[i], &attr, worker, &w[i]);
     }
     for (i = 0; i < n_threads; ++i) {
         pthread_join(tid[i], 0);
-        if (!in_mem) {
-            assert(w[i].index >= 0 && w[i].index < fns_size);
-            fns[w[i].index] = w[i].tmpfile_name;
-        }
         if (w[i].error != 0) {
             errno = w[i].error;
-            print_error_errno("sort", "failed to create temporary file \"%s.%.4d.bam\"", prefix, w[i].index);
+            print_error_errno("sort", "failed to sort block %d", i);
             n_failed++;
         }
     }
-    if (n_failed && !in_mem) {
-        // Clean up any temporary files that did get made, as we're
-        // about to lose track of them
-        for (i = 0; i < n_threads; ++i) {
-            if (fns[w[i].index]) {
-                unlink(fns[w[i].index]);
-                free(fns[w[i].index]);
-                fns[w[i].index] = NULL;
-            }
-        }
-    }
-    free(tid); free(w);
-    if (n_failed) return -1;
-    if (in_mem) return n_threads;
-    return n_files + n_threads;
+    free(w);
+    free(tid);
+
+    return n_failed ? -1 : n_threads;
 }
 
 static void lib_lookup_destroy(khash_t(const_c2c) *lib_lookup) {
@@ -2888,8 +2825,12 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         goto err;
     }
 
+    in_mem = calloc(n_threads > 0 ? n_threads : 1, sizeof(in_mem[0]));
+    if (!in_mem) goto err;
+
     // write sub files
     k = max_k = bam_mem_offset = 0;
+    size_t name_len = strlen(prefix) + 30;
     while ((res = sam_read1(fp, header, b)) >= 0) {
         int mem_full = 0;
 
@@ -2943,16 +2884,48 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         ++k;
 
         if (mem_full) {
-            if (hts_resize(char *, n_files + (n_threads > 0 ? n_threads : 1),
-                           &fns_size, &fns, 0) < 0)
+            if (hts_resize(char *, n_files + 1, &fns_size, &fns, 0) < 0)
                 goto err;
-            int new_n = sort_blocks(n_files, k, buf, prefix, header, n_threads,
-                                    NULL, large_pos, minimiser_kmer, fns, fns_size);
-            if (new_n < 0) {
+
+            int sort_res = sort_blocks(k, buf, header, n_threads,
+                                       in_mem, large_pos, minimiser_kmer);
+            if (sort_res < 0)
                 goto err;
-            } else {
-                n_files = new_n;
+
+            fns[n_files] = calloc(name_len, 1);
+            if (!fns[n_files])
+                goto err;
+            const int MAX_TRIES = 1000;
+            int tries = 0, merge_res = -1;
+            char *sort_by_tag = (g_sam_order == TagQueryName || g_sam_order == TagCoordinate) ? sort_tag : NULL;
+            for (;;) {
+                if (tries) {
+                    snprintf(fns[n_files], name_len, "%s.%.4d-%.3d.bam",
+                             prefix, n_files, tries);
+                } else {
+                    snprintf(fns[n_files], name_len, "%s.%.4d.bam", prefix, n_files);
+                }
+                if (bam_merge_simple(g_sam_order, sort_by_tag, fns[n_files],
+                                     large_pos ? "wzx1" : "wbx1", header,
+                                     0, NULL, n_threads, in_mem, buf, keys,
+                                     lib_lookup, n_threads, "sort", NULL, NULL,
+                                     NULL, 1, 0) >= 0) {
+                    merge_res = 0;
+                    break;
+                }
+                if (errno == EEXIST && tries < MAX_TRIES) {
+                    tries++;
+                } else {
+                    break;
+                }
             }
+            if (merge_res < 0) {
+                if (errno != EEXIST)
+                    unlink(fns[n_files]);
+                free(fns[n_files]);
+                goto err;
+            }
+            n_files++;
             k = 0;
             if (keys != NULL) keys->n = 0;
             bam_mem_offset = 0;
@@ -2965,10 +2938,8 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
 
     // Sort last records
     if (k > 0) {
-        in_mem = calloc(n_threads > 0 ? n_threads : 1, sizeof(in_mem[0]));
-        if (!in_mem) goto err;
-        num_in_mem = sort_blocks(n_files, k, buf, prefix, header, n_threads,
-                                 in_mem, large_pos, minimiser_kmer, fns, fns_size);
+        num_in_mem = sort_blocks(k, buf, header, n_threads,
+                                 in_mem, large_pos, minimiser_kmer);
         if (num_in_mem < 0) goto err;
     } else {
         num_in_mem = 0;
