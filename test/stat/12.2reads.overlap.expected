@@ -852,6 +852,9 @@ RL	100	2
 FRL	100	1
 # Read lengths - last fragments. Use `grep ^LRL | cut -f 2-` to extract this part. The columns are: read length, count
 LRL	100	1
+# Mapping qualities for reads !(UNMAP|SECOND|SUPPL|QCFAIL|DUP). Use `grep ^MAPQ | cut -f 2-` to extract this part. The columns are: mapq, count
+MAPQ	7	1
+MAPQ	37	1
 # Indel distribution. Use `grep ^ID | cut -f 2-` to extract this part. The columns are: length, number of insertions, number of deletions
 ID	2	0	1
 ID	3	1	0

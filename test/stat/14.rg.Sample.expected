@@ -167,6 +167,32 @@ RL	10	26
 FRL	10	14
 # Read lengths - last fragments. Use `grep ^LRL | cut -f 2-` to extract this part. The columns are: read length, count
 LRL	10	12
+# Mapping qualities for reads !(UNMAP|SECOND|SUPPL|QCFAIL|DUP). Use `grep ^MAPQ | cut -f 2-` to extract this part. The columns are: mapq, count
+MAPQ	0	1
+MAPQ	1	1
+MAPQ	2	1
+MAPQ	3	1
+MAPQ	4	1
+MAPQ	5	1
+MAPQ	6	1
+MAPQ	7	1
+MAPQ	8	1
+MAPQ	9	1
+MAPQ	10	1
+MAPQ	11	1
+MAPQ	12	1
+MAPQ	13	1
+MAPQ	14	1
+MAPQ	15	1
+MAPQ	16	1
+MAPQ	17	1
+MAPQ	18	1
+MAPQ	19	1
+MAPQ	20	1
+MAPQ	21	1
+MAPQ	22	1
+MAPQ	23	1
+MAPQ	50	2
 # Indel distribution. Use `grep ^ID | cut -f 2-` to extract this part. The columns are: length, number of insertions, number of deletions
 # Indels per cycle. Use `grep ^IC | cut -f 2-` to extract this part. The columns are: cycle, number of insertions (fwd), .. (rev) , number of deletions (fwd), .. (rev)
 # Coverage distribution. Use `grep ^COV | cut -f 2-` to extract this part.

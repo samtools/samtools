@@ -180,6 +180,7 @@ typedef struct
     uint64_t *insertions, *deletions;
     uint64_t *ins_cycles_1st, *ins_cycles_2nd, *del_cycles_1st, *del_cycles_2nd;
     isize_t *isize;
+    uint64_t* mapping_qualities;
 
     // The extremes encountered
     int max_len;            // Maximum read length
@@ -1198,6 +1199,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
         stats->max_len_1st = read_len;
     if ( order == READ_ORDER_LAST && stats->max_len_2nd < read_len )
         stats->max_len_2nd = read_len;
+    if ( ( bam_line->core.flag & (BAM_FUNMAP|BAM_FSECONDARY|BAM_FSUPPLEMENTARY|BAM_FQCFAIL|BAM_FDUP) ) == 0 )
+        stats->mapping_qualities[bam_line->core.qual]++;
 
     int i;
     int gc_count = 0;
@@ -1460,7 +1463,7 @@ float gcd_percentile(gc_depth_t *gcd, int N, int p)
 void output_stats(FILE *to, stats_t *stats, int sparse)
 {
     // Calculate average insert size and standard deviation (from the main bulk data only)
-    int isize, ibulk=0, icov;
+    int isize, ibulk=0, icov, imapq=0;
     uint64_t nisize=0, nisize_inward=0, nisize_outward=0, nisize_other=0, cov_sum=0;
     double bulk=0, avg_isize=0, sd_isize=0;
     for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
@@ -1766,6 +1769,13 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     {
         if ( stats->read_lengths_2nd[ilen+1]>0 )
             fprintf(to, "LRL\t%d\t%ld\n", ilen+1, (long)stats->read_lengths_2nd[ilen+1]);
+    }
+
+    fprintf(to, "# Mapping qualities for reads !(UNMAP|SECOND|SUPPL|QCFAIL|DUP). Use `grep ^MAPQ | cut -f 2-` to extract this part. The columns are: mapq, count\n");
+    for (imapq=0; imapq < 256; imapq++)
+    {
+        if ( stats->mapping_qualities[imapq]>0 )
+            fprintf(to, "MAPQ\t%d\t%ld\n", imapq, (long)stats->mapping_qualities[imapq]);
     }
 
     fprintf(to, "# Indel distribution. Use `grep ^ID | cut -f 2-` to extract this part. The columns are: length, number of insertions, number of deletions\n");
@@ -2128,6 +2138,7 @@ void cleanup_stats(stats_t* stats)
     destroy_regions(stats);
     if ( stats->rg_hash ) kh_destroy(rg, stats->rg_hash);
     free(stats->split_name);
+    free(stats->mapping_qualities);
     free(stats);
 }
 
@@ -2317,6 +2328,8 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     if (!stats->del_cycles_1st) goto nomem;
     stats->del_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
     if (!stats->del_cycles_2nd) goto nomem;
+    stats->mapping_qualities = calloc(256,sizeof(uint64_t));
+    if(!stats->mapping_qualities) goto nomem;
     if (init_barcode_tags(stats) < 0)
         goto nomem;
     realloc_rseq_buffer(stats);
