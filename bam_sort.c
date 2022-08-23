@@ -53,6 +53,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bedidx.h"
 #include "bam.h"
 
+#define BAM_BLOCK_SIZE 1024*1024
 
 // Struct which contains the sorting key for TemplateCoordinate sort.
 typedef struct {
@@ -158,6 +159,11 @@ KLIST_INIT(hdrln, char*, hdrln_free_char)
 typedef enum {Coordinate, QueryName, TagCoordinate, TagQueryName, MinHash, TemplateCoordinate} SamOrder;
 static SamOrder g_sam_order = Coordinate;
 static char g_sort_tag[2] = {0,0};
+
+#ifdef isdigit
+#    undef isdigit
+#endif
+#define isdigit(c) ((c)<='9' && (c)>='0')
 
 static int strnum_cmp(const char *_a, const char *_b)
 {
@@ -1159,6 +1165,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             print_error_errno(cmd, "fail to open \"%s\"", fn[i]);
             goto fail;
         }
+        hts_set_opt(fp[i], HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
         hin = sam_hdr_read(fp[i]);
         if (hin == NULL) {
             print_error(cmd, "failed to read header from \"%s\"", fn[i]);
@@ -1331,6 +1338,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         print_error_errno(cmd, "failed to create \"%s\"", out);
         return -1;
     }
+    hts_set_opt(fpout, HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
     if (!no_pg && sam_hdr_add_pg(hout, "samtools",
                                  "VN", samtools_version(),
                                  arg_list ? "CL": NULL,
@@ -1758,6 +1766,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
                 print_error_errno(cmd, "fail to open \"%s\"", fn[i]);
                 goto fail;
             }
+            hts_set_opt(fp[i], HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
 
             // Read header ...
             hin = sam_hdr_read(fp[i]);
@@ -1790,6 +1799,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
         print_error_errno(cmd, "failed to create \"%s\"", out);
         return -1;
     }
+    hts_set_opt(fpout, HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
 
     if (!no_pg && sam_hdr_add_pg(hout, "samtools",
                                  "VN", samtools_version(),
@@ -2193,6 +2203,7 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
 
     fp = sam_open_format(fn, mode, fmt);
     if (fp == NULL) return -1;
+    hts_set_opt(fp, HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
     if (!no_pg && sam_hdr_add_pg((sam_hdr_t *)h, "samtools", "VN", samtools_version(),
                                  arg_list ? "CL": NULL,
                                  arg_list ? arg_list : NULL,
@@ -2706,6 +2717,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         print_error_errno("sort", "can't open \"%s\"", fn);
         goto err;
     }
+    hts_set_opt(fp, HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
     header = sam_hdr_read(fp);
     if (header == NULL) {
         print_error("sort", "failed to read header from \"%s\"", fn);
