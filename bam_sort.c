@@ -1700,7 +1700,7 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
         if (in_mem[i - nfiles].from < in_mem[i - nfiles].to) {
             size_t from = in_mem[i - nfiles].from;
             heap->entry.bam_record = buf[from].bam_record;
-            if (g_sam_order == TemplateCoordinate) heap->entry.u.key = template_coordinate_keys_get(keys, from);
+            if (g_sam_order == TemplateCoordinate) heap->entry.u.key = buf[from].u.key;
             in_mem[i - nfiles].from++;
             res = 0;
         } else {
@@ -1756,7 +1756,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
     heap = (heap1_t*)calloc(heap_size, sizeof(heap1_t));
     if (!heap) goto mem_fail;
 
-    // Make sure that there's enough memory for template coordinate keys
+    // Make sure that there's enough memory for template coordinate keys, one per file to read
     if (keys && keys->n + n >= keys->m * keys->buffer_size) {
         if (template_coordinate_keys_realloc(keys, keys->n + n) < 0) goto mem_fail;
     }
