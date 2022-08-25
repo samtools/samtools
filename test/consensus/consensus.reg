@@ -111,6 +111,16 @@ P 16p.out $samtools consensus -f pileup consen2.tmp.bam -m simple -a -r c2:2-13
 # Line wrapping
 P 17q.out $samtools consensus -f fastq consen2.sam -m simple -a -l 7
 
+# Minimum mapping and base quality
+# At --min-MQ 40 we drop out one read, altering scores, and depth
+P 22p.out $samtools consensus -f pileup consen1.sam -m simple -c 0.6 --min-MQ 40 -d 5
+P 23p.out $samtools consensus -f pileup consen1.sam -m simple -c 0.6 --min-MQ 41 -d 4
+P 24p.out $samtools consensus -f pileup consen1.sam -m simple -c 0.6 --min-MQ 41 -d 5
+# At --min-BQ we drop out a few bases, also changing depth
+P 25p.out $samtools consensus -f pileup consen1.sam -m simple -c 0.6 --min-BQ 5 -d 2
+P 26p.out $samtools consensus -f pileup consen1.sam -m simple -c 0.6 --min-BQ 6 -d 2
+
+
 #-----------------------------------------------------------------------------
 # Gap5 consensus mode (default)
 

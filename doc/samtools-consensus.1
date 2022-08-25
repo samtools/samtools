@@ -171,6 +171,11 @@ Filters out reads with a mapping quality below \fIINT\fR.  This
 defaults to zero.
 
 .TP
+.BI "--min-BQ " INT
+Filters out bases with a base quality below \fIINT\fR.  This defaults
+to zero.
+
+.TP
 .BI --show-del " yes" / "no"
 Whether to show deletions as "*" (no) or to omit from the output
 (yes).  Defaults to no.
@@ -205,7 +210,7 @@ sequences, which still get scores with a fixed +1 per base type occurrence.
 The minimum depth required to make a call.  Defaults to 1.  Failing
 this depth check will produce consensus "N", or absent if it is an
 insertion.  Note this check is performed after filtering by flags
-and mapping quality.
+and mapping/base quality.
 
 .TP
 .BI "-H " H ", --het-fract " H
@@ -229,7 +234,7 @@ use lower-case letter to symbolise a half-present base type.
 .BI "-c " C ", --call-fract " C
 Only used for the simple consensus algorithm.  Require at least
 .I C
-fraction of bases agreeing with the most likely consensus call to omit
+fraction of bases agreeing with the most likely consensus call to emit
 that base type.  This defaults to 0.75.  Failing this check will
 output "N".
 
