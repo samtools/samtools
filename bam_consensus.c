@@ -1385,6 +1385,7 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "                        Exclude reads with any flag bit set\n");
     fprintf(fp, "                        [UNMAP,SECONDARY,QCFAIL,DUP]\n");
     fprintf(fp, "  --min-MQ INT          Exclude reads with mapping quality below INT [0]\n");
+    fprintf(fp, "  --min-BQ INT          Exclude reads with base quality below INT [0]\n");
     fprintf(fp, "  --show-del yes/no     Whether to show deletion as \"*\" [no]\n");
     fprintf(fp, "  --show-ins yes/no     Whether to show insertions [yes]\n");
     fprintf(fp, "  -A, --ambig           Enable IUPAC ambiguity codes [off]\n");
@@ -1489,6 +1490,7 @@ int main_consensus(int argc, char **argv) {
         {"excl-flags",         required_argument, NULL, 12},
         {"ff",                 required_argument, NULL, 12},
         {"min-MQ",             required_argument, NULL, 13},
+        {"min-BQ",             required_argument, NULL, 16},
         {"P-het",              required_argument, NULL, 15},
         {"mode",               required_argument, NULL, 'm'},
         {NULL, 0, NULL, 0}
@@ -1516,6 +1518,7 @@ int main_consensus(int argc, char **argv) {
         case 7:   opts.show_del = (*optarg == 'y' || *optarg == 'Y'); break;
         case 8:   opts.show_ins = (*optarg == 'y' || *optarg == 'Y'); break;
         case 13:  opts.min_mqual = atoi(optarg); break;
+        case 16:  opts.min_qual  = atoi(optarg); break;
         case 15:  opts.P_het = atof(optarg); break;
         case 'q'+100: opts.adj_qual = 1; break;
         case 'q'+101: opts.adj_qual = 0; break;
