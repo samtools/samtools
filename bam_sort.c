@@ -1817,6 +1817,8 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
                 goto fail;
             }
             hts_set_opt(fp[i], HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
+            if (htspool->pool)
+                hts_set_opt(fp[i], HTS_OPT_THREAD_POOL, htspool);
 
             // Read header ...
             hin = sam_hdr_read(fp[i]);
