@@ -160,30 +160,36 @@ typedef enum {Coordinate, QueryName, TagCoordinate, TagQueryName, MinHash, Templ
 static SamOrder g_sam_order = Coordinate;
 static char g_sort_tag[2] = {0,0};
 
-#ifdef isdigit
-#    undef isdigit
-#endif
-#define isdigit(c) ((c)<='9' && (c)>='0')
-
+#define is_digit(c) ((c)<='9' && (c)>='0')
 static int strnum_cmp(const char *_a, const char *_b)
 {
     const unsigned char *a = (const unsigned char*)_a, *b = (const unsigned char*)_b;
     const unsigned char *pa = a, *pb = b;
     while (*pa && *pb) {
-        if (isdigit(*pa) && isdigit(*pb)) {
+        if (!is_digit(*pa) || !is_digit(*pb)) {
+            if (*pa != *pb)
+                return (int)*pa - (int)*pb;
+            ++pa; ++pb;
+        } else {
+            // skip leading zeros
             while (*pa == '0') ++pa;
             while (*pb == '0') ++pb;
-            while (isdigit(*pa) && isdigit(*pb) && *pa == *pb) ++pa, ++pb;
-            if (isdigit(*pa) && isdigit(*pb)) {
-                int i = 0;
-                while (isdigit(pa[i]) && isdigit(pb[i])) ++i;
-                return isdigit(pa[i])? 1 : isdigit(pb[i])? -1 : (int)*pa - (int)*pb;
-            } else if (isdigit(*pa)) return 1;
-            else if (isdigit(*pb)) return -1;
-            else if (pa - a != pb - b) return pa - a < pb - b? 1 : -1;
-        } else {
-            if (*pa != *pb) return (int)*pa - (int)*pb;
-            ++pa; ++pb;
+
+            // skip matching digits
+            while (is_digit(*pa) && *pa == *pb)
+                pa++, pb++;
+
+            // Now mismatching, so see which ends the number sooner
+            int diff = (int)*pa - (int)*pb;
+            while (is_digit(*pa) && is_digit(*pb))
+                pa++, pb++;
+
+            if (is_digit(*pa))
+                return  1; // pa still going, so larger
+            else if (is_digit(*pb))
+                return -1; // pb still going, so larger
+            else if (diff)
+                return diff; // same length, so earlier diff
         }
     }
     return *pa? 1 : *pb? -1 : 0;
