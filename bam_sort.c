@@ -48,6 +48,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "htslib/hts_endian.h"
 #include "htslib/cram.h"
+#include "htslib/thread_pool.h"
 #include "sam_opts.h"
 #include "samtools.h"
 #include "bedidx.h"
@@ -1735,7 +1736,8 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
                             int n, char * const *fn, int num_in_mem,
                             buf_region *in_mem, bam1_tag *buf,
                             template_coordinate_keys_t *keys,
-                            khash_t(const_c2c) *lib_lookup, int n_threads,
+                            khash_t(const_c2c) *lib_lookup,
+                            htsThreadPool *htspool,
                             const char *cmd, const htsFormat *in_fmt,
                             const htsFormat *out_fmt, char *arg_list, int no_pg,
                             int write_index) {
@@ -1817,7 +1819,8 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
         return -1;
     }
 
-    if (n_threads > 1) hts_set_threads(fpout, n_threads);
+    if (htspool->pool)
+        hts_set_opt(fpout, HTS_OPT_THREAD_POOL, htspool);
 
     if (sam_hdr_write(fpout, hout) != 0) {
         print_error_errno(cmd, "failed to write header to \"%s\"", out);
@@ -2690,6 +2693,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     const char *new_ss = NULL;
     buf_region *in_mem = NULL;
     khash_t(const_c2c) *lib_lookup = NULL;
+    htsThreadPool htspool = { NULL, 0 };
     int num_in_mem = 0;
     int large_pos = 0;
 
@@ -2832,11 +2836,14 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         }
     }
 
-    // No gain to using the thread pool here as the flow of this code
-    // is such that we are *either* reading *or* sorting.  Hence a shared
-    // pool makes no real difference except to reduce the thread count a little.
-    if (n_threads > 1)
-        hts_set_threads(fp, n_threads);
+    if (n_threads > 1) {
+        htspool.pool = hts_tpool_init(n_threads);
+        if (!htspool.pool) {
+            print_error_errno("sort", "failed to set up thread pool");
+            goto err;
+        }
+        hts_set_opt(fp, HTS_OPT_THREAD_POOL, &htspool);
+    }
 
     if ((bam_mem = malloc(max_mem)) == NULL) {
         print_error("sort", "couldn't allocate memory for bam_mem");
@@ -2926,7 +2933,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
                 if (bam_merge_simple(g_sam_order, sort_by_tag, fns[n_files],
                                      large_pos ? "wzx1" : "wbx1", header,
                                      0, NULL, n_threads, in_mem, buf, keys,
-                                     lib_lookup, n_threads, "sort", NULL, NULL,
+                                     lib_lookup, &htspool, "sort", NULL, NULL,
                                      NULL, 1, 0) >= 0) {
                     merge_res = 0;
                     break;
@@ -2985,7 +2992,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         char *sort_by_tag = (sam_order == TagQueryName || sam_order == TagCoordinate) ? sort_tag : NULL;
         if (bam_merge_simple(sam_order, sort_by_tag, fnout, modeout, header,
                              n_files, fns, num_in_mem, in_mem, buf, keys,
-                             lib_lookup, n_threads, "sort", in_fmt, out_fmt,
+                             lib_lookup, &htspool, "sort", in_fmt, out_fmt,
                              arg_list, no_pg, write_index) < 0) {
             // Propagate bam_merge_simple() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
@@ -3020,6 +3027,9 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     lib_lookup_destroy(lib_lookup);
     sam_hdr_destroy(header);
     if (fp) sam_close(fp);
+    if (htspool.pool)
+        hts_tpool_destroy(htspool.pool);
+
     return ret;
 }
 
