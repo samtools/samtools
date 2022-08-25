@@ -973,12 +973,12 @@ static int readaln2(void *dat, samFile *fp, sam_hdr_t *h, bam1_t *b) {
  * standard pileup criteria (eg COG-UK / CLIMB Covid-19 seq project).
  *
  *
- * call1 / score1 / depth1 is the highest scoring allele.
- * call2 / score2 / depth2 is the second highest scoring allele.
+ * call1 / score1 is the highest scoring allele.
+ * call2 / score2 is the second highest scoring allele.
  *
  * Het_fract:  score2/score1
  * Call_fract: score1 or score1+score2 over total score
- * Min_depth:  minimum total depth of utilised bases (depth1+depth2)
+ * Min_depth:  minimum total depth of unfiltered bases (above qual/mqual)
  * Min_score:  minimum total score of utilised bases (score1+score2)
  *
  * Eg het_fract 0.66, call_fract 0.75 and min_depth 10.
@@ -999,6 +999,7 @@ static int readaln2(void *dat, samFile *fp, sam_hdr_t *h, bam1_t *b) {
 static int calculate_consensus_simple(const pileup_t *plp,
                                       consensus_opts *opts, int *qual) {
     int i, min_qual = opts->min_qual;
+    int tot_depth = 0;
 
     // Map "seqi" nt16 to A,C,G,T compatibility with weights on pure bases.
     // where seqi is A | (C<<1) | (G<<2) | (T<<3)
@@ -1049,6 +1050,7 @@ static int calculate_consensus_simple(const pileup_t *plp,
             freq[16] ++;
             score[16]+=8 * (opts->use_qual ? q : 1);
         }
+        tot_depth++;
     }
 
     // Total usable depth
@@ -1058,19 +1060,15 @@ static int calculate_consensus_simple(const pileup_t *plp,
 
     // Best and second best potential calls
     int call1  = 15, call2 = 15;
-    int depth1 = 0,  depth2 = 0;
     int score1 = 0,  score2 = 0;
     for (i = 0; i < 5; i++) {
         int c = 1<<i; // A C G T *
         if (score1 < score[c]) {
-            depth2 = depth1;
             score2 = score1;
             call2  = call1;
-            depth1 = freq[c];
             score1 = score[c];
             call1  = c;
         } else if (score2 < score[c]) {
-            depth2 = freq[c];
             score2 = score[c];
             call2  = c;
         }
@@ -1078,23 +1076,19 @@ static int calculate_consensus_simple(const pileup_t *plp,
 
     // Work out which best and second best are usable as a call
     int used_score = score1;
-    int used_depth = depth1;
     int used_base  = call1;
     if (score2 >= opts->het_fract * score1 && opts->ambig) {
         used_base  |= call2;
         used_score += score2;
-        used_depth += depth2;
     }
 
     // N is too shallow, or insufficient proportion of total
-    if (used_depth < opts->min_depth ||
+    if (tot_depth  < opts->min_depth ||
         used_score < opts->call_fract * tscore) {
-        used_depth = 0;
         // But note shallow gaps are still called gaps, not N, as
         // we're still more confident there is no base than it is
         // A, C, G or T.
-        used_base = call1 == 16 /*&& depth1 >= call_fract * depth*/
-            ? 16 : 0; // * or N
+        used_base = call1 == 16 ? 16 : 0; // * or N
     }
 
     // Our final call.  "?" shouldn't be possible to generate
@@ -1102,7 +1096,7 @@ static int calculate_consensus_simple(const pileup_t *plp,
         "NACMGRSVTWYHKDBN"
         "*ac?g???t???????";
 
-    //printf("%c %d\n", het[used_base], used_depth);
+    //printf("%c %d\n", het[used_base], tot_depth);
     if (qual)
         *qual = used_base ? 100.0 * used_score / tscore : 0;
 

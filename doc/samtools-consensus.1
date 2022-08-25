@@ -204,7 +204,8 @@ sequences, which still get scores with a fixed +1 per base type occurrence.
 .BI "-d " D ", --min-depth " D
 The minimum depth required to make a call.  Defaults to 1.  Failing
 this depth check will produce consensus "N", or absent if it is an
-insertion.
+insertion.  Note this check is performed after filtering by flags
+and mapping quality.
 
 .TP
 .BI "-H " H ", --het-fract " H

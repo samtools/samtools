@@ -73,12 +73,8 @@ P 10q.out   $samtools consensus -f fastq consen1.sam -m simple -q -A -H 0.375 -c
 P 10.1q.out $samtools consensus -f fastq consen1.sam -m simple -q -A -H 0.375 -c 0.917
 
 # Minimum depth
-P 11.3q.out $samtools consensus -f fastq  consen1.sam -m simple -c 0.6 -d 3 --show-del yes
-P 11.3p.out $samtools consensus -f pileup consen1.sam -m simple -c 0.6 -d 3 --show-del yes
-
-# At depth 4, the insertions vanish
-P 11.4q.out $samtools consensus -f fastq  consen1.sam -m simple -c 0.6 -d 4 --show-del yes
-P 11.4p.out $samtools consensus -f pileup consen1.sam -m simple -c 0.6 -d 4 --show-del yes
+P 11.3q.out $samtools consensus -f fastq  consen1.sam -m simple -c 0.6 -d 5 --show-del yes
+P 11.3p.out $samtools consensus -f pileup consen1.sam -m simple -c 0.6 -d 5 --show-del yes
 
 # And at 6 we have nothing, although deletion still there as "*" is still
 # more accurate than "N".
