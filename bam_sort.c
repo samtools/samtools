@@ -54,7 +54,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bedidx.h"
 #include "bam.h"
 
-#define BAM_BLOCK_SIZE 1024*1024
+#define BAM_BLOCK_SIZE 2*1024*1024
+#define MAX_TMP_FILES 64
 
 // Struct which contains the sorting key for TemplateCoordinate sort.
 typedef struct {
@@ -2722,7 +2723,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
                       const htsFormat *in_fmt, const htsFormat *out_fmt,
                       char *arg_list, int no_pg, int write_index)
 {
-    int ret = -1, res, i, nref, n_files = 0;
+    int ret = -1, res, i, nref, n_files = 0, n_big_files = 0, fn_counter = 0;
     size_t max_k, k, max_mem, bam_mem_offset;
     sam_hdr_t *header = NULL;
     samFile *fp = NULL;
@@ -2967,16 +2968,25 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             const int MAX_TRIES = 1000;
             int tries = 0, merge_res = -1;
             char *sort_by_tag = (g_sam_order == TagQueryName || g_sam_order == TagCoordinate) ? sort_tag : NULL;
+            int consolidate_from = n_files;
+            if (n_files - n_big_files >= MAX_TMP_FILES/2)
+                consolidate_from = n_big_files;
+            else if (n_files >= MAX_TMP_FILES)
+                consolidate_from = 0;
+
             for (;;) {
                 if (tries) {
                     snprintf(fns[n_files], name_len, "%s.%.4d-%.3d.bam",
-                             prefix, n_files, tries);
+                             prefix, fn_counter, tries);
                 } else {
-                    snprintf(fns[n_files], name_len, "%s.%.4d.bam", prefix, n_files);
+                    snprintf(fns[n_files], name_len, "%s.%.4d.bam", prefix,
+                             fn_counter);
                 }
                 if (bam_merge_simple(g_sam_order, sort_by_tag, fns[n_files],
                                      large_pos ? "wzx1" : "wbx1", header,
-                                     0, NULL, n_threads, in_mem, buf, keys,
+                                     n_files - consolidate_from,
+                                     &fns[consolidate_from], n_threads,
+                                     in_mem, buf, keys,
                                      lib_lookup, &htspool, "sort", NULL, NULL,
                                      NULL, 1, 0) >= 0) {
                     merge_res = 0;
@@ -2988,16 +2998,29 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
                     break;
                 }
             }
+            fn_counter++;
             if (merge_res < 0) {
                 if (errno != EEXIST)
                     unlink(fns[n_files]);
                 free(fns[n_files]);
                 goto err;
             }
+
+            if (consolidate_from < n_files) {
+                for (i = consolidate_from; i < n_files; i++) {
+                    unlink(fns[i]);
+                    free(fns[i]);
+                }
+                fns[consolidate_from] = fns[n_files];
+                n_files = consolidate_from;
+                n_big_files = consolidate_from + 1;
+            }
+
             n_files++;
             k = 0;
             if (keys != NULL) keys->n = 0;
             bam_mem_offset = 0;
+
         }
     }
     if (res != -1) {
