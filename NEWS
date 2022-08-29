@@ -715,7 +715,7 @@ Changes affecting the whole of samtools, or multiple sub-commands:
    version 4 signatures are in use.  See HTSlib's NEWS file and
    htslib-s3-plugin manual page for more information.
 
- * HTSlib (and therefore SAMtools) no longer considers a zero-length
+ * HTSlib (and therefore SAMtools) no longer considers a zero-length empty
    file to be a valid SAM file.  This has been changed so that pipelines such
    as `somecmd | samtools ...` with `somecmd` aborting before outputting
    anything will now propagate the error to the second command.
