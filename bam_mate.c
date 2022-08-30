@@ -366,54 +366,6 @@ static int bam_trim(bam1_t *b, hts_pos_t end) {
     return 0;
 }
 
-// Copied from htslib/sam.c.
-// Replace with sam tag iterator when this is merged.
-static inline int aux_type2size(uint8_t type)
-{
-    switch (type) {
-    case 'A': case 'c': case 'C':
-        return 1;
-    case 's': case 'S':
-        return 2;
-    case 'i': case 'I': case 'f':
-        return 4;
-    case 'd':
-        return 8;
-    case 'Z': case 'H': case 'B':
-        return type;
-    default:
-        return 0;
-    }
-}
-
-// Copied from htslib/sam.c.
-// Replace with sam tag iterator when this is merged.
-static inline uint8_t *skip_aux(uint8_t *s, uint8_t *end)
-{
-    int size;
-    uint32_t n;
-    if (s >= end) return end;
-    size = aux_type2size(*s); ++s; // skip type
-    switch (size) {
-    case 'Z':
-    case 'H':
-        while (s < end && *s) ++s;
-        return s < end ? s + 1 : end;
-    case 'B':
-        if (end - s < 5) return NULL;
-        size = aux_type2size(*s); ++s;
-        n = le_to_u32(s);
-        s += 4;
-        if (size == 0 || end - s < size * n) return NULL;
-        return s + size * n;
-    case 0:
-        return NULL;
-    default:
-        if (end - s < size) return NULL;
-        return s + size;
-    }
-}
-
 // Parses a comma-separated list of "pos", "mqual", "unmap", "cigar", and "aux"
 // keywords for the bam sanitizer.
 int bam_sanitize_options(const char *str) {
@@ -489,44 +441,31 @@ int bam_sanitize(sam_hdr_t *h, bam1_t *b, int flags) {
 
         // Remove NM, MD, CG, SM tags.
         if (flags & FIX_AUX) {
-// Slow equivalent.  Replace with https://github.com/samtools/htslib/pull/1354
-// once complete.
-//            uint8_t *tag;
-//            char *tags[] = {"NM", "MD", "CG", "SM"};
-//            int i;
-//            for (i = 0; i < sizeof(tags)/sizeof(*tags); i++) {
-//                if ((tag = bam_aux_get(b, tags[i])))
-//                    // Sanitizer deliberate ignores errors as we always want to
-//                    // fix things.
-//                    (void)bam_aux_del(b, tag);
-//            }
+            uint8_t *from = bam_aux_first(b);
+            uint8_t *end = b->data + b->l_data;
+            uint8_t *to = from ? from-2 : end;
 
-            uint8_t *s_from, *s_to, *end = b->data + b->l_data;
-            s_from = s_to = bam_get_aux(b);
 #define XTAG(a) (((a)[0]<<8) + (a)[1])
-            while (s_from < end) {
-                int x = (int)s_from[0]<<8 | s_from[1];
-                uint8_t *s = skip_aux(s_from+2, end);
-                if (s == NULL) {
-                    print_error("view", "malformed aux data for record \"%s\"",
-                                bam_get_qname(b));
-                    // As we're sanitizing things, we gloss over erroneous
-                    // data here and trim at this point.  However it's
-                    // unlikely this will change anything as most cases
-                    // the record will have failed in sam_read1 already.
-                    break;
-                }
+            while (from) {
+                uint8_t *next = bam_aux_next(b, from);
+                if (!next && errno != ENOENT)
+                    return -1;
 
-                if (x != XTAG("NM") && x != XTAG("MD") &&
-                    x != XTAG("CG") && x != XTAG("SM")) {
-                    // Keep all bar the above tags.  Note CG shouldn't
-                    // exist anyway, but cull just incase.
-                    if (s_to != s_from) memmove(s_to, s_from, s - s_from);
-                    s_to += s - s_from;
+                // Keep tag unless one of a specific set.
+                // NB "to" always points to an aux tag start, while
+                // "from" is after key.
+                from -= 2;
+                int key = (int)from[0]<<8 | from[1];
+                if (key != XTAG("NM") && key != XTAG("MD") &&
+                    key != XTAG("CG") && key != XTAG("SM")) {
+                    ptrdiff_t len = (next ? next-2 : end) - from;
+                    if (from != to)
+                        memmove(to, from, len);
+                    to += len;
                 }
-                s_from = s;
+                from = next;
             }
-            b->l_data = s_to - b->data;
+            b->l_data = to - b->data;
         }
     }
 
