@@ -103,4 +103,6 @@ P d8_noQC.out   $samtools depth           xx#depth4.sam
 P d8_QC.out     $samtools depth -g QCFAIL xx#depth4.sam
 P d8_noSUPP.out $samtools depth -G 2048   xx#depth4.sam
 P d8_noSUPP.out $samtools depth --excl-flags SUPPLEMENTARY xx#depth4.sam
- 
+P d8_PROPER.out $samtools depth --incl-flags PROPER_PAIR   xx#depth4.sam
+P d8_PROSUP.out $samtools depth --incl-flags 2050          xx#depth4.sam
+P d8_R1PROP.out $samtools depth --require-flags PROPER_PAIR,READ1 xx#depth4.sam
