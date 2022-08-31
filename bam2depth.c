@@ -712,8 +712,10 @@ static void usage_exit(FILE *fp, int exit_status)
     fprintf(fp, "  -b FILE      Use bed FILE for list of regions\n");
     fprintf(fp, "  -f FILE      Specify list of input BAM/SAM/CRAM filenames\n");
     fprintf(fp, "  -X           Use custom index files (in -X *.bam *.bam.bai order)\n");
-    fprintf(fp, "  -g INT       Remove specified flags from default flag filter\n");
-    fprintf(fp, "  -G INT       Add specified flags to the default flag filter\n");
+    fprintf(fp, "  -g INT       Remove specified flags from default filter-out flag list\n");
+    fprintf(fp, "  -G, --excl-flags FLAGS\n");
+    fprintf(fp, "               Adds specified flags to the default filter-out flag list\n");
+    fprintf(fp, "               [UNMAP,SECONDARY,QCFAIL,DUP]\n");
     fprintf(fp, "  -H           Print a file header line\n");
     fprintf(fp, "  -l INT       Minimum read length [0]\n");
     fprintf(fp, "  -o FILE      Write output to FILE [stdout]\n");
@@ -721,7 +723,6 @@ static void usage_exit(FILE *fp, int exit_status)
                 "               Filter bases with base quality smaller than INT [0]\n");
     fprintf(fp, "  -Q, --min-MQ INT\n"
                 "               Filter alignments with mapping quality smaller than INT [0]\n");
-    fprintf(fp, "  -H           Print a file header\n");
     fprintf(fp, "  -J           Include reads with deletions in depth computation\n");
     fprintf(fp, "  -s           Do not count overlapping reads within a template\n");
     sam_global_opt_help(fp, "-.--.@-.");
@@ -752,10 +753,11 @@ int main_depth(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        {"min-MQ", required_argument, NULL, 'Q'},
-        {"min-mq", required_argument, NULL, 'Q'},
-        {"min-BQ", required_argument, NULL, 'q'},
-        {"min-bq", required_argument, NULL, 'q'},
+        {"min-MQ",     required_argument, NULL, 'Q'},
+        {"min-mq",     required_argument, NULL, 'Q'},
+        {"min-BQ",     required_argument, NULL, 'q'},
+        {"min-bq",     required_argument, NULL, 'q'},
+        {"excl-flags", required_argument, NULL, 'G'},
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '@'),
         {NULL, 0, NULL, 0}
     };

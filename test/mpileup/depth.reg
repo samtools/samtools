@@ -97,3 +97,10 @@ P d6_nodel.out $samtools depth    depth_del.sam
 
 # With -s (remove operlaps)
 P d7_nodup.out $samtools depth -s xx#depth4.sam
+
+# Flag filtering with -G and -g
+P d8_noQC.out   $samtools depth           xx#depth4.sam
+P d8_QC.out     $samtools depth -g QCFAIL xx#depth4.sam
+P d8_noSUPP.out $samtools depth -G 2048   xx#depth4.sam
+P d8_noSUPP.out $samtools depth --excl-flags SUPPLEMENTARY xx#depth4.sam
+ 
