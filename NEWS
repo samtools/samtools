@@ -1,6 +1,17 @@
 Release a.b
 -----------
 
+Bug fixes:
+
+ * Fixed a bug with the template-coordinate sort which caused incorrect
+   ordering when using threads, or processing large files that don't
+   fit completely in memory.
+   (PR#1703, thanks to Nils Homer)
+
+ * Fixed a crash that occurred when trying to use `samtools merge` in
+   template-coordinate mode.
+   (PR#1705, thanks to Nils Homer)
+
 Release 1.16 (18th August 2022)
 -------------------------------
 
@@ -10,7 +21,7 @@ New work and changes:
    reference out of a CRAM file.
    (PR#1649, addresses #723.  Requested by Torsten Seemann)
 
-  * samtools import now adds grouped by query-name to the header.
+ * samtools import now adds grouped by query-name to the header.
    (PR#1633, thanks to Nils Homer)
 
  * Made samtools view read error messages more generic.  Former error message
