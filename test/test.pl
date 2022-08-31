@@ -3127,6 +3127,7 @@ sub test_stats
     test_cmd($opts,out=>'stat/14.rg.grp2.expected',cmd=>"$$opts{bin}/samtools stats -I grp2 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/14.rg.grp3.expected',cmd=>"$$opts{bin}/samtools stats -I grp3 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/14.rg.Sample.expected',cmd=>"$$opts{bin}/samtools stats -I Sample $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/15.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/mpileup/ce.fa $$opts{path}/stat/15.big_del.sam | tail -n+4", exp_fix=>$efix);
 }
 
 sub test_merge
