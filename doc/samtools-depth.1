@@ -123,11 +123,27 @@ For a list of flag names see
 .IR samtools-flags (1).
 .TP
 .BI "-G " FLAGS ", --excl-flags " FLAGS
-Discard any read that has any of the flags specified by
+Discard reads that have any of the flags specified by
 .I FLAGS
 set.  FLAGS are specified as for the
 .B "-g"
 option. [UNMAP,SECONDARY,QCFAIL,DUP]
+.TP
+.BI "--incl-flags " FLAGS
+Only include reads with at least one bit set in
+.I FLAGS
+present in the FLAG field.
+FLAGS are specified as for the
+.B "-g"
+option. [0]
+.TP
+.BI "--require-flags " FLAGS
+Only include reads with all bits set in
+.I FLAGS
+present in the FLAG field.
+FLAGS are specified as for the
+.B "-g"
+option. [0]
 .TP
 .B -J
 Include reads with deletions in depth computation.

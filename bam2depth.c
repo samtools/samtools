@@ -72,6 +72,8 @@ typedef struct {
 typedef struct {
     int header;
     int flag;
+    int incl_flag;
+    int require_flag;
     int min_qual;
     int min_mqual;
     int min_len;
@@ -564,7 +566,11 @@ static int fastdepth_core(depth_opt *opt, uint32_t nfiles, char **fn,
             if (b[i]->core.tid < 0)
                 continue;
             if (b[i]->core.flag & opt->flag)
-                continue;
+                continue; // must have none of the flags set
+            if (opt->incl_flag && (b[i]->core.flag & opt->incl_flag) == 0)
+                continue; // must have at least one flag set
+            if ((b[i]->core.flag & opt->require_flag) != opt->require_flag)
+                continue; // must have all lags set
             if (b[i]->core.qual < opt->min_mqual)
                 continue;
 
@@ -654,7 +660,11 @@ static int fastdepth_core(depth_opt *opt, uint32_t nfiles, char **fn,
             if (b[i]->core.tid < 0)
                 continue;
             if (b[i]->core.flag & opt->flag)
-                continue;
+                continue; // must have none of the flags set
+            if (opt->incl_flag && (b[i]->core.flag & opt->incl_flag) == 0)
+                continue; // must have at least one flag set
+            if ((b[i]->core.flag & opt->require_flag) != opt->require_flag)
+                continue; // must have all lags set
             if (b[i]->core.qual < opt->min_mqual)
                 continue;
 
@@ -714,8 +724,12 @@ static void usage_exit(FILE *fp, int exit_status)
     fprintf(fp, "  -X           Use custom index files (in -X *.bam *.bam.bai order)\n");
     fprintf(fp, "  -g INT       Remove specified flags from default filter-out flag list\n");
     fprintf(fp, "  -G, --excl-flags FLAGS\n");
-    fprintf(fp, "               Adds specified flags to the default filter-out flag list\n");
+    fprintf(fp, "               Add specified flags to the  default filter-out flag list\n");
     fprintf(fp, "               [UNMAP,SECONDARY,QCFAIL,DUP]\n");
+    fprintf(fp, "      --incl-flags FLAGS\n");
+    fprintf(fp, "               Only inclue records with at least one the FLAGs present [0]\n");
+    fprintf(fp, "      --require-flags FLAGS\n");
+    fprintf(fp, "               Only inclue records with all of the FLAGs present [0]\n");
     fprintf(fp, "  -H           Print a file header line\n");
     fprintf(fp, "  -l INT       Minimum read length [0]\n");
     fprintf(fp, "  -o FILE      Write output to FILE [stdout]\n");
@@ -739,6 +753,8 @@ int main_depth(int argc, char *argv[])
     char *out_file = NULL;
     depth_opt opt = {
         .flag = BAM_FUNMAP | BAM_FSECONDARY | BAM_FDUP | BAM_FQCFAIL,
+        .incl_flag = 0,
+        .require_flag = 0,
         .min_qual = 0,
         .min_mqual = 0,
         .skip_del = 1,
@@ -753,11 +769,13 @@ int main_depth(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        {"min-MQ",     required_argument, NULL, 'Q'},
-        {"min-mq",     required_argument, NULL, 'Q'},
-        {"min-BQ",     required_argument, NULL, 'q'},
-        {"min-bq",     required_argument, NULL, 'q'},
-        {"excl-flags", required_argument, NULL, 'G'},
+        {"min-MQ",        required_argument, NULL, 'Q'},
+        {"min-mq",        required_argument, NULL, 'Q'},
+        {"min-BQ",        required_argument, NULL, 'q'},
+        {"min-bq",        required_argument, NULL, 'q'},
+        {"excl-flags",    required_argument, NULL, 'G'},
+        {"incl-flags",    required_argument, NULL, 1},
+        {"require-flags", required_argument, NULL, 2},
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '@'),
         {NULL, 0, NULL, 0}
     };
@@ -790,8 +808,14 @@ int main_depth(int argc, char *argv[])
         case 'g':
             opt.flag &= ~bam_str2flag(optarg);
             break;
-        case 'G':
+        case 'G': // reject if any set
             opt.flag |= bam_str2flag(optarg);
+            break;
+        case 1: // reject unless at least one set (0 means ignore option)
+            opt.incl_flag |= bam_str2flag(optarg);
+            break;
+        case 2: // reject unless all set
+            opt.require_flag |= bam_str2flag(optarg);
             break;
 
         case 'l':
