@@ -538,11 +538,24 @@ void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
     }
 }
 
-void read_ref_seq(stats_t *stats, int32_t tid, hts_pos_t pos)
+void read_ref_seq(stats_t *stats, int32_t tid, hts_pos_t pos, hts_pos_t end)
 {
     int i;
     hts_pos_t fai_ref_len;
-    char *fai_ref = faidx_fetch_seq64(stats->info->fai, sam_hdr_tid2name(stats->info->sam_header, tid), pos, pos+stats->mrseq_buf-1, &fai_ref_len);
+    char *fai_ref;
+
+    if (end < pos+stats->mrseq_buf-1)
+        end = pos+stats->mrseq_buf-1;
+    else if (stats->mrseq_buf < end - pos) {
+        size_t sz = end - pos;
+        uint8_t *new_rseq = realloc(stats->rseq_buf, sz);
+        if (!new_rseq)
+            error("Couldn't expand the reference sequence buffer\n");
+        stats->rseq_buf = new_rseq;
+        stats->mrseq_buf = sz;
+    }
+
+    fai_ref = faidx_fetch_seq64(stats->info->fai, sam_hdr_tid2name(stats->info->sam_header, tid), pos, pos+stats->mrseq_buf-1, &fai_ref_len);
     if ( fai_ref_len < 0 ) error("Failed to fetch the sequence \"%s\"\n", sam_hdr_tid2name(stats->info->sam_header, tid));
 
     uint8_t *ptr = stats->rseq_buf;
@@ -1331,16 +1344,19 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
         //  20kbp, so the effect is negligible.
         if ( stats->info->fai )
         {
-            int inc_ref = 0, inc_gcd = 0;
-            // First pass or new chromosome
-            if ( stats->rseq_pos==-1 || stats->tid != bam_line->core.tid ) { inc_ref=1; inc_gcd=1; }
-            // Read goes beyond the end of the rseq buffer
-            else if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+readlen ) { inc_ref=1; inc_gcd=1; }
+            hts_pos_t inc_ref = 0;
+            int inc_gcd = 0;
+            // First pass or new chromosome, or read goes beyond the rseq buffer
+            if ( stats->rseq_pos==-1 || stats->tid != bam_line->core.tid
+                 || stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+readlen) {
+                inc_ref=bam_line->core.pos+readlen;
+                inc_gcd=1;
+            }
             // Read overlaps the next gcd bin
             else if ( stats->gcd_pos+stats->info->gcd_bin_size < bam_line->core.pos+readlen )
             {
                 inc_gcd = 1;
-                if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+stats->info->gcd_bin_size ) inc_ref = 1;
+                if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+stats->info->gcd_bin_size ) inc_ref = bam_line->core.pos+stats->info->gcd_bin_size;
             }
             if ( inc_gcd )
             {
@@ -1348,7 +1364,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
                 if ( stats->igcd >= stats->ngcd )
                     realloc_gcd_buffer(stats, readlen);
                 if ( inc_ref )
-                    read_ref_seq(stats,bam_line->core.tid,bam_line->core.pos);
+                    read_ref_seq(stats, bam_line->core.tid,
+                                 bam_line->core.pos, inc_ref);
                 stats->gcd_pos = bam_line->core.pos;
                 stats->gcd[ stats->igcd ].gc = fai_gc_content(stats, stats->gcd_pos, stats->info->gcd_bin_size);
             }
