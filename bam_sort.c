@@ -155,6 +155,8 @@ KHASH_MAP_INIT_STR(const_c2c, char *)
 #define hdrln_free_char(p)
 KLIST_INIT(hdrln, char*, hdrln_free_char)
 
+static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_coordinate_key_t *key, sam_hdr_t *hdr, khash_t(const_c2c) *lib_lookup);
+
 typedef enum {Coordinate, QueryName, TagCoordinate, TagQueryName, MinHash, TemplateCoordinate} SamOrder;
 static SamOrder g_sam_order = Coordinate;
 static char g_sort_tag[2] = {0,0};
@@ -195,6 +197,8 @@ typedef struct {
 static inline int bam1_cmp_by_tag(const bam1_tag a, const bam1_tag b);
 static inline int bam1_cmp_by_minhash(const bam1_tag a, const bam1_tag b);
 static inline int bam1_cmp_template_coordinate(const bam1_tag a, const bam1_tag b);
+static khash_t(const_c2c) * lookup_libraries(sam_hdr_t *header);
+static void lib_lookup_destroy(khash_t(const_c2c) *lib_lookup);
 
 // Function to compare reads in the heap and determine which one is < the other
 // Note, unlike the bam1_cmp_by_X functions which return <0, 0, >0 this
@@ -1088,6 +1092,8 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     merged_header_t *merged_hdr = init_merged_header();
     if (!merged_hdr) return -1;
     refs_t *refs = NULL;
+    template_coordinate_keys_t *keys = NULL;
+    khash_t(const_c2c) *lib_lookup = NULL;
 
     // Is there a specified pre-prepared header to use for output?
     if (headers) {
@@ -1294,6 +1300,26 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         rtrans = NULL;
     }
 
+    // Make sure that there's enough memory for template coordinate keys, one per file to read
+    if (sam_order == TemplateCoordinate) {
+        if ((keys = malloc(sizeof(template_coordinate_keys_t))) == NULL) {
+            print_error("sort", "could not allocate memory for the top-level keys");
+            goto mem_fail;
+        }
+        keys->n = 0;
+        keys->m = 0;
+        keys->buffer_size = 0x10000;
+        keys->buffers = NULL;
+        // Make sure that there's enough memory for template coordinate keys, one per file to read
+        if (keys->n + n >= keys->m * keys->buffer_size) {
+            if (template_coordinate_keys_realloc(keys, keys->n + n) < 0) goto mem_fail;
+        }
+        lib_lookup = lookup_libraries(hout);
+        if (!lib_lookup) {
+            goto mem_fail;
+        }
+    }
+
     // Load the first read from each file into the heap
     for (i = 0; i < n; ++i) {
         heap1_t *h = heap + i;
@@ -1311,6 +1337,10 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             h->idx = idx++;
             if (g_sam_order == TagQueryName || g_sam_order == TagCoordinate) {
                 h->entry.u.tag = bam_aux_get(h->entry.bam_record, g_sort_tag);
+            } else if (g_sam_order == TemplateCoordinate) {
+                template_coordinate_key_t *key = template_coordinate_keys_get(keys, i); // get the next key to use
+                h->entry.u.key = template_coordinate_key(heap->entry.bam_record, key, hout, lib_lookup); // update the key
+                if (heap->entry.u.key == NULL) goto mem_fail; // key could not be created, error out
             } else {
                 h->entry.u.tag = NULL;
             }
@@ -1320,6 +1350,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             bam_destroy1(h->entry.bam_record);
             h->entry.bam_record = NULL;
             h->entry.u.tag = NULL;
+            h->entry.u.key = NULL;
         } else {
             print_error(cmd, "failed to read first record from \"%s\"", fn[i]);
             goto fail;
@@ -1379,6 +1410,10 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             heap->idx = idx++;
             if (g_sam_order == TagQueryName || g_sam_order == TagCoordinate) {
                 heap->entry.u.tag = bam_aux_get(heap->entry.bam_record, g_sort_tag);
+            } else if (g_sam_order == TemplateCoordinate) {
+                template_coordinate_key_t *key = template_coordinate_keys_get(keys, heap->i); // get the next key to use
+                heap->entry.u.key = template_coordinate_key(heap->entry.bam_record, key, hout, lib_lookup); // update the key
+                if (heap->entry.u.key == NULL) goto mem_fail; // key could not be created, error out
             } else {
                 heap->entry.u.tag = NULL;
             }
@@ -1453,6 +1488,14 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     free(fp);
     free(rtrans);
     free(out_idx_fn);
+    if (keys != NULL) {
+        for (i = 0; i < keys->m; ++i) {
+            free(keys->buffers[i]);
+        }
+        free(keys->buffers);
+        free(keys);
+    }
+    lib_lookup_destroy(lib_lookup);
     return -1;
 }
 
@@ -1657,7 +1700,6 @@ end:
  * BAM sorting *
  ***************/
 
-static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_coordinate_key_t *key, sam_hdr_t *hdr, khash_t(const_c2c) *lib_lookup);
 
 typedef struct {
     size_t from;
@@ -1686,7 +1728,7 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
         if (in_mem[i - nfiles].from < in_mem[i - nfiles].to) {
             size_t from = in_mem[i - nfiles].from;
             heap->entry.bam_record = buf[from].bam_record;
-            if (g_sam_order == TemplateCoordinate) heap->entry.u.key = template_coordinate_keys_get(keys, from);
+            if (g_sam_order == TemplateCoordinate) heap->entry.u.key = buf[from].u.key;
             in_mem[i - nfiles].from++;
             res = 0;
         } else {
@@ -1742,7 +1784,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
     heap = (heap1_t*)calloc(heap_size, sizeof(heap1_t));
     if (!heap) goto mem_fail;
 
-    // Make sure that there's enough memory for template coordinate keys
+    // Make sure that there's enough memory for template coordinate keys, one per file to read
     if (keys && keys->n + n >= keys->m * keys->buffer_size) {
         if (template_coordinate_keys_realloc(keys, keys->n + n) < 0) goto mem_fail;
     }
