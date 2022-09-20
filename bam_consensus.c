@@ -99,6 +99,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // but 30T+ 20T- 18A+ 2A- seems like a consistent A miscall on one strand
 // only, while T is spread evenly across both strands.
 
+// TODO: Find lowest quality within STR or homopolymer if indel
+// So T insert to left end with last T being low qual, means low ins score
+
 #include <config.h>
 
 #include <stdio.h>
@@ -170,6 +173,7 @@ typedef struct {
     int incl_flags;
     int min_mqual;
     double P_het;
+    int homopoly_fix;
 
     // Internal state
     samFile *fp;
@@ -380,6 +384,49 @@ int nins(const bam1_t *b){
     return indel;
 }
 
+/*
+ * Some machines, including 454 and PacBio, store the quality values in
+ * homopolymers with the first or last base always being the low quality
+ * state.  This can cause problems when reverse-complementing and aligning,
+ * especially when we left-justify indels.
+ *
+ * Other platforms take the approach of having the middle bases high and
+ * the low confidence spread evenly to both start and end.  This means
+ * reverse-complementing doesn't introduce any strand bias.
+ *
+ * We redistribute qualities within homopolymers in this style to fix
+ * naive consensus or variant calling algorithms.
+ */
+void homopoly_qual_fix(bam1_t *b) {
+    static double ph2err[256] = {0};
+    if (!ph2err[0]) {
+        for (int i = 0; i < 256; i++)
+            ph2err[i] = pow(10, i/-10.0);
+    }
+    uint8_t *seq = bam_get_seq(b);
+    uint8_t *qual = bam_get_qual(b);
+    for (int i = 0; i < b->core.l_qseq; i++) {
+        int s = i; // start of homopoly
+        int base = bam_seqi(seq, i);
+        while (i+1 < b->core.l_qseq && bam_seqi(seq, i+1) == base)
+            i++;
+        // s..i inclusive is now homopolymer
+
+        if (s == i)
+            continue;
+
+        // Simplest:  reverse if end_qual < start_qual
+        // Next:      average outer-most two, then next two, etc
+        // Best:      fully redistribute so start/end lower qual than centre
+
+        // Middle route of averaging outer pairs is sufficient?
+        for (int j = s, k = i; j < k; j++,k--) {
+            double e = ph2err[qual[j]] + ph2err[qual[k]];
+            qual[j] = qual[k] = -fast_log2(e/2)*3.0104+.49;
+        }
+    }
+}
+
 // Return the local NM figure within halo (+/- HALO) of pos.
 // This local NM is used as a way to modify MAPQ to get a localised MAPQ
 // score via an adhoc fashion.
@@ -491,6 +538,11 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
         }
 #endif
     }
+
+    // Fix e.g. PacBio homopolymer qualities
+    if (opts->homopoly_fix)
+        homopoly_qual_fix((bam1_t *)b);
+
 
     // Adjust local_nm array by the number of edits within
     // a defined region (pos +/- halo).
@@ -1405,6 +1457,7 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "      --high-MQ INT     Cap maximum mapping quality [60]\n");
     fprintf(fp, "      --P-het FLOAT     Probability of heterozygous site[%.1e]\n",
             P_HET);
+    fprintf(fp, "  -p, --homopoly-fix    Spread low-qual bases to both ends of homopolymers\n");
 
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@-.");
@@ -1443,6 +1496,7 @@ int main_consensus(int argc, char **argv) {
         .excl_flags   = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP,
         .min_mqual    = 0,
         .P_het        = P_HET,
+        .homopoly_fix = 0,
 
         // Internal state
         .ks_line      = {0,0},
@@ -1493,10 +1547,11 @@ int main_consensus(int argc, char **argv) {
         {"min-BQ",             required_argument, NULL, 16},
         {"P-het",              required_argument, NULL, 15},
         {"mode",               required_argument, NULL, 'm'},
+        {"homopoly-fix",       no_argument,       NULL, 'p'},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "@:qd:c:H:r:5f:C:aAl:o:m:",
+    while ((c = getopt_long(argc, argv, "@:qd:c:H:r:5f:C:aAl:o:m:p",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 'a': opts.all_bases++; break;
@@ -1513,6 +1568,7 @@ int main_consensus(int argc, char **argv) {
         case 'r': opts.reg = optarg; break;
         case 'C': opts.cons_cutoff = atoi(optarg); break;
         case 'A': opts.ambig = 1; break;
+        case 'p': opts.homopoly_fix = 1; break;
         case 1:   opts.default_qual = atoi(optarg); break;
         case 6:   opts.het_only = 1; break;
         case 7:   opts.show_del = (*optarg == 'y' || *optarg == 'Y'); break;
