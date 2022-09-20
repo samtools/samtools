@@ -291,6 +291,14 @@ probability of the base being homozygous vs heterozygous, irrespective
 of whether the output is reported as ambiguous (it will be "N" if
 deemed to be heterozygous without \fB--ambig\fR mode enabled).
 
+.TP
+.BR -h ", " --homopoly-fix
+Some technologies that call runs of the same base type together always
+put the lowest quality calls at one end.  This can cause problems when
+reverse complementing and comparing alignments with indels.  This
+option averages the qualities at both ends to avoid orientation
+biases.  Recommended for old 454 or PacBio HiFi data sets.
+
 .SH EXAMPLES
 .IP -
 Create a modified FASTA reference that has a 1:1 coordinate correspondence with the original reference used in alignment.
