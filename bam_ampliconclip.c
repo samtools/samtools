@@ -308,7 +308,7 @@ static int bam_trim_left(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     memcpy(&rec_out->core, &rec->core, sizeof(rec->core));
     memcpy(rec_out->data, rec->data, rec->core.l_qname);
 
-    if (clipping == hard_clip && bases >= rec->core.l_qseq) {
+    if (clipping == hard_clip && bases >= bam_cigar2rlen(rec->core.n_cigar, bam_get_cigar(rec))) {
         rec_out->core.l_qseq = 0;
         rec_out->core.n_cigar = 0;
 
@@ -457,7 +457,7 @@ static int bam_trim_right(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     memcpy(&rec_out->core, &rec->core, sizeof(rec->core));
     memcpy(rec_out->data, rec->data, rec->core.l_qname);
 
-    if (clipping == hard_clip && bases >= rec->core.l_qseq) {
+    if (clipping == hard_clip && bases >= bam_cigar2rlen(rec->core.n_cigar, bam_get_cigar(rec))) {
         rec_out->core.l_qseq = 0;
         rec_out->core.n_cigar = 0;
 
