@@ -68,6 +68,17 @@ the MD and NM tags without access to the query sequence.
 .B samtools calmd
 will emit a warning if any records have been skipped for this reason.
 
+Calmd works best on position-sorted input files, as with these it can
+stream through the reference sequence and so doesn't have to store
+much reference data at any one time.
+For other orderings, it may have to switch to a caching mode which
+keeps the reference sequences in memory.
+This will result in calmd using more memory (up to the full size
+of the reference) than it would in the position-sorted case.
+Note also that versions of samtools calmd up to 1.16.1 should only
+be used on position sorted inputs as they could be very slow when run
+on other orderings.
+
 .SH OPTIONS
 .TP 8
 .B -A
