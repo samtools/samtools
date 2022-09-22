@@ -201,7 +201,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
 
     // Read input, distribute reads pseudo-randomly into n_files temporary
     // files.
-    fp = sam_open_format(fn, "r", &ga->in);
+    fp = sam_open_format(fn ? fn : "-", "r", &ga->in);
     if (fp == NULL) {
         print_error_errno("collate", "Cannot open input file \"%s\"", fn);
         return 1;
