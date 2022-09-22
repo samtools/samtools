@@ -727,9 +727,9 @@ static void usage_exit(FILE *fp, int exit_status)
     fprintf(fp, "               Add specified flags to the  default filter-out flag list\n");
     fprintf(fp, "               [UNMAP,SECONDARY,QCFAIL,DUP]\n");
     fprintf(fp, "      --incl-flags FLAGS\n");
-    fprintf(fp, "               Only inclue records with at least one the FLAGs present [0]\n");
+    fprintf(fp, "               Only include records with at least one the FLAGs present [0]\n");
     fprintf(fp, "      --require-flags FLAGS\n");
-    fprintf(fp, "               Only inclue records with all of the FLAGs present [0]\n");
+    fprintf(fp, "               Only include records with all of the FLAGs present [0]\n");
     fprintf(fp, "  -H           Print a file header line\n");
     fprintf(fp, "  -l INT       Minimum read length [0]\n");
     fprintf(fp, "  -o FILE      Write output to FILE [stdout]\n");
