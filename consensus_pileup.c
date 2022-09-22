@@ -186,7 +186,7 @@ static int get_next_base(pileup_t *p, hts_pos_t pos, int nth, int *is_insert) {
         p->base4 = 16;
         p->padding = 1;
         if (p->seq_offset < b->core.l_qseq)
-            p->qual = (p->qual + p->b_qual[p->seq_offset+1])/2;
+            p->qual = MIN(p->qual, p->b_qual[p->seq_offset+1]);
         else
             p->qual = 0;
     } else {
@@ -196,9 +196,9 @@ static int get_next_base(pileup_t *p, hts_pos_t pos, int nth, int *is_insert) {
             p->base = '*';
             p->base4 = 16;
             if (p->seq_offset+1 < b->core.l_qseq)
-                p->qual = (p->qual + p->b_qual[p->seq_offset+1])/2;
+                p->qual = MIN(p->qual, p->b_qual[p->seq_offset+1]);
             else
-                p->qual = (p->qual + p->b_qual[p->seq_offset])/2;
+                p->qual = MIN(p->qual, p->b_qual[p->seq_offset]);
             break;
 
         case BAM_CPAD:
@@ -206,9 +206,9 @@ static int get_next_base(pileup_t *p, hts_pos_t pos, int nth, int *is_insert) {
             p->base = '*';
             p->base4 = 16;
             if (p->seq_offset+1 < b->core.l_qseq)
-                p->qual = (p->qual + p->b_qual[p->seq_offset+1])/2;
+                p->qual = MIN(p->qual, p->b_qual[p->seq_offset+1]);
             else
-                p->qual = (p->qual + p->b_qual[p->seq_offset])/2;
+                p->qual = MIN(p->qual, p->b_qual[p->seq_offset]);
             break;
 
         case BAM_CREF_SKIP:
