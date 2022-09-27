@@ -1,3 +1,6 @@
+// TODO: add -X profile
+// -X pbccs: -p --homopoly-score 0.5 --P-indel 0.20
+
 /*  bam_consensus.c -- consensus subcommand.
 
     Copyright (C) 1998-2001,2003 Medical Research Council (Gap4/5 source)
@@ -99,9 +102,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // but 30T+ 20T- 18A+ 2A- seems like a consistent A miscall on one strand
 // only, while T is spread evenly across both strands.
 
-// TODO: Find lowest quality within STR or homopolymer if indel
-// So T insert to left end with last T being low qual, means low ins score
-
 #include <config.h>
 
 #include <stdio.h>
@@ -159,7 +159,7 @@ typedef struct {
     int min_depth;
     double call_fract;
     double het_fract;
-    int gap5;
+    int mode;   // One of MODE_{GAP5,BAYES*} macros below
     enum format fmt;
     int cons_cutoff;
     int ambig;
@@ -174,7 +174,8 @@ typedef struct {
     int incl_flags;
     int min_mqual;
     double P_het;
-    int homopoly_fix;
+    double P_indel;
+    double homopoly_fix;
 
     // Internal state
     samFile *fp;
@@ -227,6 +228,8 @@ typedef struct {
 } consensus_t;
 
 #define P_HET 1e-4
+#define P_INDEL 1e-3
+#define P_HOMOPOLY 0.5
 
 #define LOG10            2.30258509299404568401
 #define TENOVERLOG10     4.34294481903251827652
@@ -238,19 +241,34 @@ typedef struct {
 #define ALIGNED(x)
 #endif
 
-static double prior[25]    ALIGNED(16);  /* Sum to 1.0 */
-static double lprior15[15] ALIGNED(16);  /* 15 combinations of {ACGT*} */
-
-/* Precomputed matrices for the consensus algorithm */
-static double pMM[101] ALIGNED(16);
-static double p__[101] ALIGNED(16);
-static double p_M[101] ALIGNED(16);
-
+// Initialised once as a global array.  This won't work if threaded,
+// but we'll rewrite if and when that gets added later.
 static double e_tab_a[1002]  ALIGNED(16);
 static double *e_tab = &e_tab_a[500];
 static double e_tab2_a[1002] ALIGNED(16);
 static double *e_tab2 = &e_tab2_a[500];
 static double e_log[501]     ALIGNED(16);
+
+/* Precomputed matrices for the consensus algorithm */
+typedef struct {
+    double prior[25]    ALIGNED(16);  /* Sum to 1.0 */
+    double lprior15[15] ALIGNED(16);  /* 15 combinations of {ACGT*} */
+
+    double pMM[101] ALIGNED(16);
+    double p__[101] ALIGNED(16);
+    double p_M[101] ALIGNED(16);
+    double po_[101] ALIGNED(16);
+    double poM[101] ALIGNED(16);
+    double poo[101] ALIGNED(16);
+    double puu[101] ALIGNED(16);
+    double pum[101] ALIGNED(16);
+    double pmm[101] ALIGNED(16);
+} cons_probs;
+
+// Two sets of params; recall oriented (gap5) and precision (stf).
+// We use the former unless MODE_MIXED is set (which is the default
+// for bayesian consensus mode if P_indel is significant).
+static cons_probs cons_prob_gap5, cons_prob_stf;
 
 /*
  * Lots of confusing matrix terms here, so some definitions will help.
@@ -289,11 +307,26 @@ static double e_log[501]     ALIGNED(16);
  * The heterozygosity weight though is a per column calculation as we're
  * trying to model whether the column is pure or mixed. Hence this is done
  * once via a prior and has no affect on the individual matrix cells.
+ *
+ * We have a generic indel probability, but it's a catch all for overcall,
+ * undercall, alignment artifacts, homopolymer issues, etc.  So we can set
+ * it considerably higher and just let the QUAL skew do the filtering for
+ * us, albeit no longer well calibrated.
  */
 
-static void consensus_init(double p_het) {
+#define MODE_SIMPLE    0 // freq counting
+
+#define MODE_BAYES_116 1 // Samtools 1.16 (no indel param)
+#define MODE_GAP5      2 // so called as it's the params from Gap5
+#define MODE_BAYES     3 // a more precise set; +FN, --FP
+#define MODE_MIXED     4 // Combination of GAP5/BAYES
+
+
+static void consensus_init(double p_het, double indel, int mode,
+                           cons_probs *cp) {
     int i;
 
+    // NB: only need to initialise once, but we do here for now
     for (i = -500; i <= 500; i++)
         e_tab[i] = exp(i);
     for (i = -500; i <= 500; i++)
@@ -301,43 +334,99 @@ static void consensus_init(double p_het) {
     for (i = 0; i <= 500; i++)
         e_log[i] = log(i);
 
-    // Heterozygous locations
+    // The priors make very little difference, unless shallow data.
     for (i = 0; i < 25; i++)
-        prior[i] = p_het / 20;
-    prior[0] = prior[6] = prior[12] = prior[18] = prior[24] = (1-p_het)/5;
+        cp->prior[i] = p_het / 20;
+    cp->prior[0] = cp->prior[6] = cp->prior[12] = cp->prior[18]
+        = cp->prior[24] = (1-p_het)/5;
 
-    lprior15[0]  = log(prior[0]);
-    lprior15[1]  = log(prior[1]*2);
-    lprior15[2]  = log(prior[2]*2);
-    lprior15[3]  = log(prior[3]*2);
-    lprior15[4]  = log(prior[4]*2);
-    lprior15[5]  = log(prior[6]);
-    lprior15[6]  = log(prior[7]*2);
-    lprior15[7]  = log(prior[8]*2);
-    lprior15[8]  = log(prior[9]*2);
-    lprior15[9]  = log(prior[12]);
-    lprior15[10] = log(prior[13]*2);
-    lprior15[11] = log(prior[14]*2);
-    lprior15[12] = log(prior[18]);
-    lprior15[13] = log(prior[19]*2);
-    lprior15[14] = log(prior[24]);
+    cp->lprior15[0]  = log(cp->prior[0]);
+    cp->lprior15[1]  = log(cp->prior[1]*2);
+    cp->lprior15[2]  = log(cp->prior[2]*2);
+    cp->lprior15[3]  = log(cp->prior[3]*2);
+    cp->lprior15[4]  = log(cp->prior[4]*2);
+    cp->lprior15[5]  = log(cp->prior[6]);
+    cp->lprior15[6]  = log(cp->prior[7]*2);
+    cp->lprior15[7]  = log(cp->prior[8]*2);
+    cp->lprior15[8]  = log(cp->prior[9]*2);
+    cp->lprior15[9]  = log(cp->prior[12]);
+    cp->lprior15[10] = log(cp->prior[13]*2);
+    cp->lprior15[11] = log(cp->prior[14]*2);
+    cp->lprior15[12] = log(cp->prior[18]);
+    cp->lprior15[13] = log(cp->prior[19]*2);
+    cp->lprior15[14] = log(cp->prior[24]);
 
-
-    // Rewrite as new form
     for (i = 1; i < 101; i++) {
         double prob = 1 - pow(10, -i / 10.0);
 
-        // May want to multiply all these by 5 so pMM[i] becomes close
-        // to -0 for most data. This makes the sums increment very slowly,
-        // keeping bit precision in the accumulator.
-        pMM[i] = log(prob/5);
-        p__[i] = log((1-prob)/20);
-        p_M[i] = log((exp(pMM[i]) + exp(p__[i]))/2);
+        // Single allele
+        cp->pMM[i] = log(prob/5);
+        cp->p__[i] = log((1-prob)/20);
+
+        // Mixed alleles; just average two likelihoods
+        cp->p_M[i] = log((exp(cp->pMM[i]) + exp(cp->p__[i]))/2);
+
+        // Parameters affecting overcall and undercall rates.
+        //
+        // These aren't ideal as we're using multiplicative effects on the
+        // logged values, which is really a power function.  However in
+        // practice this works better, probably due to very poor calibration
+        // of the input values due to systematic alignment bias.
+        if (mode == MODE_GAP5) {
+            // The parameters direct from Gap5.
+            // A bit more sensitive than MODE_BAYES, but less accurate
+            cp->puu[i] = cp->p__[i];
+            cp->poM[i] = cp->p_M[i] * (1+indel);
+            cp->p_M[i] = cp->p_M[i] * (1+indel);
+            cp->po_[i] = cp->p__[i] * (1+indel);
+            cp->p__[i] = cp->p__[i] * (1+indel);
+            cp->poo[i] = cp->p__[i] * (1+indel);
+            cp->p__[i] = cp->p__[i] * (1+indel);
+            cp->pum[i] = cp->p_M[i] * (1+indel);
+            cp->p_M[i] = cp->p_M[i] * (1+indel);
+            cp->pmm[i] = cp->pMM[i] * (1+indel);
+            cp->pMM[i] = cp->pMM[i] * (1+indel);
+
+        } else if (mode == MODE_BAYES || mode == MODE_MIXED) {
+            // MODE_BAYES; more accurate, less sensitive.
+            // MODE_MIXED is MODE_BAYES and MODE_GAP5 in separate runs
+            // and heuristically combined to get a joint score.
+            cp->poM[i] = cp->p_M[i];
+            cp->po_[i] = cp->p__[i] * (1+indel/2);
+            cp->pmm[i] = cp->pMM[i] / (1+indel/2);
+            cp->poo[i] = cp->p__[i] * (1+indel);   // affects indels
+            cp->pum[i] = cp->p_M[i] * (1+indel/2); // affects indels
+            cp->p_M[i] = cp->p_M[i] * (1+indel);   // affects SNPs
+            cp->pMM[i] = cp->pMM[i] / (1+indel);   // affects SNPs
+            cp->puu[i] = cp->p__[i] / (1+indel);
+
+        } else if (mode == MODE_BAYES_116) {
+            // Compatibility with samtools 1.16
+
+            // This had no differention for indel vs substitution error rates,
+            // so o(vercall) and u(undercall) are subst(_).
+            cp->pmm[i] = cp->pMM[i];
+            cp->poM[i] = cp->p_M[i];
+            cp->pum[i] = cp->p_M[i];
+            cp->po_[i] = cp->p__[i];
+            cp->poo[i] = cp->p__[i];
+            cp->puu[i] = cp->p__[i];
+
+        } else {
+            abort(); // cannot get here (now)
+        }
     }
 
-    pMM[0] = pMM[1];
-    p__[0] = p__[1];
-    p_M[0] = p_M[1];
+    cp->pMM[0] = cp->pMM[1];
+    cp->p__[0] = cp->p__[1];
+    cp->p_M[0] = cp->p_M[1];
+
+    cp->pmm[0] = cp->pmm[1];
+    cp->poo[0] = cp->poo[1];
+    cp->po_[0] = cp->po_[1];
+    cp->poM[0] = cp->poM[1];
+    cp->puu[0] = cp->puu[1];
+    cp->pum[0] = cp->pum[1];
 }
 
 static inline double fast_exp(double y) {
@@ -468,63 +557,65 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
         return -1;
     p->cd = local_nm;
 
+    double poly_adj = opts->homopoly_fix ? opts->homopoly_fix : 1;
+
     if (opts->adj_qual) {
-#if 0
-        // Tweak by localised quality.
-        // Quality is reduced by a significant portion of the minimum quality
-        // in neighbouring bases, on the pretext that if the region is bad, then
-        // this base is bad even if it claims otherwise.
-        uint8_t *qual = bam_get_qual(b);
-        const int qhalo = 8; // 2?
-        int qmin = 50; // effectively caps PacBio qual too
-        for (i = 0; i < qlen && i < qhalo; i++) {
-            local_nm[i] = qual[i];
-            if (qmin > qual[i])
-                qmin = qual[i];
-        }
-        for (;i < qlen-qhalo; i++) {
-            //int t = (qual[i]*1   + 3*qmin)/4; // good on 60x
-            int t = (qual[i]   + 5*qmin)/4; // good on 15x
-            local_nm[i] = t < qual[i] ? t : qual[i];
-            if (qmin > qual[i+qhalo])
-                qmin = qual[i+qhalo];
-            else if (qmin <= qual[i-qhalo]) {
-                int j;
-                qmin = 50;
-                for (j = i-qhalo+1; j <= i+qhalo; j++)
-                    if (qmin > qual[j])
-                        qmin = qual[j];
-            }
-        }
-        for (; i < qlen; i++) {
-            local_nm[i] = qual[i];
-            local_nm[i] = (local_nm[i] + 6*qmin)/4;
-        }
-
-        for (i = 0; i < qlen; i++) {
-            qual[i] = local_nm[i];
-
-            // Plus overall rescale.
-            // Lower becomes lower, very high becomes a little higher.
-            // Helps deep GIAB, but detrimental elsewhere.  (What this really
-            // indicates is quality calibration differs per data set.)
-            // It's probably something best accounted for somewhere else.
-
-            //qual[i] = qual[i]*qual[i]/40+1;
-        }
-        memset(local_nm, 0, qlen * sizeof(*local_nm));
-#else
         // Skew local NM by qual vs min-qual delta
         uint8_t *qual = bam_get_qual(b);
+        uint8_t *seq = bam_get_seq(b);
         const int qhalo = 8; // 4
-        int qmin = 99;
+        int qmin = 99, qminp = 99;
+        int base = bam_seqi(seq, 0), polyl = 0, polyr=0; // pos, not len
+        const int qhalop = 2;
+
+        for (i = 1; i < qlen; i++) {
+            if (bam_seqi(seq, i) != base)
+                break;
+            if (i < qhalop && qminp > qual[i])
+                qminp = qual[i];
+        }
+        polyr = i-1;
+
         for (i = 0; i < qlen && i < qhalo; i++) {
             if (qmin > qual[i])
                 qmin = qual[i];
         }
+
         for (;i < qlen-qhalo; i++) {
-            int t = (qual[i]   + 5*qmin)/4; // good on 15x
-            local_nm[i] += t < qual[i] ? (qual[i]-t) : 0;
+            if (opts->homopoly_fix && bam_seqi(seq, i) != base) {
+                polyl = i;
+                base = bam_seqi(seq, i);
+                qminp = qual[i];
+                int j;
+                for (j = i+1; j < qlen; j++) {
+                    if (bam_seqi(seq, j) != base)
+                        break;
+                    if (i < qhalop && qminp > qual[j])
+                        qminp = qual[j];
+                }
+                polyr = j-1;
+            } else {
+                // CHECK: do we want to have opts->homopoly_fix above,
+                // so when not in use we don't define pl to non-zero?
+                // Test on SynDip
+                polyr = polyl;
+            }
+            int pl = polyr-polyl;
+
+            int t = (opts->mode == MODE_BAYES_116)
+                ? (qual[i]   + 5*qmin)/4
+                : qual[i]/3 + (qminp-pl*2)*poly_adj;
+
+
+            local_nm[i] += t < qual[i] ? qual[i]-t : 0;
+
+            // Brute force qminp in polyl to polyr range.
+            // TODO: optimise this with sliding window
+            qminp = qual[i];
+            for (int j = MAX(polyl,i-qhalop); j <= MIN(polyr,i+qhalop); j++)
+                if (qminp < qual[j])
+                    qminp = qual[j];
+
             if (qmin > qual[i+qhalo])
                 qmin = qual[i+qhalo];
             else if (qmin <= qual[i-qhalo]) {
@@ -536,10 +627,11 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
             }
         }
         for (; i < qlen; i++) {
-            int t = (qual[i]   + 5*qmin)/4; // good on 15x
-            local_nm[i] += t < qual[i] ? (qual[i]-t) : 0;
+            int t = (opts->mode == MODE_BAYES_116)
+                ? (qual[i]   + 5*qmin)/4
+                : qual[i]/3 + qminp*poly_adj;
+            local_nm[i] += t < qual[i] ? qual[i]-t : 0;
         }
-#endif
     }
 
     // Fix e.g. PacBio homopolymer qualities
@@ -612,7 +704,8 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
 static
 int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
                              pileup_t *plp, consensus_opts *opts,
-                             consensus_t *cons, int default_qual) {
+                             consensus_t *cons, int default_qual,
+                             cons_probs *cp) {
     int i, j;
     static int init_done =0;
     static double q2p[101], mqual_pow[256];
@@ -649,7 +742,6 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
 
     if (!init_done) {
         init_done = 1;
-        consensus_init(opts->P_het);
 
         for (i = 0; i <= 100; i++) {
             q2p[i] = pow(10, -i/10.0);
@@ -743,7 +835,7 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
         // convert from sam base to acgt*n order.
         base = L[base];
 
-        double MM, __, _M, qe;
+        double MM, __, _M, oo, oM, o_, uu, um, mm, qe;
 
         // Correction for mapping quality.  Maybe speed up via lookups?
         // Cannot nullify mapping quality completely.  Lots of (true)
@@ -778,9 +870,20 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
         if (qual < 1)
             qual = 1;
 
-        __ = p__[qual];       // neither match
-        MM = pMM[qual] - __;  // both match
-        _M = p_M[qual] - __;  // one allele only (half match)
+        /* MM=match  _M=half-match  __=mismatch */
+        __ = cp->p__[qual];       // neither match
+        MM = cp->pMM[qual] - __;  // both match
+        _M = cp->p_M[qual] - __;  // one allele only (half match)
+
+        /* observation ACGT, but against hypothesis ** or *base */
+        oo = cp->poo[qual] - __;
+        oM = cp->poM[qual] - __;
+        o_ = cp->po_[qual] - __;
+
+        /* observation * */
+        uu = cp->puu[qual] - __;
+        um = cp->pum[qual] - __;
+        mm = cp->pmm[qual] - __;
 
         if (flags & CONS_DISCREP) {
             qe = q2p[qual];
@@ -791,19 +894,27 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
 
         switch (base) {
         case 0: // A
-            S[0] += MM;
-            S[1] += _M;
-            S[2] += _M;
-            S[3] += _M;
-            S[4] += _M;
+            S[0]  += MM;
+            S[1]  += _M;
+            S[2]  += _M;
+            S[3]  += _M;
+            S[4]  += oM;
+            S[8]  += o_;
+            S[11] += o_;
+            S[13] += o_;
+            S[14] += oo;
             break;
 
         case 1: // C
-            S[1] += _M;
-            S[5] += MM;
-            S[6] += _M;
-            S[7] += _M;
-            S[8] += _M;
+            S[1]  += _M;
+            S[5]  += MM;
+            S[6]  += _M;
+            S[7]  += _M;
+            S[8]  += oM;
+            S[4]  += o_;
+            S[11] += o_;
+            S[13] += o_;
+            S[14] += oo;
             break;
 
         case 2: // G
@@ -811,44 +922,42 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
             S[ 6] += _M;
             S[ 9] += MM;
             S[10] += _M;
-            S[11] += _M;
+            S[11] += oM;
+            S[4]  += o_;
+            S[8]  += o_;
+            S[13] += o_;
+            S[14] += oo;
             break;
 
         case 3: // T
-            S[ 3] += _M;
+            S[ 3] += _M; // _m
             S[ 7] += _M;
             S[10] += _M;
-            S[12] += MM;
-            S[13] += _M;
+            S[12] += MM; // mm
+            S[13] += oM;
+            S[4]  += o_;
+            S[8]  += o_;
+            S[11] += o_;
+            S[14] += oo;
+            // S[14] oo
 
             break;
 
         case 4: // *
-            S[ 4] += _M;
-            S[ 8] += _M;
-            S[11] += _M;
-            S[13] += _M;
-            S[14] += MM;
+            //   under       under       under       under   agree-no-base
+            S[0] += uu; S[1 ]+= uu; S[2 ]+= uu; S[3 ]+= uu; S[4 ]+= um;
+                        S[5 ]+= uu; S[6 ]+= uu; S[7 ]+= uu; S[8 ]+= um;
+                                    S[9 ]+= uu; S[10]+= uu; S[11]+= um;
+                                                S[12]+= uu; S[13]+= um;
+                                                            S[14]+= mm;
             break;
 
         case 5: /* N => equal weight to all A,C,G,T but not a pad */
-            S[ 0] += MM;
-            S[ 1] += MM;
-            S[ 2] += MM;
-            S[ 3] += MM;
-            S[ 4] += _M;
-
-            S[ 5] += MM;
-            S[ 6] += MM;
-            S[ 7] += MM;
-            S[ 8] += _M;
-
-            S[ 9] += MM;
-            S[10] += MM;
-            S[11] += _M;
-
-            S[12] += MM;
-            S[13] += _M;
+            S[0] += MM; S[1 ]+= MM; S[2 ]+= MM; S[3 ]+= MM; S[4 ]+= oM;
+                        S[5 ]+= MM; S[6 ]+= MM; S[7 ]+= MM; S[8 ]+= oM;
+                                    S[9 ]+= MM; S[10]+= MM; S[11]+= oM;
+                                                S[12]+= MM; S[13]+= oM;
+                                                            S[14]+= oo;
             break;
         }
 
@@ -878,7 +987,7 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
     max_het = -DBL_MAX;
 
     for (j = 0; j < 15; j++) {
-        S[j] += lprior15[j];
+        S[j] += cp->lprior15[j];
         if (shift < S[j])
             shift = S[j];
 
@@ -967,6 +1076,76 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
     return 0;
 }
 
+// If opts->gap5 is MODE_MIXED then we use two different parameter
+// sets, favouring cp_p for precision and cp_r for recall.  Otherwise it's
+// always cp_r only.
+//
+// When both calls equal, we return the same result.  When they differ,
+// we adjust qual based on accurate vs recall profiles.
+int calculate_consensus_gap5m(hts_pos_t pos, int flags, int depth,
+                              pileup_t *plp, consensus_opts *opts,
+                              consensus_t *cons, int default_qual,
+                              cons_probs *cp_r, cons_probs *cp_p) {
+    if (opts->P_indel <= 0.01 || opts->mode != MODE_MIXED)
+        return calculate_consensus_gap5(pos, flags, depth, plp, opts,
+                                        cons, default_qual, cp_r);
+    consensus_t consP, consR;
+
+    // Favours precision
+    calculate_consensus_gap5(pos, flags, depth, plp, opts,
+                             &consP, default_qual, cp_p);
+    // Favours recall
+    calculate_consensus_gap5(pos, flags, depth, plp, opts,
+                             &consR, default_qual, cp_r);
+
+#define MIN(a,b) ((a)<(b)?(a):(b))
+#define MAX(a,b) ((a)>(b)?(a):(b))
+
+    memcpy(cons, &consP, sizeof(consP));
+    // Both strategies match, so defer to cp1 but with a boosted qual
+    if ((consP.phred > 0 &&        // both matching HOM
+         consR.phred > 0 &&
+         consP.call == consR.call) ||
+        (consP.het_logodd >= 0 &&  // both matching HET
+         consR.het_logodd >= 0 &&
+         consP.het_call == consR.het_call)) {
+        // Boost qual as both in agreement
+        if (consP.het_logodd < 0) {
+            cons->phred += MIN(20, consR.phred/2);
+        } else {
+            cons->het_logodd += MIN(20, consR.het_logodd/2);
+        }
+        return 0;
+    }
+
+    // Differ, so which is correct?
+    // If the accurate mode claims heterozygous, we believe it.
+    if (consP.het_logodd >= 0) {
+        // Accurate method claims heterozygous, so go with it.
+        // However sensitive method disagrees, so redous qual.
+        int q2 = MAX(consR.phred, consR.het_logodd);
+        cons->het_logodd = MAX(1, (cons->het_logodd - q2));
+
+    } else if (consR.het_logodd >= 0) {
+        // Accurate is homozygous and consR is het, so we go with it instead.
+        // TODO: may wish to check HET is consistent with HOM? Very unlikely
+        // not to be though.
+        int q1 = consP.phred;
+        int q2 = consR.het_logodd;
+        memcpy(cons, &consR, sizeof(consR));
+        cons->het_logodd = MIN(15, MAX((q2-q1*2)/2, 1+q2/(q1+1.0))); // best
+
+    } else {
+        // Neither are heterozygous, but differing in phred call (V rare).
+        // Pick highest qual, after some scaling?
+        consR.phred = consR.phred / 2;
+        if (consR.phred > consP.phred)
+            memcpy(cons, &consR, sizeof(consR));
+        cons->phred = MAX(10, cons->phred);
+    }
+
+    return 0;
+}
 
 /* --------------------------------------------------------------------------
  * Main processing logic
@@ -1218,10 +1397,11 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         }
     }
 
-    if (opts->gap5) {
+    if (opts->mode != MODE_SIMPLE) {
         consensus_t cons;
-        calculate_consensus_gap5(pos, opts->use_mqual ? CONS_MQUAL : 0,
-                                 depth, p, opts, &cons, opts->default_qual);
+        calculate_consensus_gap5m(pos, opts->use_mqual ? CONS_MQUAL : 0,
+                                  depth, p, opts, &cons, opts->default_qual,
+                                  &cons_prob_gap5, &cons_prob_stf);
         if (cons.het_logodd > 0 && opts->ambig) {
             cb = "AMRWa" // 5x5 matrix with ACGT* per row / col
                  "MCSYc"
@@ -1356,10 +1536,11 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
     }
 
     // share this with basic_pileup
-    if (opts->gap5) {
+    if (opts->mode != MODE_SIMPLE) {
         consensus_t cons;
-        calculate_consensus_gap5(pos, opts->use_mqual ? CONS_MQUAL : 0,
-                                 depth, p, opts, &cons, opts->default_qual);
+        calculate_consensus_gap5m(pos, opts->use_mqual ? CONS_MQUAL : 0,
+                                  depth, p, opts, &cons, opts->default_qual,
+                                  &cons_prob_gap5, &cons_prob_stf);
         if (cons.het_logodd > 0 && opts->ambig) {
             cb = "AMRWa" // 5x5 matrix with ACGT* per row / col
                  "MCSYc"
@@ -1466,7 +1647,15 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "      --high-MQ INT     Cap maximum mapping quality [60]\n");
     fprintf(fp, "      --P-het FLOAT     Probability of heterozygous site[%.1e]\n",
             P_HET);
+    fprintf(fp, "      --P-indel FLOAT   Probability of indel errs[%.1e]\n",
+            P_INDEL);
     fprintf(fp, "  -p, --homopoly-fix    Spread low-qual bases to both ends of homopolymers\n");
+    fprintf(fp, "      --homopoly-score FLOAT\n"
+                "                        Qual fraction adjustment for -p option [%g]\n", P_HOMOPOLY);
+    fprintf(fp, "\n");
+    fprintf(fp, "  -X, --config STR      Use pre-defined configuration set. STR from:\n");
+    fprintf(fp, "                        illumina     [defaults]\n");
+    fprintf(fp, "                        pacbio-ccs   --homopoly-score 0.4 --P-indel 0.2\n");
 
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@-.");
@@ -1478,7 +1667,7 @@ int main_consensus(int argc, char **argv) {
 
     consensus_opts opts = {
         // User options
-        .gap5         = 1,
+        .mode         = MODE_BAYES,
         .use_qual     = 0,
         .min_qual     = 0,
         .adj_qual     = 1,
@@ -1506,6 +1695,7 @@ int main_consensus(int argc, char **argv) {
         .excl_flags   = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP,
         .min_mqual    = 0,
         .P_het        = P_HET,
+        .P_indel      = P_INDEL,
         .homopoly_fix = 0,
 
         // Internal state
@@ -1557,12 +1747,15 @@ int main_consensus(int argc, char **argv) {
         {"min-MQ",             required_argument, NULL, 13},
         {"min-BQ",             required_argument, NULL, 16},
         {"P-het",              required_argument, NULL, 15},
+        {"P-indel",            required_argument, NULL, 17},
         {"mode",               required_argument, NULL, 'm'},
         {"homopoly-fix",       no_argument,       NULL, 'p'},
+        {"homopoly-score",     required_argument, NULL, 'p'+100},
+        {"config",             required_argument, NULL, 'X'},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "@:qd:c:H:r:5f:C:aAl:o:m:p",
+    while ((c = getopt_long(argc, argv, "@:qd:c:H:r:5f:C:aAl:o:m:pX:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 'a': opts.all_bases++; break;
@@ -1579,7 +1772,8 @@ int main_consensus(int argc, char **argv) {
         case 'r': opts.reg = optarg; break;
         case 'C': opts.cons_cutoff = atoi(optarg); break;
         case 'A': opts.ambig = 1; break;
-        case 'p': opts.homopoly_fix = 1; break;
+        case 'p': opts.homopoly_fix = P_HOMOPOLY; break;
+        case 'p'+100: opts.homopoly_fix = atof(optarg); break;
         case 1:   opts.default_qual = atoi(optarg); break;
         case 6:   opts.het_only = 1; break;
         case 7:   opts.show_del = (*optarg == 'y' || *optarg == 'Y'); break;
@@ -1588,6 +1782,7 @@ int main_consensus(int argc, char **argv) {
         case 13:  opts.min_mqual = atoi(optarg); break;
         case 16:  opts.min_qual  = atoi(optarg); break;
         case 15:  opts.P_het = atof(optarg); break;
+        case 17:  opts.P_indel = atof(optarg); break;
         case 'q'+100: opts.adj_qual = 1; break;
         case 'q'+101: opts.adj_qual = 0; break;
         case 'm'+100: opts.nm_adjust = 1; break;
@@ -1597,9 +1792,16 @@ int main_consensus(int argc, char **argv) {
 
         case 'm': // mode
             if (strcasecmp(optarg, "simple") == 0) {
-                opts.gap5 = 0;
+                opts.mode = MODE_SIMPLE;
             } else if (strcasecmp(optarg, "bayesian") == 0) {
-                opts.gap5 = 1;
+                opts.mode = MODE_MIXED;
+            } else if (strcasecmp(optarg, "bayesian_p") == 0) {
+                opts.mode = MODE_BAYES;
+            } else if (strcasecmp(optarg, "bayesian_r") == 0) {
+                // CHECK: doesn't seem any better than merged (bayesian)
+                opts.mode = MODE_GAP5; // high at recall, lower precision
+            } else if (strcasecmp(optarg, "bayesian_116") == 0) {
+                opts.mode = MODE_BAYES_116;
             } else {
                 fprintf(stderr, "Unknown mode %s\n", optarg);
                 return 1;
@@ -1631,6 +1833,21 @@ int main_consensus(int argc, char **argv) {
             }
             break;
 
+        case 'X':
+            if (strcasecmp(optarg, "pacbio-ccs") == 0) {
+                // -p --P-indel 0.2 --homopoly-score 0.4
+                opts.homopoly_fix = 0.4;
+                opts.P_indel = 0.2;
+                opts.mode = MODE_MIXED;
+            } else if (strcasecmp(optarg, "illuimna") == 0) {
+                opts.mode = MODE_BAYES;
+            } else {
+                fprintf(stderr, "Unrecognised configuration name: \"%s\"\n",
+                        optarg);
+                return 1;
+            }
+            break;
+
         case 11:
             if ((opts.incl_flags = bam_str2flag(optarg)) < 0) {
                 print_error("consensus", "could not parse --rf %s", optarg);
@@ -1649,6 +1866,19 @@ int main_consensus(int argc, char **argv) {
         case '?':
             usage_exit(stderr, EXIT_FAILURE);
         }
+    }
+
+    if (opts.mode != MODE_SIMPLE) {
+        if (opts.P_indel >= 0.01 && opts.mode == MODE_MIXED)
+            // Dual method enabled, so be more sensitive here.
+            consensus_init(pow(opts.P_het, 0.8), pow(opts.P_indel, 1.1),
+                           MODE_GAP5, &cons_prob_gap5);
+        else
+            consensus_init(opts.P_het, opts.P_indel,
+                           opts.mode, &cons_prob_gap5);
+
+        // Favours precision over recall
+        consensus_init(opts.P_het, opts.P_indel, MODE_MIXED,  &cons_prob_stf);
     }
 
     if (argc != optind+1) {
@@ -1690,7 +1920,8 @@ int main_consensus(int argc, char **argv) {
     }
 
     if (opts.fmt == PILEUP) {
-        if (pileup_loop(opts.fp, opts.h, readaln2, opts.gap5 ? nm_init : NULL,
+        if (pileup_loop(opts.fp, opts.h, readaln2,
+                        opts.mode != MODE_SIMPLE ? nm_init : NULL,
                         basic_pileup, &opts) < 0)
             goto err;
 
@@ -1706,7 +1937,8 @@ int main_consensus(int argc, char **argv) {
                 goto err;
         }
     } else {
-        if (pileup_loop(opts.fp, opts.h, readaln2, opts.gap5 ? nm_init : NULL,
+        if (pileup_loop(opts.fp, opts.h, readaln2,
+                        opts.mode != MODE_SIMPLE ? nm_init : NULL,
                         basic_fasta,
                         &opts) < 0)
             goto err;

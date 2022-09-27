@@ -147,8 +147,20 @@ Output consensus to FILE instead of stdout.
 .TP
 .BI "-m " STR ", --mode " STR
 Select the consensus algorithm.  Valid modes are "simple" frequency
-counting and the "bayesian" (Gap5) method, with Bayesian being the
+counting and the "bayesian" (Gap5) methods, with Bayesian being the
 default.  (Note case does not matter, so "Bayesian" is accepted too.)
+There are a variety of bayesian methods.  Straight "bayesian" and also
+"bayesian_117" are the best set suitable for the other parameters
+selected.  The choice of internal parameters may change depending on
+the "--P-indel" score.  This method distinguishes between substitution
+and indel error rates.  The old Samtools consensus in version 1.16 did
+not distinguish types of errors, but for compatibility the
+"bayesian_116" mode may be selected to replicate this.  Finally there
+are experimental "bayesian_r" and "bayesian_p" modes which favour
+recall and precision respectively.  It is not expected that these are
+likely to be significantly better than "bayesian", as the two
+parameters sets may be both used and combined internally to improve
+accuracy.
 .TP
 .B -a
 Outputs all bases, from start to end of reference, even when the
@@ -303,6 +315,15 @@ of whether the output is reported as ambiguous (it will be "N" if
 deemed to be heterozygous without \fB--ambig\fR mode enabled).
 
 .TP
+.BI "--P-indel " FLOAT
+Controls the joint likelihood of indel errors due to a combination of
+base calling, alignment errors and reference bias, including
+homopolymer derived cases.  Setting this higher than reality can
+considerably reduce false positives at the expense of false negatives
+and reduced quality scores.  Defaults to 1e-3, 0.1 to 0.3
+may be appropriate for some long-read technologies.
+
+.TP
 .BR -p ", " --homopoly-fix
 Some technologies that call runs of the same base type together always
 put the lowest quality calls at one end.  This can cause problems when
@@ -310,6 +331,20 @@ reverse complementing and comparing alignments with indels.  This
 option averages the qualities at both ends to avoid orientation
 biases.  Recommended for old 454 or PacBio HiFi data sets.
 
+.TP
+.BI "--homopoly-score " FLOAT
+The \fB-p\fR option also downweights confidence values within
+homopolymers due to an additional likelihood of sequence specific
+errors.  The quality values are multiplied by \fIFLOAT\fR.  This
+defaults to 0.5, but is not used if \fB-p\fR was not specified.
+Adjusting this score also automatically enables \fB-p\fR.
+
+.TP
+\fB-X\fR, \fB--config \fISTR\fR
+Specifies predefined sets of configuration parameters.  Acceptable
+values for \fISTR\fR are \fBillumina\fR, which uses the default
+values, and \fBpacbio-ccs\fR.  The latter is a synonym for
+\fB-p --P-indel 0.2 --homopoly-score 0.4\fR.
 .SH EXAMPLES
 .IP -
 Create a modified FASTA reference that has a 1:1 coordinate correspondence with the original reference used in alignment.
