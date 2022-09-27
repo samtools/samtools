@@ -3522,4 +3522,5 @@ sub test_ampliconstats
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
     test_cmd($opts, out=>'ampliconstats/stats.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -S -t 50 -d 1,20,100 $$opts{path}/ampliconclip/ac_test.bed @inputs | grep -E -v 'Samtools version|Command line'");
     test_cmd($opts, out=>'ampliconstats/stats_mixed.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -c 0 $$opts{path}/ampliconclip/multi_ref.bed $$opts{path}/ampliconstats/mixed_clipped.sam | grep -E -v 'Samtools version|Command line'");
+    test_cmd($opts, out=>'ampliconstats/stats_partial.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -c 0 $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconstats/mixed_clipped.sam | grep -E -v 'Samtools version|Command line'");
 }
