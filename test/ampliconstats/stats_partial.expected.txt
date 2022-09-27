@@ -1,0 +1,92 @@
+# Summary statistics, used for scaling the plots.
+SS	Number of files:	1
+SS	Number of amplicons:	vir1	2
+SS	Reference length:	vir1	800
+SS	End of summary
+# Amplicon locations from BED file.
+# LEFT/RIGHT are <start>-<end> format and comma-separated for alt-primers.
+#
+# AMPLICON	REF	NUMBER	LEFT	RIGHT
+AMPLICON	vir1	1	31-54	386-410
+AMPLICON	vir1	2	321-342	705-726
+# Summary stats.
+# Use 'grep ^FSS | cut -f 2-' to extract this part.
+FSS	mixed_clipped	vir1	raw total sequences:	8
+FSS	mixed_clipped	vir1	filtered sequences:	0
+FSS	mixed_clipped	vir1	failed primer match:	2
+FSS	mixed_clipped	vir1	matching sequences:	6
+FSS	mixed_clipped	vir1	consensus depth count < 1 and >= 1:	132	517
+# Absolute matching read counts per amplicon.
+# Use 'grep ^FREADS | cut -f 2-' to extract this part.
+FREADS	mixed_clipped	5	1
+FVDEPTH	mixed_clipped	2	0
+# Read percentage of distribution between amplicons.
+# Use 'grep ^FRPERC | cut -f 2-' to extract this part.
+FRPERC	mixed_clipped	83.333	16.667
+# Read depth per amplicon.
+# Use 'grep ^FDEPTH | cut -f 2-' to extract this part.
+FDEPTH	mixed_clipped	2.8	0.5
+# Percentage coverage per amplicon
+# Use 'grep ^FPCOV | cut -f 2-' to extract this part.
+FPCOV-1	mixed_clipped	100.00	51.80
+# Depth per reference base for ALL data.
+# Use 'grep ^FDP_ALL | cut -f 2-' to extract this part.
+FDP_ALL	mixed_clipped	vir1	0,54	2,77	3,254	0,25	1,294	0,96
+# Depth per reference base for full-length valid amplicon data.
+# Use 'grep ^FDP_VALID | cut -f 2-' to extract this part.
+FDP_VALID	mixed_clipped	vir1	0,54	2,331	0,415
+# Distribution of aligned template coordinates.
+# Use 'grep ^FTCOORD | cut -f 2-' to extract this part.
+FTCOORD	mixed_clipped	1	55,385,2,0
+FTCOORD	mixed_clipped	2
+# Classification of amplicon status.  Columns are
+# number with both primers from this amplicon, number with
+# primers from different amplicon, and number with a position
+# not matching any valid amplicon primer site
+# Use 'grep ^FAMP | cut -f 2-' to extract this part.
+FAMP	mixed_clipped	0	2	0	2
+FAMP	mixed_clipped	1	2	0	1
+FAMP	mixed_clipped	2	0	0	1
+# Summary stats.
+# Use 'grep ^CSS | cut -f 2-' to extract this part.
+CSS	COMBINED	vir1	raw total sequences:	8
+CSS	COMBINED	vir1	filtered sequences:	0
+CSS	COMBINED	vir1	failed primer match:	2
+CSS	COMBINED	vir1	matching sequences:	6
+CSS	COMBINED	vir1	consensus depth count < 1 and >= 1:	649	0
+# Absolute matching read counts per amplicon.
+# Use 'grep ^CREADS | cut -f 2-' to extract this part.
+CREADS	COMBINED	5	1
+CVDEPTH	COMBINED	2	0
+CREADS	MEAN	5.0	1.0
+CREADS	STDDEV	0.0	0.0
+# Read percentage of distribution between amplicons.
+# Use 'grep ^CRPERC | cut -f 2-' to extract this part.
+CRPERC	COMBINED	83.333	16.667
+CRPERC	MEAN	83.333	16.667
+CRPERC	STDDEV	0.000	0.000
+# Read depth per amplicon.
+# Use 'grep ^CDEPTH | cut -f 2-' to extract this part.
+CDEPTH	COMBINED	2.8	0.5
+CDEPTH	MEAN	2.8	0.5
+CDEPTH	STDDEV	0.0	0.0
+CPCOV-1	MEAN	100.0	51.8
+CPCOV-1	STDDEV	0.0	0.0
+# Depth per reference base for ALL data.
+# Use 'grep ^CDP_ALL | cut -f 2-' to extract this part.
+CDP_ALL	COMBINED	vir1	0,54	2,77	3,254	0,25	1,294	0,96
+# Depth per reference base for full-length valid amplicon data.
+# Use 'grep ^CDP_VALID | cut -f 2-' to extract this part.
+CDP_VALID	COMBINED	vir1	0,54	2,331	0,415
+# Distribution of aligned template coordinates.
+# Use 'grep ^CTCOORD | cut -f 2-' to extract this part.
+CTCOORD	COMBINED	1	55,385,2,0
+CTCOORD	COMBINED	2
+# Classification of amplicon status.  Columns are
+# number with both primers from this amplicon, number with
+# primers from different amplicon, and number with a position
+# not matching any valid amplicon primer site
+# Use 'grep ^CAMP | cut -f 2-' to extract this part.
+CAMP	COMBINED	0	2	0	2
+CAMP	COMBINED	1	2	0	1
+CAMP	COMBINED	2	0	0	1

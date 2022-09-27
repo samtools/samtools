@@ -1475,6 +1475,8 @@ static int amplicon_stats(astats_args_t *args,
         }
         int r;
         for (r = 0; r < nref; r++) {
+            if (!amps[r].sites)
+                continue;
             if (!amps[r].ref ||
                 strcmp(amps[r].ref, sam_hdr_tid2name(header, r)) != 0 ||
                 amps[r].len != sam_hdr_tid2len(header, r)) {
