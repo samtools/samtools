@@ -607,6 +607,12 @@ int main_bamshuf(int argc, char *argv[])
     }
     if (is_un) clevel = 0;
     if (argc >= optind + 2) prefix = argv[optind+1];
+    if (argc == optind) {
+        if (argc > 1 || !isatty(STDIN_FILENO))
+            fprintf(stderr, "collate: no input filename specified.\n");
+        return usage(argc > 1 || !isatty(STDIN_FILENO) ? stderr : stdout,
+                     n_files, reads_store);
+    }
     if (!(prefix || is_stdout || output_file))
         return usage(stderr, n_files, reads_store);
     if (is_stdout && output_file) {
