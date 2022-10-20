@@ -185,6 +185,17 @@ Whether to show deletions as "*" (no) or to omit from the output
 Whether to show insertions in the consensus.  Defaults to yes.
 
 .TP
+.BR --mark-ins
+Insertions, when shown, are normally recorded in the consensus with
+plain 7-bit ASCII (ACGT, or acgt if heterozygous).  However this makes
+it impossible to identify the mapping between consensus coordinates
+and the original reference coordinates.  If fasta output is selected
+then the option adds an underscore before every inserted base, plus a
+corresponding character in the quality for fastq format.  When used in
+conjunction with \fB-a --show-del yes\fR, this permits an easy
+derivation of the consensus to reference coordinate mapping.
+
+.TP
 .BR -A ", " --ambig
 Enables IUPAC ambiguity codes in the consensus output.  Without this
 the output will be limited to A, C, G, T, N and *.
