@@ -77,8 +77,8 @@ searches using the index will be very slow and use a lot of memory.
 Write FASTQ to file rather than to stdout.
 .TP
 .BI "-n, --length " INT
-Length of FASTQ sequence line.
-[60]
+Length for FASTQ sequence line wrapping.  If zero, this means do not
+line wrap.  Defaults to the line length in the input file.
 .TP
 .B -c, --continue
 Continue working if a non-existent region is requested.

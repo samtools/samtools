@@ -46,7 +46,12 @@ History:
 #include <htslib/kstring.h>
 #include "samtools.h"
 
-#define DEFAULT_FASTA_LINE_LEN 60
+// Negative indicates the same as input data
+#define DEFAULT_FASTA_LINE_LEN -60
+
+#ifndef ABS
+#   define ABS(x) ((x)>=0?(x):-(x))
+#endif
 
 static unsigned char comp_base[256] = {
   0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  15,
@@ -95,7 +100,7 @@ static void reverse(char *str, const hts_pos_t len) {
 
 
 static int write_line(faidx_t *faid, FILE *file, const char *line, const char *name,
-                      const int ignore, const int length, const hts_pos_t seq_len) {
+                      const int ignore, const hts_pos_t length, const hts_pos_t seq_len) {
     int id;
     hts_pos_t beg, end;
 
@@ -110,7 +115,7 @@ static int write_line(faidx_t *faid, FILE *file, const char *line, const char *n
     } else if (seq_len == 0) {
         fprintf(stderr, "[faidx] Zero length sequence: %s\n", name);
     } else if (fai_parse_region(faid, name, &id, &beg, &end, 0)
-               && (end < INT_MAX) && (seq_len != end - beg)) {
+               && (end < HTS_POS_MAX) && (seq_len != end - beg)) {
         fprintf(stderr, "[faidx] Truncated sequence: %s\n", name);
     }
 
@@ -131,10 +136,14 @@ static int write_line(faidx_t *faid, FILE *file, const char *line, const char *n
 
 
 static int write_output(faidx_t *faid, FILE *file, const char *name, const int ignore,
-                        const int length, const int rev,
+                        const hts_pos_t length, const int rev,
                         const char *pos_strand_name, const char *neg_strand_name,
                         enum fai_format_options format) {
-    hts_pos_t seq_len;
+    hts_pos_t seq_len, wrap_len = length;
+    if (wrap_len < 0)
+        wrap_len = fai_line_length(faid, name);
+    if (wrap_len <= 0)
+        wrap_len = HTS_POS_MAX;
     char *seq = fai_fetch64(faid, name, &seq_len);
 
     if (format == FAI_FASTA) {
@@ -147,7 +156,7 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
         reverse_complement(seq, seq_len);
     }
 
-    if (write_line(faid, file, seq, name, ignore, length, seq_len)
+    if (write_line(faid, file, seq, name, ignore, wrap_len, seq_len)
         == EXIT_FAILURE) {
         free(seq);
         return EXIT_FAILURE;
@@ -164,7 +173,7 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
             reverse(qual, seq_len);
         }
 
-        if (write_line(faid, file, qual, name, ignore, length, seq_len)
+        if (write_line(faid, file, qual, name, ignore, wrap_len, seq_len)
             == EXIT_FAILURE) {
             free(qual);
             return EXIT_FAILURE;
@@ -178,7 +187,7 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
 
 
 static int read_regions_from_file(faidx_t *faid, hFILE *in_file, FILE *file, const int ignore,
-                                  const int length, const int rev,
+                                  const hts_pos_t length, const int rev,
                                   const char *pos_strand_name,
                                   const char *neg_strand_name,
                                   enum fai_format_options format) {
@@ -239,7 +248,7 @@ static int usage(FILE *fp, enum fai_format_options format, int exit_status)
 int faidx_core(int argc, char *argv[], enum fai_format_options format)
 {
     int c, ignore_error = 0, rev = 0;
-    int line_len = DEFAULT_FASTA_LINE_LEN ;/* fasta line len */
+    hts_pos_t line_len = DEFAULT_FASTA_LINE_LEN ;/* fasta line len */
     char* output_file = NULL; /* output file (default is stdout ) */
     char *region_file = NULL; // list of regions from file, one per line
     char *pos_strand_name = ""; // Extension to add to name for +ve strand
@@ -266,11 +275,11 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
     while ((c = getopt_long(argc, argv, "ho:n:cr:fi", lopts, NULL)) >= 0) {
         switch (c) {
             case 'o': output_file = optarg; break;
-            case 'n': line_len = atoi(optarg);
-                      if(line_len<1) {
-                        fprintf(stderr,"[faidx] bad line length '%s', using default:%d\n",optarg,DEFAULT_FASTA_LINE_LEN);
-                        line_len= DEFAULT_FASTA_LINE_LEN ;
-                        }
+            case 'n': line_len = strtol(optarg, NULL, 10);
+                      if (line_len < 0) {
+                        fprintf(stderr,"[faidx] bad line length '%s', using default:%d\n",optarg,ABS(DEFAULT_FASTA_LINE_LEN));
+                        line_len= ABS(DEFAULT_FASTA_LINE_LEN);
+                      }
                       break;
             case 'c': ignore_error = 1; break;
             case 'r': region_file = optarg; break;
