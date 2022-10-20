@@ -169,6 +169,7 @@ typedef struct {
     int all_bases;
     int show_del;
     int show_ins;
+    int mark_ins;
     int excl_flags;
     int incl_flags;
     int min_mqual;
@@ -1392,6 +1393,11 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         opts->last_tid = tid;
         return 0;
     }
+    if (opts->mark_ins && nth && cb != '*') {
+        kputc('_', seq);
+        kputc('_', qual);
+    }
+
     // end of share
 
     // Append consensus base/qual to seqs
@@ -1442,6 +1448,7 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "  --min-BQ INT          Exclude reads with base quality below INT [0]\n");
     fprintf(fp, "  --show-del yes/no     Whether to show deletion as \"*\" [no]\n");
     fprintf(fp, "  --show-ins yes/no     Whether to show insertions [yes]\n");
+    fprintf(fp, "  --mark-ins            Add '+' before every inserted base/qual [off]\n");
     fprintf(fp, "  -A, --ambig           Enable IUPAC ambiguity codes [off]\n");
     fprintf(fp, "\nFor simple consensus mode:\n");
     fprintf(fp, "  -q, --(no-)use-qual   Use quality values in calculation [off]\n");
@@ -1494,6 +1501,7 @@ int main_consensus(int argc, char **argv) {
         .all_bases    = 0,
         .show_del     = 0,
         .show_ins     = 1,
+        .mark_ins     = 0,
         .incl_flags   = 0,
         .excl_flags   = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP,
         .min_mqual    = 0,
@@ -1540,6 +1548,7 @@ int main_consensus(int argc, char **argv) {
         {"het-only",           no_argument,       NULL, 6},
         {"show-del",           required_argument, NULL, 7},
         {"show-ins",           required_argument, NULL, 8},
+        {"mark-ins",           no_argument,       NULL, 18},
         {"output",             required_argument, NULL, 'o'},
         {"incl-flags",         required_argument, NULL, 11},
         {"rf",                 required_argument, NULL, 11},
@@ -1575,6 +1584,7 @@ int main_consensus(int argc, char **argv) {
         case 6:   opts.het_only = 1; break;
         case 7:   opts.show_del = (*optarg == 'y' || *optarg == 'Y'); break;
         case 8:   opts.show_ins = (*optarg == 'y' || *optarg == 'Y'); break;
+        case 18:  opts.mark_ins = 1; break;
         case 13:  opts.min_mqual = atoi(optarg); break;
         case 16:  opts.min_qual  = atoi(optarg); break;
         case 15:  opts.P_het = atof(optarg); break;
