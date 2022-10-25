@@ -260,6 +260,13 @@ To match only the coordinates of \fIx:y:randomstuff\fR use:
 --coords-order xy
 .EE
 
+To use a barcode from the read name matching the Illumina example of
+\fINDX550136:7:H2MTNBDXX:1:13302:3141:10799:AAGGATG+TCGGAGA\fR use:
+
+.EX 4
+--barcode-rgx '[0-9A-Za-z]+:[0-9]+:[0-9A-Za-z]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:([!-?A-~]+)'
+.EE
+
 It is possible that complex regular expressions may slow the running of the
 program.  It would be best to keep them simple. 
 

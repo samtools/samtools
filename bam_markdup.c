@@ -2407,7 +2407,7 @@ int bam_markdup(int argc, char **argv) {
 
         /* From Illumina UMI documentation: "The UMI sequence is located in the
            eighth colon-delimited field of the read name (QNAME)". */
-        char *rgx = "[0-9A-Za-z]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:([!-?A-~]+)";
+        char *rgx = "[0-9A-Za-z]+:[0-9A-Za-z]+:[0-9A-Za-z]+:[0-9A-Za-z]+:[0-9A-Za-z]+:[0-9A-Za-z]+:[0-9A-Za-z]+:([!-?A-~]+)";
 
         if ((param.bc_rgx = malloc(sizeof(regex_t))) == NULL) {
             print_error("markdup", "error,  could not allocate memory for barcode regex.\n");
