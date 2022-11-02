@@ -460,6 +460,8 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
 
     const bam1_t *b = &p->b;
     int qlen = b->core.l_qseq, i;
+    if (qlen <= 0)
+        return 0;
     int *local_nm = calloc(qlen, sizeof(*local_nm));
     if (!local_nm)
         return -1;
@@ -593,7 +595,7 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
         }
 
         // substitution
-        for (i = pos-halo*2 >= 0 ? pos-halo*2 : 0; i < pos-halo; i++)
+        for (i = pos-halo*2 >= 0 ?pos-halo*2 :0; i < pos-halo && i < qlen; i++)
             local_nm[i]+=5;
         for (; i < pos+halo && i < qlen; i++)
             local_nm[i]+=10;
