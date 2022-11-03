@@ -87,7 +87,10 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
         // set base
         if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
         mapQ  = p->b->core.qual < 255? p->b->core.qual : DEF_MAPQ; // special case for mapQ==255
-        q = is_indel? p->aux&0xff : (int)bam_get_qual(p->b)[p->qpos]; // base/indel quality
+        q = is_indel? p->aux&0xff : // base/indel quality
+            (p->qpos < p->b->core.l_qseq
+             ? (int)bam_get_qual(p->b)[p->qpos]
+             : 0);
         seqQ = is_indel? (p->aux>>8&0xff) : 99;
         if (q < bca->min_baseQ) continue;
         if (q > seqQ) q = seqQ;
@@ -96,8 +99,12 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
         if (q > 63) q = 63;
         if (q < 4) q = 4;       // MQ=0 reads count as BQ=4
         if (!is_indel) {
-            b = bam_seqi(bam_get_seq(p->b), p->qpos); // base
-            b = seq_nt16_int[b? b : ref_base]; // b is the 2-bit base
+            if (p->qpos < p->b->core.l_qseq) {
+                b = bam_seqi(bam_get_seq(p->b), p->qpos); // base
+                b = seq_nt16_int[b? b : ref_base]; // b is the 2-bit base
+            } else {
+                b = 4; // N
+            }
         } else {
             b = p->aux>>16&0x3f;
         }
