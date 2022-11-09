@@ -1233,7 +1233,7 @@ int main_samview(int argc, char *argv[])
         settings.unmap = 0;  // Not valid in counting mode
     }
 
-    if (ga.nthreads > 1) {
+    if (ga.nthreads > 0) {
         if (!(p.pool = hts_tpool_init(ga.nthreads))) {
             fprintf(stderr, "Error creating thread pool\n");
             ret = 1;
