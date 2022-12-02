@@ -58,6 +58,25 @@ typedef struct pileup {
     bam1_t b;             // Bam entry associated with struct
 } pileup_t;
 
+/*
+ * The pileup loop executes and calls callbacks to perform the work.
+ *
+ * seq_fetch returns the next sequence.  Return 0 from this indicates no
+ *   more data.
+ *
+ * seq_init is called, if non-NULL, when a sequence is added to the pileup,
+ * seq_free likewise, if non-NULL, is called when a sequence is removed
+ *   from the pileup.
+ * These two functions are akin to the constructor and destructors added
+ * to mpileup.
+ *
+ * seq_column is the primary work horse which is executed for each
+ *   reference position, and for each inserted base per ref pos.
+ *
+ * If we were to invert this from a loop generating callbacks to a polled
+ * style interface like mpileup, then the seq_column bit would be dropped
+ * and replaced by the returned pileup and associated parameters.
+ */
 int pileup_loop(samFile *fp,
                 sam_hdr_t *h,
                 int (*seq_fetch)(void *client_data,
@@ -68,12 +87,16 @@ int pileup_loop(samFile *fp,
                                 samFile *fp,
                                 sam_hdr_t *h,
                                 pileup_t *p),
-                int (*seq_add)(void *client_data,
-                               samFile *fp,
-                               sam_hdr_t *h,
-                               pileup_t *p,
-                               int depth,
-                               hts_pos_t pos,
-                               int nth,
-                               int is_insert),
+                int (*seq_column)(void *client_data,
+                                  samFile *fp,
+                                  sam_hdr_t *h,
+                                  pileup_t *p,
+                                  int depth,
+                                  hts_pos_t pos,
+                                  int nth,
+                                  int is_insert),
+                void (*seq_free)(void *client_data,
+                                 samFile *fp,
+                                 sam_hdr_t *h,
+                                 pileup_t *p),
                 void *client_data);

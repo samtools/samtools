@@ -132,5 +132,5 @@ P 18p.out $samtools consensus -f pileup --no-use-MQ consen1.sam -C 0
 P 19p.out $samtools consensus -f pileup --no-use-MQ consen1.sam -C 19
 
 # Ambiguity codes in insertions
-P 20p.out $samtools consensus -f pileup --no-use-MQ consen1.sam -C 33 -A
-P 21p.out $samtools consensus -f pileup --no-use-MQ consen1.sam -C 34 -A
+P 20p.out $samtools consensus -f pileup --no-use-MQ consen1.sam -C 30 -A
+P 21p.out $samtools consensus -f pileup --no-use-MQ consen1.sam -C 31 -A

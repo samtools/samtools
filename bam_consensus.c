@@ -1,7 +1,7 @@
 /*  bam_consensus.c -- consensus subcommand.
 
     Copyright (C) 1998-2001,2003 Medical Research Council (Gap4/5 source)
-    Copyright (C) 2003-2005,2007-2022 Genome Research Ltd.
+    Copyright (C) 2003-2005,2007-2023 Genome Research Ltd.
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
@@ -114,6 +114,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Middle seq doesn't validate those initial T alignments.
 // Qual_train solves this by use of the STR trimmer.
 
+// TODO add a weight for proximity to homopolymer.
+// Maybe length/distance?  So 3 away from a 12-mer is similar to 1 away
+// from a 4-mer?
+
+// TODO: Count number of base types between this point and the nearest
+// indel or end of read.  Eg GATCG<here>AGAGAG*TAGC => 2 (A and G).
+// adj is nbase/4 * score, or (nbase+1)/5?
+// Perhaps multiplied by length too, to get local complexity score?
 
 #include <config.h>
 
@@ -146,6 +154,21 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #  define MAX(a,b) ((a)>(b)?(a):(b))
 #endif
 
+// Defines for experiment code which is currently disabled
+
+// Hardy-Weinberg statistics to check heterozygous sites match allelic
+// frequencies.
+//#define DO_HDW
+
+// Filter bayesian calls by min-depth and min-fract parameters
+//#define DO_FRACT
+
+// Checks uniqueness of surrounding bases to adjust scores
+//#define K2 2
+
+// Look for strand bias in distribution of homopolymer lengths
+//#define DO_POLY_DIST
+
 // Minimum cutoff for storing mod data; => at least 10% chance
 #define MOD_CUTOFF 0.46
 
@@ -160,9 +183,9 @@ typedef unsigned char uc;
 // Simple recalibration table for substitutions, undercalls and overcalls.
 // In future, we'll update this to be kmer based too.
 typedef struct {
-    int smap[101];
-    int umap[101];
-    int omap[101];
+    int smap[101]; // substituion or SNP
+    int umap[101]; // undercall   or DEL
+    int omap[101]; // overcall    or INS
 } qcal_t;
 
 typedef struct {
@@ -358,13 +381,14 @@ static cons_probs cons_prob_recall, cons_prob_precise;
 #define QCAL_HIFI           1
 #define QCAL_HISEQ          2
 #define QCAL_ONT_R10_4_SUP  3
-#define QCAL_ULTIMA         4
+#define QCAL_ONT_R10_4_DUP  4
+#define QCAL_ULTIMA         5
 
 // Calibration tables here don't necessarily reflect the true accuracy.
 // They have been manually tuned to work in conjunction with other command
 // line parameters used in the machine profiles.  For example reducing one
 // qual here and increasing sensitivity elsewhere via another parameter.
-static qcal_t static_qcal[5] = {
+static qcal_t static_qcal[6] = {
     { // FLAT
         {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
          10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
@@ -399,141 +423,179 @@ static qcal_t static_qcal[5] = {
     },
 
     { // HiFi
-        {3, 3, 3, 13, 15, 16, 17, 18, 19, 19,
-         21, 21, 22, 23, 23, 24, 25, 25, 26, 26,
-         26, 27, 27, 28, 29, 29, 30, 30, 31, 31,
-         31, 32, 32, 32, 32, 32, 33, 33, 34, 33,
-         33, 33, 34, 34, 34, 35, 35, 35, 35, 35,
-         35, 35, 36, 36, 36, 36, 36, 37, 37, 37,
-         38, 38, 38, 37, 38, 38, 38, 39, 39, 39,
-         38, 39, 39, 38, 39, 40, 39, 40, 39, 40,
-         40, 40, 40, 40, 40, 40, 41, 40, 40, 41,
-         40, 39, 41, 42, 42, 42, 42, 42, 42, 42},
-        {4, 4, 4, 4, 5, 6, 6, 7, 8, 9,
-         10, 11, 11, 12, 13, 14, 15, 15, 16, 17,
-         18, 19, 19, 20, 20, 21, 22, 23, 23, 24,
-         25, 25, 25, 26, 26, 26, 27, 27, 28, 28,
-         28, 28, 27, 27, 27, 28, 28, 28, 28, 27,
-         27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
-         27, 27, 26, 26, 25, 26, 26, 27, 27, 27,
-         26, 26, 26, 26, 26, 26, 26, 26, 27, 27,
-         28, 29, 28, 28, 28, 27, 27, 27, 27, 27,
-         27, 28, 28, 30, 30, 30, 30, 30, 30, 30},
-        {5, 5, 5, 8, 9, 10, 11, 12, 13, 14,
-         15, 15, 16, 17, 18, 19, 19, 20, 20, 21,
-         21, 22, 22, 23, 23, 23, 24, 24, 24, 25,
-         25, 25, 25, 25, 25, 26, 26, 26, 26, 27,
-         27, 27, 27, 27, 27, 28, 28, 28, 28, 28,
-         29, 29, 29, 29, 29, 29, 30, 30, 30, 31,
-         31, 31, 31, 30, 30, 30, 31, 31, 31, 32,
-         32, 32, 32, 32, 32, 32, 33, 33, 33, 34,
-         34, 34, 34, 34, 33, 33, 34, 33, 34, 34,
-         34, 35, 35, 38, 38, 38, 38, 38, 38, 38}
+        {10, 11, 11, 12, 13, 14, 15, 16, 18, 19,
+         20, 21, 22, 23, 24, 25, 27, 28, 29, 30,
+         31, 32, 33, 33, 34, 35, 36, 36, 37, 38,
+         38, 39, 39, 40, 40, 41, 41, 41, 41, 42,
+         42, 42, 42, 43, 43, 43, 43, 43, 43, 43,
+         44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
+         44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
+         44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
+         44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
+         44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
+         },
+        {  4,  4,  4,  4,  5,  6,  6,  7,  8,  9,
+          10, 11, 11, 12, 13, 14, 15, 15, 16, 17,
+          18, 19, 19, 20, 20, 21, 22, 23, 23, 24,
+          25, 25, 25, 26, 26, 26, 27, 27, 28, 28,
+          28, 28, 27, 27, 27, 28, 28, 28, 28, 27,
+          27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
+          27, 27, 26, 26, 25, 26, 26, 27, 27, 27,
+          26, 26, 26, 26, 26, 26, 26, 26, 27, 27,
+          28, 29, 28, 28, 28, 27, 27, 27, 27, 27,
+          27, 28, 28, 30, 30, 30, 30, 30, 30, 30,
+          },
+        {  8,  8,  8,  8,  9, 10, 11, 12, 13, 14,
+          15, 15, 16, 17, 18, 19, 19, 20, 20, 21,
+          21, 22, 22, 23, 23, 23, 24, 24, 24, 25,
+          25, 25, 25, 25, 25, 26, 26, 26, 26, 27,
+          27, 27, 27, 27, 27, 28, 28, 28, 28, 28,
+          29, 29, 29, 29, 29, 29, 30, 30, 30, 30,
+          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+        }
     },
 
     { // HiSeq
-        {  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
-          10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-          20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-          30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
-          40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
-          50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
-          60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
-          70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
-          80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
-          90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+        { 2,  2,  2,  3,  3,  4,  5,  5,  6,  7,
+          8,  9, 10, 11, 11, 12, 13, 14, 15, 16,
+          17, 17, 18, 19, 20, 21, 22, 22, 23, 24,
+          25, 26, 27, 28, 28, 29, 30, 31, 32, 33,
+          34, 34, 35, 36, 37, 38, 39, 39, 40, 41,
+          42, 43, 44, 45, 45, 46, 47, 48, 49, 50,
+          51, 51, 52, 53, 54, 55, 56, 56, 57, 58,
+          59, 60, 61, 62, 62, 63, 64, 65, 66, 67,
+          68, 68, 69, 70, 71, 72, 73, 73, 74, 75,
+          76, 77, 78, 79, 79, 80, 81, 82, 83, 84,
         },
-        {  5,  6,  7,  8,  9, 11, 12, 13, 14, 15,
-          17, 18, 19, 20, 21, 23, 24, 25, 26, 27,
-          29, 30, 31, 32, 33, 35, 36, 37, 38, 39,
-          41, 42, 43, 44, 45, 47, 48, 49, 50, 51,
-          53, 54, 55, 56, 57, 59, 60, 61, 62, 63,
-          65, 66, 67, 68, 69, 71, 72, 73, 74, 75,
-          77, 78, 79, 80, 81, 83, 84, 85, 86, 87,
-          89, 90, 91, 92, 93, 95, 96, 97, 98, 99,
-          101, 102, 103, 104, 105, 107, 108, 109, 110, 111,
-          113, 114, 115, 116, 117, 119, 120, 121, 122, 123,
+        { 1,  2,  3,  4,  5,  7,  8,  9, 10, 11,
+          13, 14, 15, 16, 17, 19, 20, 21, 22, 23,
+          25, 26, 27, 28, 29, 31, 32, 33, 34, 35,
+          37, 38, 39, 40, 41, 43, 44, 45, 46, 47,
+          49, 50, 51, 52, 53, 55, 56, 57, 58, 59,
+          61, 62, 63, 64, 65, 67, 68, 69, 70, 71,
+          73, 74, 75, 76, 77, 79, 80, 81, 82, 83,
+          85, 86, 87, 88, 89, 91, 92, 93, 94, 95,
+          97, 98, 99, 100, 101, 103, 104, 105, 106, 107,
+          109, 110, 111, 112, 113, 115, 116, 117, 118, 119,
         },
-        {  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,
-          16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-          27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
-          38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-          49, 50, 51, 52, 53, 54, 55, 56, 57, 58,
-          60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
-          71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
-          82, 83, 84, 85, 86, 87, 88, 89, 90, 91,
-          93, 94, 95, 96, 97, 98, 99, 100, 101, 102,
-          104, 105, 106, 107, 108, 109, 110, 111, 112, 113,
+        { 1,  2,  3,  4,  5,  7,  8,  9, 10, 11,
+          13, 14, 15, 16, 17, 19, 20, 21, 22, 23,
+          25, 26, 27, 28, 29, 31, 32, 33, 34, 35,
+          37, 38, 39, 40, 41, 43, 44, 45, 46, 47,
+          49, 50, 51, 52, 53, 55, 56, 57, 58, 59,
+          61, 62, 63, 64, 65, 67, 68, 69, 70, 71,
+          73, 74, 75, 76, 77, 79, 80, 81, 82, 83,
+          85, 86, 87, 88, 89, 91, 92, 93, 94, 95,
+          97, 98, 99, 100, 101, 103, 104, 105, 106, 107,
+          109, 110, 111, 112, 113, 115, 116, 117, 118, 119,
         }
     },
     { // ONT R10.4 super
-        {0, 2, 2, 2, 3, 4, 4, 5, 6, 7,
-         7, 8, 9, 10, 11, 12, 13, 13, 14, 15,
-         16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-         26, 27, 28, 29, 30, 31, 32, 32, 33, 33,
-         34, 34, 34, 34, 34, 34, 34, 35, 34, 34,
-         35, 35, 34, 34, 34, 34, 35, 34, 34, 34,
-         34, 35, 35, 34, 34, 35, 34, 34, 33, 35,
-         34, 35, 34, 34, 35, 35, 35, 34, 34, 34,
-         34, 34, 34, 34, 34, 34, 34, 34, 34, 34,
-         34, 34, 34, 34, 34, 34, 34, 34, 34, 34,
+        {  0,  2,  2,  2,  3,  4,  4,  5,  6,  7,
+           7,  8,  9, 12, 13, 14, 15, 15, 16, 17,
+          18, 19, 20, 22, 24, 25, 26, 27, 28, 29,
+          30, 31, 33, 34, 36, 37, 38, 38, 39, 39,
+          40, 40, 40, 40, 40, 40, 40, 41, 40, 40,
+          41, 41, 40, 40, 40, 40, 41, 40, 40, 40,
+          40, 41, 41, 40, 40, 41, 40, 40, 39, 41,
+          40, 41, 40, 40, 41, 41, 41, 40, 40, 40,
+          40, 40, 40, 40, 40, 40, 40, 40, 40, 40,
+          40, 40, 40, 40, 40, 40, 40, 40, 40, 40,
         },
-        {0, 2, 2, 2, 3, 4, 5, 6, 7, 8,
-         8, 9, 9, 10, 10, 10, 11, 12, 12, 13,
-         13, 13, 14, 14, 15, 16, 16, 17, 18, 18,
-         19, 19, 20, 21, 22, 23, 24, 25, 25, 25,
-         25, 25, 25, 25, 25, 25, 26, 26, 26, 26,
-         26, 26, 26, 26, 27, 27, 27, 27, 27, 27,
-         27, 27, 27, 27, 27, 27, 27, 28, 28, 28,
-         28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
-         28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
-         28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
+        {  0,  2,  2,  2,  3,  4,  5,  6,  7,  8,
+           8,  9,  9, 10, 10, 10, 11, 12, 12, 13,
+          13, 13, 14, 14, 15, 16, 16, 17, 18, 18,
+          19, 19, 20, 21, 22, 23, 24, 25, 25, 25,
+          25, 25, 25, 25, 25, 25, 26, 26, 26, 26,
+          26, 26, 26, 26, 27, 27, 27, 27, 27, 27,
+          27, 27, 27, 27, 27, 27, 27, 28, 28, 28,
+          28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
+          28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
+          28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
         },
-        {0, 4, 6, 6, 6, 7, 7, 8, 9, 9,
-         9, 10, 10, 11, 11, 12, 12, 13, 13, 14,
-         15, 15, 15, 16, 16, 17, 17, 18, 18, 19,
-         19, 20, 20, 21, 22, 22, 23, 23, 24, 24,
-         24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-         24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-         24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-         24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-         24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-         24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+        {  0,  4,  6,  6,  6,  7,  7,  8,  9,  9,
+           9, 10, 10, 11, 11, 12, 12, 13, 13, 14,
+          15, 15, 15, 16, 16, 17, 17, 18, 18, 19,
+          19, 20, 20, 21, 22, 22, 23, 23, 24, 24,
+          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+        }
+    },
+    { // ONT R10.4 duplex; just a copy of hifi for now
+        {10, 11, 11, 12, 13, 14, 15, 16, 18, 19,
+         20, 21, 22, 23, 24, 25, 27, 28, 29, 30,
+         31, 32, 33, 33, 34, 35, 36, 36, 37, 38,
+         38, 39, 39, 40, 40, 41, 41, 41, 41, 42,
+         42, 42, 42, 43, 43, 43, 43, 43, 43, 43,
+         44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
+         44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
+         44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
+         44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
+         44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
+         },
+        {  4,  4,  4,  4,  5,  6,  6,  7,  8,  9,
+          10, 11, 11, 12, 13, 14, 15, 15, 16, 17,
+          18, 19, 19, 20, 20, 21, 22, 23, 23, 24,
+          25, 25, 25, 26, 26, 26, 27, 27, 28, 28,
+          28, 28, 27, 27, 27, 28, 28, 28, 28, 27,
+          27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
+          27, 27, 26, 26, 25, 26, 26, 27, 27, 27,
+          26, 26, 26, 26, 26, 26, 26, 26, 27, 27,
+          28, 29, 28, 28, 28, 27, 27, 27, 27, 27,
+          27, 28, 28, 30, 30, 30, 30, 30, 30, 30,
+          },
+        {  8,  8,  8,  8,  9, 10, 11, 12, 13, 14,
+          15, 15, 16, 17, 18, 19, 19, 20, 20, 21,
+          21, 22, 22, 23, 23, 23, 24, 24, 24, 25,
+          25, 25, 25, 25, 25, 26, 26, 26, 26, 27,
+          27, 27, 27, 27, 27, 28, 28, 28, 28, 28,
+          29, 29, 29, 29, 29, 29, 30, 30, 30, 30,
+          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
         }
     },
     { // Ultima Genomics
-        {  2,  2,  3,  4,  5,  6,  6,  7,  8,  9,
+        { 2,  2,  3,  4,  5,  6,  6,  7,  8,  9,
           10, 10, 11, 12, 13, 14, 14, 15, 16, 17,
-          18, 18, 19, 20, 21, 22, 22, 23, 24, 25,
-          26, 26, 27, 28, 29, 30, 30, 31, 32, 33,
-          34, 34, 35, 36, 37, 38, 38, 39, 40, 41,
-          42, 42, 43, 44, 45, 46, 46, 47, 48, 49,
-          50, 50, 51, 52, 53, 54, 54, 55, 56, 57,
-          58, 58, 59, 60, 61, 62, 62, 63, 64, 65,
-          66, 66, 67, 68, 69, 70, 70, 71, 72, 73,
-          74, 74, 75, 76, 77, 78, 78, 79, 80, 81,
+          18, 18, 19, 21, 22, 23, 23, 24, 25, 26,
+          27, 27, 28, 29, 30, 31, 31, 32, 33, 34,
+          35, 35, 36, 37, 38, 39, 39, 40, 42, 43,
+          44, 44, 45, 46, 47, 48, 48, 49, 50, 51,
+          52, 52, 53, 54, 55, 56, 56, 57, 58, 59,
+          60, 60, 61, 63, 64, 65, 65, 66, 67, 68,
+          69, 69, 70, 71, 72, 73, 73, 74, 75, 76,
+          77, 77, 78, 79, 80, 81, 81, 82, 84, 85,
         },
-        {  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,
-           9,  9, 10, 10, 11, 12, 13, 13, 14, 15,
-          16, 16, 17, 18, 19, 20, 20, 21, 22, 23,
-          24, 24, 25, 26, 26, 27, 28, 29, 29, 30,
-          30, 31, 31, 32, 32, 33, 33, 34, 34, 35,
-          35, 35, 35, 36, 36, 36, 37, 37, 37, 37,
-          37, 37, 38, 38, 38, 38, 38, 38, 38, 38,
-          38, 39, 39, 39, 39, 39, 39, 39, 39, 39,
-          39, 39, 39, 39, 39, 39, 39, 39, 39, 39,
-          39, 39, 39, 39, 39, 39, 39, 39, 39, 39,
+        { 1,  1,  2,  2,  3,  3,  4,  4,  4,  4,
+          5,  5,  6,  6,  7,  7,  8,  8,  9, 10,
+          10, 10, 11, 12, 13, 13, 13, 14, 15, 16,
+          16, 16, 17, 18, 18, 19, 19, 20, 20, 21,
+          21, 22, 22, 22, 22, 23, 23, 24, 24, 25,
+          25, 25, 25, 25, 25, 25, 26, 26, 26, 26,
+          26, 26, 27, 27, 27, 27, 27, 27, 27, 27,
+          27, 28, 28, 28, 28, 28, 28, 28, 28, 28,
+          28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
+          28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
         },
-        {  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,
-           9,  9, 10, 10, 11, 12, 13, 13, 14, 15,
-          16, 16, 17, 18, 19, 20, 20, 21, 22, 23,
-          24, 24, 25, 26, 26, 27, 28, 29, 29, 30,
-          30, 31, 31, 32, 32, 33, 33, 34, 34, 35,
-          35, 35, 35, 36, 36, 36, 37, 37, 37, 37,
-          37, 37, 38, 38, 38, 38, 38, 38, 38, 38,
-          38, 39, 39, 39, 39, 39, 39, 39, 39, 39,
-          39, 39, 39, 39, 39, 39, 39, 39, 39, 39,
-          39, 39, 39, 39, 39, 39, 39, 39, 39, 39,
+        { 1,  1,  2,  2,  3,  3,  4,  4,  4,  4,
+          5,  5,  6,  6,  7,  7,  8,  8,  9, 10,
+          10, 10, 11, 12, 13, 13, 13, 14, 15, 16,
+          16, 16, 17, 18, 18, 19, 19, 20, 20, 21,
+          21, 22, 22, 22, 22, 23, 23, 24, 24, 25,
+          25, 25, 25, 25, 25, 25, 26, 26, 26, 26,
+          26, 26, 27, 27, 27, 27, 27, 27, 27, 27,
+          27, 28, 28, 28, 28, 28, 28, 28, 28, 28,
+          28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
+          28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
         }
     }
 };
@@ -549,16 +611,23 @@ int set_qcal(qcal_t *q, int id) {
 int load_qcal(qcal_t *q, const char *fn) {
     int i;
 
-    if (strcmp(fn, "@hifi") == 0)
+    if (strcmp(fn, ":hifi") == 0)
         return set_qcal(q, QCAL_HIFI);
-    if (strcmp(fn, "@hiseq") == 0)
+    if (strcmp(fn, ":hiseq") == 0)
         return set_qcal(q, QCAL_HISEQ);
-    if (strcmp(fn, "@r10.4_sup") == 0)
+    if (strcmp(fn, ":r10.4_sup") == 0)
         return set_qcal(q, QCAL_ONT_R10_4_SUP);
+    if (strcmp(fn, ":r10.4_dup") == 0)
+        return set_qcal(q, QCAL_ONT_R10_4_DUP);
+    if (strcmp(fn, ":ultima") == 0)
+        return set_qcal(q, QCAL_ULTIMA);
 
     // default
     for (i = 0; i < 101; i++)
         q->smap[i] = q->umap[i] = q->omap[i] = i;
+
+    if (strcmp(fn, ":flat") == 0)
+        return 0;
 
     hFILE *fp = hopen(fn, "r");
     if (!fp)
@@ -586,7 +655,7 @@ int load_qcal(qcal_t *q, const char *fn) {
         }
         if (v < max) {
             fprintf(stderr, "Qual calibration file is not in ascending order\n");
-            return -1;
+            return hclose(fp) ? -2 : -1;
         }
         max = v;
     }
@@ -598,11 +667,11 @@ int load_qcal(qcal_t *q, const char *fn) {
     }
 
     ks_free(&line);
-    return 0;
+    return hclose(fp) < 0 ? -2 : 0;
 
  err:
     ks_free(&line);
-    return 1;
+    return hclose(fp) < 0 ? -2 : -1;
 }
 
 static void consensus_init(double p_het, double p_indel, double het_scale,
@@ -618,9 +687,8 @@ static void consensus_init(double p_het, double p_indel, double het_scale,
     for (i = 0; i <= 500; i++)
         e_log[i] = log(i);
 
+    // EXPERIMENTAL
     cp->poly_mul = poly_mul;
-
-    // TODO: check priors for indels and het-indels?
 
     // The priors make very little difference, unless shallow data.
     // ACGT* by ACGT*
@@ -628,27 +696,17 @@ static void consensus_init(double p_het, double p_indel, double het_scale,
     for (i = 0; i < 25; i++)
         cp->prior[i] = p_het / 6; // AC AG AT CG CT GT
 
-    cp->prior[0] =cp->prior[6] =cp->prior[12] =cp->prior[18] =cp->prior[24]
-        = (1-p_het)/4; // AA CC GG TT **
+    // Flat assumption that it is what we observe, and measure everything else
+    // as relative to this.
+    cp->prior[0]=cp->prior[6]=cp->prior[12]=cp->prior[18]=cp->prior[24] = 1;
 
     // heterozygous deletion
     for (i = 4; i < 24; i+=5)
-        cp->prior[i] = p_indel; // /4?
+        cp->prior[i] = p_indel / 6; // /6 to be scaled vs p_het equivalently
 
     // heterozygous insertion
     for (i = 20; i < 24; i++)
-        cp->prior[i] = p_indel; // /4?
-
-    cp->prior[24] = 1-p_indel;
-        
-//    // A* to T* is 4+n*5
-//    for (i = 4; i < 25; i+=5)
-//        cp->prior[i] = .99;
-//
-//    // *A to *T is 4*5+n
-//    // tragic at low end quality though.
-//    for (i = 20; i < 25; i++)
-//        cp->prior[i] = .99;
+        cp->prior[i] = p_indel / 6;
 
     cp->lprior15[0]  = log(cp->prior[0]);
     cp->lprior15[1]  = log(cp->prior[1]);
@@ -678,14 +736,25 @@ static void consensus_init(double p_het, double p_indel, double het_scale,
         // Mixed alleles; just average two likelihoods
         cp->p_M[i] = log((exp(cp->pMM[i]) + exp(cp->p__[i]))/2);
 
-        // TODO: what does this mean!?  Can we simulate this by priors?
+        // What does this really mean?  Can we simulate this by priors?
         // It reduces the likelihood of calling het sites, which is
         // maybe compensation for alignment artifacts?  I'm unsure,
         // but it works (to differing degrees) on both PacBio HiFi and
         // Illumina HiSeq.  It (obviously) loses true hets, but
         // potentially this can be compensated for by tweaking P-het
         // (which is entirely in the priors).
-        cp->p_M[i] += log(het_scale); 
+        //
+        // Low het_scale reduces false positives by making hets less
+        // likely to be called.  In  high depth data we normally  have
+        // enough evidence to call correctly even with low het_scale,
+        // so it's a good +FN vs --FP tradeoff.  However on low depth
+        // data, het_scale can filter out too many true variants.
+        //
+        // TODO: So consider adjusting at the end maybe?
+        // Also consider never changing calls, but changing their
+        // confidence, so the data is what produces the call with the
+        // parameters skewing the quality score distribution.
+        cp->p_M[i] += log(het_scale);
 
         if (mode == MODE_BAYES_116) {
             // Compatibility with samtools 1.16
@@ -702,9 +771,15 @@ static void consensus_init(double p_het, double p_indel, double het_scale,
         } else {
             // When observing A C G T; leads to insertion calls
             prob = 1 - pow(10, -qcal->omap[i] / 10.0);
-            cp->poo[i] = log(1-prob);
-            if (cp->poo[i] > cp->pMM[i]*.5)
-                cp->poo[i] = cp->pMM[i]*.5;
+            // /3 for consistency with ACGT rem as relative likelihoods.
+            // Otherwise with flat priors we end up calling all shallow data
+            // as "*", which is illogical.
+            cp->poo[i] = log((1-prob)/3);
+
+            // Ensure pMM is always more likely. (NB: This shouldn't happen
+            // now with the addition of the /3 step above.)
+            if (cp->poo[i] > cp->pMM[i]-.5)
+                cp->poo[i] = cp->pMM[i]-.5;
 
             cp->po_[i] = log((exp(cp->poo[i]) + exp(cp->p__[i]))/2);
             cp->poM[i] = log((exp(cp->poo[i]) + exp(cp->pMM[i]))/2);
@@ -724,9 +799,9 @@ static void consensus_init(double p_het, double p_indel, double het_scale,
 
             prob = 1 - pow(10, -qcal->umap[i] / 10.0);
             cp->pmm[i] = log(prob);
-            cp->puu[i] = log(1-prob);
-            if (cp->puu[i] > cp->pMM[i]*2) // MM is -ve
-                cp->puu[i] = cp->pMM[i]*2;
+            cp->puu[i] = log((1-prob)/3);
+            if (cp->puu[i] > cp->pMM[i]-.5) // MM is -ve
+                cp->puu[i] = cp->pMM[i]-.5;
 
             cp->pum[i] = log((exp(cp->puu[i]) + exp(cp->pmm[i]))/2);
         }
@@ -835,9 +910,6 @@ void homopoly_qual_fix(bam1_t *b) {
 // Return the local NM figure within halo (+/- HALO) of pos.
 // This local NM is used as a way to modify MAPQ to get a localised MAPQ
 // score via an adhoc fashion.
-//
-// FIXME: this is pos in ref coords, but nm is pos in seq coords.
-// With indels it gets out of sync!
 double nm_local(const pileup_t *p, const bam1_t *b, hts_pos_t pos) {
     int *nm = (int *)p->cd;
     if (!nm)
@@ -889,22 +961,36 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
     double poly_adj = opts->homopoly_fix ? opts->homopoly_fix : 1;
 
     if (opts->adj_qual) {
-        // Skew local NM by qual vs min-qual delta
+        // Set local_nm based on a function of current qual and the local
+        // minimum qual within the surrounding window.
+        //
+        // Basically if we're in a region of low confidence then we downgrade
+        // higher qual outliers as they may not be as trustworthy as they
+        // claim.  This may be because the qualities have been assigned to
+        // the wrong or arbitrary base (very common in homopolymers), or the
+        // surrounding quality (hence also error likelihood) have lead to
+        // misalignments and the base may be contributing to the wrong
+        // pileup column.
+        //
+        // The nm_local() function returns these scores and uses it to bias
+        // the mapping quality, which in turn adjusts base quality.
         uint8_t *qual = bam_get_qual(b);
         uint8_t *seq = bam_get_seq(b);
-        const int qhalo = 8; // 4
-        int qmin = 99, qminp = 99;
-        int base = bam_seqi(seq, 0), polyl = 0, polyr=0; // pos, not len
-        const int qhalop = 2;
+        const int qhalo = 8; // window size for base qual
+        int qmin = qual[0];  // min qual within qhalo
+        const int qhalop = 2;// window size for homopolymer qual
+        int qminp = qual[0]; // min qual within homopolymer halo
+        int base = bam_seqi(seq, 0), polyl = 0, polyr = 0; // pos, not len
 
+        // Minimum quality of the initial homopolymer
         for (i = 1; i < qlen; i++) {
             if (bam_seqi(seq, i) != base)
                 break;
             if (i < qhalop && qminp > qual[i])
                 qminp = qual[i];
         }
-        polyr = i-1;
 
+        // Minimum quality for general bases
         for (i = 0; i < qlen && i < qhalo; i++) {
             if (qmin > qual[i])
                 qmin = qual[i];
@@ -946,7 +1032,7 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
             // TODO: optimise this with sliding window
             qminp = qual[i];
             for (int j = MAX(polyl,i-qhalop); j <= MIN(polyr,i+qhalop); j++)
-                if (qminp < qual[j])
+                if (qminp > qual[j])
                     qminp = qual[j];
 
             if (qmin > qual[i+qhalo])
@@ -971,7 +1057,6 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
     if (opts->homopoly_fix)
         homopoly_qual_fix((bam1_t *)b);
 
-#if 1
     // local_nm[i] & ((1<<24)-1) is for SNP score adjustment.
     // We also put some more basic poly-X len in local_nm[i] >> 24.
     uint8_t *seq = bam_get_seq(b);
@@ -987,11 +1072,11 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
         const int HALO=0;
         for (k = i-HALO; k < j+HALO; k++)
             if (k >= 0 && k < qlen)
-                local_nm[k] |= (MAX(poly,local_nm[k]>>24))<<24;
+                local_nm[k] = ((MAX(poly, local_nm[k]>>24))<<24)
+                            | (local_nm[k] & ((1<<24)-1));
 
         i = j-1;
     }
-#endif
 
     // Adjust local_nm array by the number of edits within
     // a defined region (pos +/- halo).
@@ -1054,13 +1139,19 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
     return 1;
 }
 
+void nm_free(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
+    free(p->cd);
+    p->cd = NULL;
+}
+
+#ifdef DO_HDW
 /*
  * Stirling's formula with a 1/12n correction applied to improve accuracy.
  * This seems to hold remarkably true for both low and high numbers too.
  */
 double lnfact(double n) {
-    /* Or Gosper's formula... 
-     * return (n*ln(n) - n + ln(2*M_PI*n + M_PI/3) / 2); 
+    /* Or Gosper's formula...
+     * return (n*ln(n) - n + ln(2*M_PI*n + M_PI/3) / 2);
      */
     return ((n+0.5)*log(n) - n + log(2*M_PI)/2) + log(1 + 1/(12.0*n));
         /* + log(1 + 1/(288.0*n*n)); */
@@ -1093,6 +1184,7 @@ double lnbinprobhalf(int n, double k) {
     // ln(binprobhalf) expanded up and simplified
     return lnfact(n) - lnfact(k) - lnfact(n-k) - 0.69315*n;
 }
+#endif
 
 static
 int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
@@ -1112,8 +1204,6 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
     // if it's rare.
     // Helps a bit on deep data, especially with K2=3, but detrimental on
     // shallow and (currently) quite a slow down.
-
-//#define K2 2
 #ifdef K2
     int hashN[1<<(K2*4+2)] = {0};
     int hash1[1<<2] = {0};
@@ -1152,7 +1242,9 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
 
     /* Initialise */
     int counts[6] = {0};
+#ifdef DO_FRACT
     int counts2[2][6] = {{0}};
+#endif
 
     /* Accumulate */
 
@@ -1180,7 +1272,9 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
 
     int td = depth; // original depth
     depth = 0;
+#ifdef DO_POLY_DIST
     int poly_dist[2][100] = {0};
+#endif
     for (; plp; plp = plp->next) {
         pileup_t *p = plp;
 
@@ -1202,7 +1296,6 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
             int base = i >= 0 && i < p->b.core.l_qseq ? X[bam_seqi(seq,i)] : _;
             hb = (hb<<2)|base;
         }
-        //        fprintf(stderr, "%c: %d %d of %d\t%d %d\n", p->base, hashN[hb], hash1[base1], td, p->qual, p->qual * hashN[hb] / hash1[base1]);
 #undef _
 #endif
 
@@ -1266,38 +1359,16 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
         if (qual < 1)
             qual = 1;
 
-#if 1
-        // Also produce a length distribution, eg at chr1:10040121
-        // If we can fit a 1 or 2 distributions to the homopolymer lengths
-        // then we can determine the consensus.
-        
-        
         double poly = poly_len(p, b, b->core.pos + p->seq_offset+1);
+#ifdef DO_POLY_DIST
         poly_dist[bam_is_rev(b)][MIN(99,(int)poly)]++;
-//        fprintf(stderr,
-//                "pos=%ld poly=%f %d -> %f\n", pos, poly, //bam_get_qname(b),
-//                qual, qual-poly*2);//1+(qual/(poly+1)));
+#endif
 
+        // EXPERIMENTAL
         // Adjust qual based on homopolymer length.
         // Affects different platforms by differing amounts.
         // May wish to further separate to qual2 and qual3 for ins and del?
         int qual2 = MAX(1, qual-(poly-2)*cp->poly_mul);
-        //int qual2 = MAX(1, qual-(poly-2>0?pow(poly,2):0));
-
-//        // Compute ratio of first two homopolymer lengths vs total number
-//        int pl1 = 0, pl2 = 0, pltot = 0;
-//        for (i = 0; i < 100; i++) {
-//            int p = poly_dist[0][i] + poly_dist[1][i];
-//            pltot += p;
-//            if (pl1 < p) {
-//                pl2 = pl1;
-//                pl1 = p;
-//            } else if (pl2 < p) {
-//                pl2 = p;
-//            }
-//        }
-//        qual2 += log((pl1+pl2)/(pltot+0.1));
-//        qual2 = MAX(1,qual2);
 
         /* MM=match  _M=half-match  __=mismatch */
         __ = cp->p__[qual];       // neither match
@@ -1305,14 +1376,14 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
         _M = cp->p_M[qual] - __;  // one allele only (half match)
 
         /* observation ACGT, but against hypothesis ** or *base */
-        oo = cp->poo[qual2] - __;// - poly;
-        oM = cp->poM[qual2] - __;// - 0.6; // log((match + poly)/2)
-        o_ = cp->po_[qual2] - __;// - 0.6;
+        oo = cp->poo[qual2] - __;
+        oM = cp->poM[qual2] - __;
+        o_ = cp->po_[qual2] - __;
 
         /* observation * */
-        uu = cp->puu[qual2] - __;// - poly;
-        um = cp->pum[qual2] - __;// - 0.6;
-        mm = cp->pmm[qual2] - __;// - poly;
+        uu = cp->puu[qual2] - __;
+        um = cp->pum[qual2] - __;
+        mm = cp->pmm[qual2] - __;
 
         if (flags & CONS_DISCREP) {
             qe = q2p[qual];
@@ -1321,7 +1392,9 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
 
 
         counts[base]++;
+#ifdef DO_FRACT
         counts2[bam_is_rev(b)][base]++;
+#endif
 
         // oM should never be higher than _M for actual bases!  or...
         //printf("base %d@%d MM %f _M %f oM %f\n", base, qual, MM, _M, oM);
@@ -1396,89 +1469,11 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
                                                             S[14]+= oo;
             break;
         }
-#else
-        /* MM=match  _M=half-match  __=mismatch */
-        __ = cp->p__[qual];       // neither match
-        MM = cp->pMM[qual];  // both match
-        _M = cp->p_M[qual];  // one allele only (half match)
-
-        /* observation ACGT, but against hypothesis ** or *base */
-        oo = cp->poo[qual];
-        oM = cp->poM[qual];
-        o_ = cp->po_[qual];
-
-        /* observation * */
-        uu = cp->puu[qual];
-        um = cp->pum[qual];
-        mm = cp->pmm[qual];
-
-        if (flags & CONS_DISCREP) {
-            qe = q2p[qual];
-            sumsC[base] += 1 - qe;
-        }
-
-        counts[base]++;
-
-        switch (base) {
-        case 0: //  match       subst     subst       subst     overcall
-    	S[0] += MM; S[1 ]+= _M; S[2 ]+= _M; S[3 ]+= _M; S[4 ]+= oM;
-    	            S[5 ]+= __; S[6 ]+= __; S[7 ]+= __; S[8 ]+= o_;
-    		                S[9 ]+= __; S[10]+= __; S[11]+= o_; 
-    				            S[12]+= __; S[13]+= o_; 
-    					                S[14]+= oo;
-    	break;
-
-        case 1:
-    	S[0] += __; S[1 ]+= _M; S[2 ]+= __; S[3 ]+= __; S[4 ]+= o_;
-    	            S[5 ]+= MM; S[6 ]+= _M; S[7 ]+= _M; S[8 ]+= oM;
-    		                S[9 ]+= __; S[10]+= __; S[11]+= o_; 
-    				            S[12]+= __; S[13]+= o_; 
-    					                S[14]+= oo;
-    	break;
-
-        case 2:
-    	S[0] += __; S[1 ]+= __; S[2 ]+= _M; S[3 ]+= __; S[4 ]+= o_;
-    	            S[5 ]+= __; S[6 ]+= _M; S[7 ]+= __; S[8 ]+= o_;
-    		                S[9 ]+= MM; S[10]+= _M; S[11]+= oM; 
-    				            S[12]+= __; S[13]+= o_; 
-    					                S[14]+= oo;
-    	break;
-
-        case 3:
-    	S[0] += __; S[1 ]+= __; S[2 ]+= __; S[3 ]+= _M; S[4 ]+= o_;
-    	            S[5 ]+= __; S[6 ]+= __; S[7 ]+= _M; S[8 ]+= o_;
-    		                S[9 ]+= __; S[10]+= _M; S[11]+= o_; 
-    				            S[12]+= MM; S[13]+= oM; 
-    					                S[14]+= oo;
-    	break;
-
-        case 4: // undercall  under       under      under  agree-no-base
-    	S[0] += uu; S[1 ]+= uu; S[2 ]+= uu; S[3 ]+= uu; S[4 ]+= um;
-    	            S[5 ]+= uu; S[6 ]+= uu; S[7 ]+= uu; S[8 ]+= um;
-    		                S[9 ]+= uu; S[10]+= uu; S[11]+= um; 
-    				            S[12]+= uu; S[13]+= um; 
-    					                S[14]+= mm;
-    	break;
-
-        case 5: /* N => equal weight to all A,C,G,T but not a pad */
-    	S[0] += MM; S[1 ]+= MM; S[2 ]+= MM; S[3 ]+= MM; S[4 ]+= oM;
-    	            S[5 ]+= MM; S[6 ]+= MM; S[7 ]+= MM; S[8 ]+= oM;
-    		                S[9 ]+= MM; S[10]+= MM; S[11]+= oM; 
-    				            S[12]+= MM; S[13]+= oM; 
-    					                S[14]+= oo;
-    	break;
-	    }
-#endif
 
         depth++;
-
-        if (p->eof && p->cd) {
-            free(p->cd);
-            p->cd = NULL;
-        }
     }
 
-#if 0
+#ifdef DO_POLY_DIST
     // Or compute mean and s.d per strand.
     // Then compare likelihood of strands coming from the same distribution?
     // eg s.d=0.59 vs mean=3.41 sd=0.54... hmm
@@ -1518,20 +1513,6 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
         }
     }
 
-//    int pl1[2] = {0,0}, pn1[2] = {0,0}, pl2[2] = {0,0}, pn2[2] = {0,0};
-//    for (int i = 0; i < 100; i++) {
-//        for (int j = 0; j < 2; j++) {
-//            if (pn1[j] < poly_dist[j][i]) {
-//                pn2[j] = pn1[j];
-//                pl2[j] = pl1[j];
-//                pn1[j] = poly_dist[j][i];
-//                pl1[j] = i;
-//            } else if (pn2[j] < poly_dist[j][i]) {
-//                pn2[j] = poly_dist[j][i];
-//                pl2[j] = i;
-//            }
-//        }
-//    }
     const double N = 5;
     nd1 += 1;
     nd2 += 1;
@@ -1566,22 +1547,7 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
     } else {
         sbias = 0;
     }
-#endif    
-
-/*
-
-Even
-20 20 => 1
-20 20 => 1
-
-Even length split within strand, but strand depth variatoin
-30 10 => 3  50 50 => 1
-30 10 => 3  50 50 => 1
-
-Even strand depth, but length variation within strand
-10 30 => 3  25 75 => 3
-30 10 => 3  75 25 => 3
-*/
+#endif
 
     /* We've accumulated stats, so now we speculate on the consensus call */
     double shift, max, max_het, norm[15];
@@ -1600,10 +1566,7 @@ Even strand depth, but length variation within strand
     max = -DBL_MAX;
     max_het = -DBL_MAX;
 
-    // S[5]=CC, S[9]=GG S[6]=CG
-    //for (j = 0; j < 15; j++) printf("A S[%d] = %f\n", j, S[j]);
-
-#if 0
+#ifdef DO_FRACT
     // Filter by --min-depth and --het-fract.
     // Also add a slight adjustment for strand bias.
     for (j = 0; j < 15; j++) {
@@ -1643,7 +1606,7 @@ Even strand depth, but length variation within strand
     }
 #endif
 
-#if 0
+#ifdef DO_HDW
     /*
      * Apply Hardy-Weinberg statistics for heterozygous sites.
      * This helps, but it also loses sensitivity a little.
@@ -1651,7 +1614,7 @@ Even strand depth, but length variation within strand
     for (j = 0; j < 15; j++) {
         if (j == 0 || j == 5 || j == 9 || j == 12 || j == 14)
             continue;
-        
+
         double c1 = counts[map_het[j]%5];
         double c2 = counts[map_het[j]/5];
 
@@ -1677,12 +1640,7 @@ Even strand depth, but length variation within strand
             c1+=1;
             c2+=1;
             c12+=2;
-            //fprintf(stderr, "%f %f %f => %f %f\n", c1, c2, c12, lnbinprobhalf(c12, c2) + log(c12), log(binprobhalf(c12, c2)*c12));
             S[j] += lnbinprobhalf(c12, c2) + fast_log2(c12)*0.69+.2;
-
-//            if ((c2+.1)/(c12+.1) < 0.5) {
-//                S[j] -= c12/2 - c2;
-//            }
         }
     }
 #endif
@@ -1701,13 +1659,11 @@ Even strand depth, but length variation within strand
             continue;
         }
 
-        //if (max < S[j]) {
-        if (max < S[j] || (max == S[j] && drand48() < 0.5) ) {
+        if (max < S[j]) {
             max = S[j];
             call = j;
         }
     }
-    //for (j = 0; j < 15; j++) printf("B S[%d] = %g\n", j, S[j]);
 
     /*
      * Shift and normalise.
@@ -1724,8 +1680,6 @@ Even strand depth, but length variation within strand
         S[j] = (S[j] > min_e_exp) ? e : DBL_MIN;
         norm[j] = 0;
     }
-
-    //for (j = 0; j < 15; j++) printf("C S[%d] = %g\n", j, S[j]);
 
     for (j = 0; j < 15; j++) {
         norm[j]    += tot1;
@@ -1767,25 +1721,6 @@ Even strand depth, but length variation within strand
     cons->het_call = map_het[het_call];
     cons->het_logodd = ph;
 
-    if (0 && cons->het_logodd > 0) {
-        int b1 = counts[cons->het_call%5];
-        int b2 = counts[cons->het_call/5];
-        if (b2>b1) { // make b1 biggest
-            int tmp = b2;
-            b2 = b1;
-            b1 = tmp;
-        }
-        // Should replace with Hardy-Weinberg, with a capped depth.
-        // It should also be done earlier to S[] array prior to calling.
-        int ph2 = ph * ((double)b2/b1 + .5);
-//        fprintf(stderr, "%d %d: %d %d: %d %d\n",
-//                ph, ph2, cons->het_call%5, cons->het_call/5,
-//                counts[cons->het_call%5], counts[cons->het_call/5]);
-        if (b1 <= 10)
-            ph2 /= 2;
-        cons->het_logodd = ph2;
-    }
-
     /* Compute discrepancy score */
     if (flags & CONS_DISCREP) {
         double m = sumsC[0]+sumsC[1]+sumsC[2]+sumsC[3]+sumsC[4];
@@ -1816,6 +1751,7 @@ int calculate_consensus_gap5m(hts_pos_t pos, int flags, int depth,
                                         opts->mode == MODE_PRECISE
                                             ? cp_p : cp_r);
 
+    // EXPERIMENTAL: mixed mode
     consensus_t consP, consR;
     // Favours precision
     calculate_consensus_gap5(pos, flags, depth, plp, opts,
@@ -1823,25 +1759,6 @@ int calculate_consensus_gap5m(hts_pos_t pos, int flags, int depth,
     // Favours recall
     calculate_consensus_gap5(pos, flags, depth, plp, opts,
                              &consR, default_qual, cp_r);
-
-#if 0
-    // If we're slightly negative on het, boost it a bit and go with it!
-    // (This is comparable to modifying the prior.)
-    memcpy(cons, &consR, sizeof(consR));
-    cons->het_logodd += 10;
-    if (cons->het_logodd > 0 && cons->phred >= 0)
-        cons->phred = -1; // switch!
-    return 0;
-#endif
-
-#if 0
-    // Reduce likelihood of het call.  Also comparable to prior hack.
-    memcpy(cons, &consR, sizeof(consR));
-    if ((cons->phred += 10) >= 0) {
-        cons->het_logodd -= 10;
-    }
-    return 0;
-#endif
 
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -1852,7 +1769,7 @@ int calculate_consensus_gap5m(hts_pos_t pos, int flags, int depth,
     if (consP.phred > 0 && consR.phred > 0 && consP.call == consR.call) {
         // Both strategies match as HOM
         // Boost qual as both in agreement
-        cons->phred += MIN(20, consR.phred);                                
+        cons->phred += MIN(20, consR.phred);
 
     } else if (consP.het_logodd >= 0 && consR.het_logodd >= 0 &&
                consP.het_call == consR.het_call) {
@@ -2405,13 +2322,11 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "  -p, --homopoly-fix    Spread low-qual bases to both ends of homopolymers\n");
     fprintf(fp, "      --homopoly-score FLOAT\n"
                 "                        Qual fraction adjustment for -p option [%g]\n", P_HOMOPOLY);
-    fprintf(fp, "  -t, --qual-calibration FILE / @system\n");
+    fprintf(fp, "  -t, --qual-calibration FILE / :config (see man page)\n");
     fprintf(fp, "                        Load quality calibration file\n");
     fprintf(fp, "\n");
     fprintf(fp, "  -X, --config STR      Use pre-defined configuration set. STR from:\n");
-    fprintf(fp, "                        hiseq        -t @hiseq\n");
-    fprintf(fp, "                        pacbio-ccs   --homopoly-score 0.4 --low-MQ 7 --scale-MQ 1.2 --het-scale 0.37 -t @hifi\n");
-    fprintf(fp, "                        r10.4_sup    --homopoly-score 0.4 -t @r10.4_sup\n");
+    fprintf(fp, "                        hiseq, hifi, r10.4_sup, r10.4_dup and ultima\n");
 
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@-.");
@@ -2434,9 +2349,9 @@ int main_consensus(int argc, char **argv) {
         .sc_cost      = 60,
         .low_mqual    = 1,
         .high_mqual   = 60,
-        .min_depth    = 2,
+        .min_depth    = 1,
         .call_fract   = 0.75,
-        .het_fract    = 0.15,
+        .het_fract    = 0.5,
         .het_only     = 0,
         .fmt          = FASTA,
         .cons_cutoff  = 10,
@@ -2454,7 +2369,7 @@ int main_consensus(int argc, char **argv) {
         .P_indel      = P_INDEL,
         .het_scale    = P_HET_SCALE,
         .homopoly_fix = 0,
-        .homopoly_redux = 0.1,
+        .homopoly_redux = 0.01,
 
         // Internal state
         .ks_line      = {0,0},
@@ -2518,7 +2433,7 @@ int main_consensus(int argc, char **argv) {
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "@:qd:c:H:r:5f:C:aAl:o:m:pX:",
+    while ((c = getopt_long(argc, argv, "@:qd:c:H:r:5f:C:aAl:o:m:pt:X:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 'a': opts.all_bases++; break;
@@ -2537,7 +2452,9 @@ int main_consensus(int argc, char **argv) {
         case 'A': opts.ambig = 1; break;
         case 'p': opts.homopoly_fix = P_HOMOPOLY; break;
         case 'p'+100: opts.homopoly_fix = atof(optarg); break;
-        case 'p'+200: opts.homopoly_redux = atof(optarg); break;
+        case 'p'+200:
+          // EXPERIMENTAL
+          opts.homopoly_redux = atof(optarg); break;
         case 1:   opts.default_qual = atoi(optarg); break;
         case 6:   opts.het_only = 1; break;
         case 7:   opts.show_del = (*optarg == 'y' || *optarg == 'Y'); break;
@@ -2558,14 +2475,18 @@ int main_consensus(int argc, char **argv) {
         case 'm': // mode
             if (strcasecmp(optarg, "simple") == 0) {
                 opts.mode = MODE_SIMPLE;
-            } else if (strcasecmp(optarg, "bayesian") == 0) {
-                // default
+            } else if (strcasecmp(optarg, "bayesian_m") == 0) {
+                // EXPERIMENTAL:
+                // A mixture of modified precise/recall params and a
+                // blending of the two.  Sometimes helps a bit.
                 opts.mode = MODE_MIXED;
             } else if (strcasecmp(optarg, "bayesian_p") == 0) {
+                // EXPERIMENTAL:
                 // favours precision
                 opts.mode = MODE_PRECISE;
-            } else if (strcasecmp(optarg, "bayesian_r") == 0) {
-                // favours recall
+            } else if (strcasecmp(optarg, "bayesian_r") == 0 ||
+                       strcasecmp(optarg, "bayesian") == 0) {
+                // favours recall; the default
                 opts.mode = MODE_RECALL;
             } else if (strcasecmp(optarg, "bayesian_116") == 0) {
                 opts.mode = MODE_BAYES_116;
@@ -2606,7 +2527,7 @@ int main_consensus(int argc, char **argv) {
                 opts.mode = MODE_RECALL;
                 opts.homopoly_fix = 0.3;
                 opts.homopoly_redux = 0.01;
-                opts.low_mqual = 7;
+                opts.low_mqual = 5;
                 opts.scale_mqual = 1.5;
                 opts.het_scale = 0.37;
             } else if (strcasecmp(optarg, "hiseq") == 0) {
@@ -2614,22 +2535,47 @@ int main_consensus(int argc, char **argv) {
                 set_qcal(&opts.qcal, QCAL_HISEQ);
                 opts.homopoly_redux = 0.01;
             } else if (strcasecmp(optarg, "r10.4_sup") == 0) {
-                // Maybe separate het_scale scores for SNPs vs INS vs DEL
-                // could mean a single parameter set (MODE_RECALL)?
-                opts.mode = MODE_MIXED;
+                // Same as HiFi params, but ONT calibration table.
+                // At higher depth, hifi params work well for ONT
+                // when combined with ONT calibration chart.
+                //
+                // At lower depth we gain a bit from increasing homopoly_redux
                 set_qcal(&opts.qcal, QCAL_ONT_R10_4_SUP);
-                opts.homopoly_fix = 0.4;
-                opts.homopoly_redux = 2;
+                opts.mode = MODE_RECALL;
+                opts.homopoly_fix = 0.3;
+                opts.homopoly_redux = 0.01;
+                opts.low_mqual = 5;
+                opts.scale_mqual = 1.5;
+                opts.het_scale = 0.37;
+
+                // Also consider, for lower depth:
+                // opts.homopoly_redux = 1;
+                // opts.scale_mqual = 1;
+                // opts.het_scale = 0.45;
+            } else if (strcasecmp(optarg, "r10.4_dup") == 0) {
+                // Just a copy of of HiFi for duplex currently until
+                // we get a good truth set for calibration.
+                set_qcal(&opts.qcal, QCAL_ONT_R10_4_DUP);
+                opts.mode = MODE_RECALL;
+                opts.homopoly_fix = 0.3;
+                opts.homopoly_redux = 0.01;
+                opts.low_mqual = 5;
+                opts.scale_mqual = 1.5;
+                opts.het_scale = 0.37;
             } else if (strcasecmp(optarg, "ultima") == 0) {
-                // similar to CCS, but less strict homopolymer scoring
+                // Very similar to HiFi, but with own calibration table
                 opts.mode = MODE_RECALL;
                 set_qcal(&opts.qcal, QCAL_ULTIMA);
-                opts.homopoly_fix = 0.6;
+                opts.homopoly_fix = 0.3;
                 opts.homopoly_redux = 0.01;
                 opts.het_scale = 0.37;
                 opts.scale_mqual = 2;
                 opts.low_mqual = 10;
             } else {
+                // NB consider defaults that are a mixture of all above.
+                // Options are all similar for all bar Illumina.
+                // Unsure what :flat calibration table does to each of
+                // these though.
                 fprintf(stderr, "Unrecognised configuration name: \"%s\"\n",
                         optarg);
                 return 1;
@@ -2744,7 +2690,9 @@ int main_consensus(int argc, char **argv) {
     if (opts.fmt == PILEUP) {
         if (pileup_loop(opts.fp, opts.h, readaln2,
                         opts.mode != MODE_SIMPLE ? nm_init : NULL,
-                        basic_pileup, &opts) < 0)
+                        basic_pileup,
+                        opts.mode != MODE_SIMPLE ? nm_free : NULL,
+                        &opts) < 0)
             goto err;
 
         if (opts.all_bases) {
@@ -2762,6 +2710,7 @@ int main_consensus(int argc, char **argv) {
         if (pileup_loop(opts.fp, opts.h, readaln2,
                         opts.mode != MODE_SIMPLE ? nm_init : NULL,
                         basic_fasta,
+                        opts.mode != MODE_SIMPLE ? nm_free : NULL,
                         &opts) < 0)
             goto err;
         if (opts.all_bases) {

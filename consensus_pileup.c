@@ -312,14 +312,18 @@ int pileup_loop(samFile *fp,
                                 samFile *fp,
                                 sam_hdr_t *h,
                                 pileup_t *p),
-                int (*seq_add)(void *client_data,
-                               samFile *fp,
-                               sam_hdr_t *h,
-                               pileup_t *p,
-                               int depth,
-                               hts_pos_t pos,
-                               int nth,
-                               int is_insert),
+                int (*seq_column)(void *client_data,
+                                  samFile *fp,
+                                  sam_hdr_t *h,
+                                  pileup_t *p,
+                                  int depth,
+                                  hts_pos_t pos,
+                                  int nth,
+                                  int is_insert),
+                void (*seq_free)(void *client_data,
+                                 samFile *fp,
+                                 sam_hdr_t *h,
+                                 pileup_t *p),
                 void *client_data) {
     int ret = -1;
     pileup_t *phead = NULL, *p, *pfree = NULL, *last, *next, *ptail = NULL;
@@ -429,13 +433,13 @@ int pileup_loop(samFile *fp,
                 ptail = phead;
 
             /* Call our function on phead linked list */
-            v = seq_add(client_data, fp, h, phead, depth,
+            v = seq_column(client_data, fp, h, phead, depth,
 #ifdef START_WITH_DEL
-                        col-1,
+                           col-1,
 #else
-                        col,
+                           col,
 #endif
-                        nth, is_insert);
+                           nth, is_insert);
 
             /* Remove dead seqs */
             for (p = eof_head ; p; p = p->eofn) {
@@ -446,6 +450,9 @@ int pileup_loop(samFile *fp,
 
                 p->next = pfree;
                 pfree = p;
+
+                if (seq_free)
+                    seq_free(client_data, fp, h, p);
             }
 
             if (v == 1)
@@ -587,6 +594,8 @@ int pileup_loop(samFile *fp,
     /* Tidy up */
     for (p = pfree; p; p = next) {
         next = p->next;
+        if (seq_free)
+            seq_free(client_data, fp, h, p);
         free(p->b.data);
         free(p);
     }
