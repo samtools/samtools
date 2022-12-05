@@ -60,13 +60,26 @@ press `?' for help and press `g' to check the alignment start from a
 region in the format like `chr10:10,000,000' or `=10,000,000' when
 viewing the same reference sequence.
 
+The top line shows the reference sequence, or '\fBN\fR's if unknown.
+Underneath this is the consensus, derived from the sequence
+alignments.  Below the consensus the sequence alignment records are
+shown.  Uppercase and lowercase is used to distinguish the sequence
+strand, with uppercase being the top/forward strand.
+
+When the reference is known, both consensus and alignment record
+sequences are displayed in a dot-notation where a matching character
+is shown as '\fB.\fR'  (forward strand) or '\fB,\fR' (reverse strand) and only
+mismatching bases and missing bases are shown.  This mode can be
+toggled with the "."  command.
+
 .SH OPTIONS
 .TP 14
 .BI -d \ display
 Output as (H)tml, (C)urses or (T)ext.
 
 The width of generated text is controlled by the COLUMNS environment
-variable.  Note this may be a local shell variable so it may need
+variable or the \fB-w\fR option for non-curses outputs.
+Note this may be a local shell variable so it may need
 exporting first or specifying on the command line prior to the
 command.  For example
 .EX 2
@@ -77,7 +90,15 @@ export COLUMNS ; samtools tview -d T -p 1:234567 in.bam
 Go directly to this position
 .TP
 .BI -s \ STR
-Display only alignments from this sample or read group
+Display only alignments from this sample or read group.  \fBSTR\fR
+must match either an \fBID\fR or \fBSM\fR field in an \fB@RG\fR header
+record.  For example
+.EX 2
+samtools tview -p chr20:10M -s NA12878 grch38.fa
+.EE
+.TP
+.BI -w \ INT
+Specifies the display width when using the HTML or Text output modes.
 .TP
 .B -X
 If this option is set, it will allows user to specify customized index file location(s) if the data
