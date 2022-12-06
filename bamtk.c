@@ -72,6 +72,7 @@ int main_import(int argc, char *argv[]);
 int main_samples(int argc, char *argv[]);
 int main_consensus(int argc, char *argv[]);
 int main_reference(int argc, char *argv[]);
+int main_reset(int argc, char *argv[]);
 
 const char *samtools_version()
 {
@@ -181,6 +182,7 @@ static void usage(FILE *fp)
 "     fasta          converts a BAM to a FASTA\n"
 "     import         Converts FASTA or FASTQ files to SAM/BAM/CRAM\n"
 "     reference      Generates a reference from aligned data\n"
+"     reset          Reverts aligner changes in reads\n"
 "\n"
 "  -- Statistics\n"
 "     bedcov         read depth per BED region\n"
@@ -293,6 +295,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "--version-only") == 0) {
         printf("%s+htslib-%s\n", samtools_version(), hts_version());
     }
+    else if (strcmp(argv[1], "reset") == 0) ret = main_reset(argc-1, argv+1);
     else {
         fprintf(stderr, "[main] unrecognized command '%s'\n", argv[1]);
         return 1;

@@ -43,12 +43,10 @@ DEALINGS IN THE SOFTWARE.  */
 #include "sam_opts.h"
 #include "bam.h" // for bam_get_library and bam_remove_B
 #include "bedidx.h"
+#include "sam_utils.h"
 
 KHASH_SET_INIT_STR(str)
 typedef khash_t(str) *strhash_t;
-
-KHASH_SET_INIT_INT(aux_exists)
-typedef khash_t(aux_exists) *auxhash_t;
 
 // This structure contains the settings for a samview run
 typedef struct samview_settings {
@@ -391,33 +389,6 @@ static inline void change_flag(bam1_t *b, samview_settings_t *settings)
 
     if (settings->remove_flag)
         b->core.flag &= ~settings->remove_flag;
-}
-
-int parse_aux_list(auxhash_t *h, char *optarg) {
-    if (!*h)
-        *h = kh_init(aux_exists);
-
-    while (strlen(optarg) >= 2) {
-        int x = optarg[0]<<8 | optarg[1];
-        int ret = 0;
-        kh_put(aux_exists, *h, x, &ret);
-        if (ret < 0)
-            return -1;
-
-        optarg += 2;
-        if (*optarg == ',') // allow white-space too for easy `cat file`?
-            optarg++;
-        else if (*optarg != 0)
-            break;
-    }
-
-    if (strlen(optarg) != 0) {
-        fprintf(stderr, "main_samview: Error parsing option, "
-                "auxiliary tags should be exactly two characters long.\n");
-        return -1;
-    }
-
-    return 0;
 }
 
 static int cmp_reglist_intervals(const void *aptr, const void *bptr)
@@ -1047,16 +1018,16 @@ int main_samview(int argc, char *argv[])
 
         case 'x':
             if (*optarg == '^') {
-                if (parse_aux_list(&settings.keep_tag, optarg+1))
+                if (parse_aux_list(&settings.keep_tag, optarg+1, "main_samview"))
                     return usage(stderr, EXIT_FAILURE, 0);
             } else {
-                if (parse_aux_list(&settings.remove_tag, optarg))
+                if (parse_aux_list(&settings.remove_tag, optarg, "main_samview"))
                     return usage(stderr, EXIT_FAILURE, 0);
             }
             break;
 
         case LONGOPT('x'):
-            if (parse_aux_list(&settings.keep_tag, optarg))
+            if (parse_aux_list(&settings.keep_tag, optarg, "main_samview"))
                 return usage(stderr, EXIT_FAILURE, 0);
             break;
 

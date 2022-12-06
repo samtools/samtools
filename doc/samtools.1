@@ -103,6 +103,8 @@ samtools reference -o ref.fa in.cram
 .PP
 samtools reheader in.header.sam in.bam > out.bam
 .PP
+samtools reset -o /tmp/reset.bam processed.bam
+.PP
 samtools samples input.bam
 .PP
 samtools sort -T /tmp/aln.sorted -o aln.sorted.bam aln.bam
@@ -813,6 +815,26 @@ samtools samples
 
 Prints the samples from alignment files
 
+.TP 10 \"-------- reset
+.B reset
+samtools reset
+.RB [ -o
+.IR FILE ]
+.RB [ -x / --remove-tag
+.IR tag_list ]
+.RB [ --keep-tag
+.IR tag_list ]
+.RB [  --reject-PG
+.IR pgid ]
+.RB [ --no-RG ]
+.RB [ --no-PG ]
+[...]
+
+Removes alignment information from records, producing an unaligned
+SAM, BAM or CRAM file.  Flags are reset, header tags are updated or
+removed as appropriate, and auxiliary tags are removed or retained as
+specified.  Note that the sort order is unchanged.
+
 .SH SAMTOOLS OPTIONS
 These are options that are passed after the \fBsamtools\fR command,
 before any sub-command is specified.
@@ -1355,6 +1377,7 @@ for further authorship.
 .IR samtools-quickcheck (1),
 .IR samtools-reference (1),
 .IR samtools-reheader (1),
+.IR samtools-reset (1),
 .IR samtools-rmdup (1),
 .IR samtools-sort (1),
 .IR samtools-split (1),
