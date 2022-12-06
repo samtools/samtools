@@ -30,7 +30,9 @@ use Getopt::Long;
 
 my $verbose = 0;
 my $shownr = 0;
-GetOptions('v' => \$verbose, 'n' => \$shownr);
+my $force = 0;
+
+GetOptions('v' => \$verbose, 'n' => \$shownr, 'f' => \$force);
 
 my ($root) = @ARGV;
 if (!$root) {
@@ -47,9 +49,10 @@ sub check {
         return;
     }
 
-    # Only check C, perl and shell files
-    return unless (/(?:\.[ch]|\.pl|\.sh)$/);
-
+    if (!$force) {
+        # Only check C, perl and shell files
+        return unless (/(?:\.[ch]|\.pl|\.sh)$/);
+    }
     my %allow_tabs = map { ("$root/$_", 1) } (
     );
 

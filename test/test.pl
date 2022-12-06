@@ -76,6 +76,7 @@ test_large_positions($opts);
 test_ampliconclip($opts);
 test_ampliconclip($opts, threads=>2);
 test_ampliconstats($opts, threads=>2);
+test_reset($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -3524,4 +3525,45 @@ sub test_ampliconstats
     test_cmd($opts, out=>'ampliconstats/stats.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -S -t 50 -d 1,20,100 $$opts{path}/ampliconclip/ac_test.bed @inputs | grep -E -v 'Samtools version|Command line'");
     test_cmd($opts, out=>'ampliconstats/stats_mixed.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -c 0 $$opts{path}/ampliconclip/multi_ref.bed $$opts{path}/ampliconstats/mixed_clipped.sam | grep -E -v 'Samtools version|Command line'");
     test_cmd($opts, out=>'ampliconstats/stats_partial.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -c 0 $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconstats/mixed_clipped.sam | grep -E -v 'Samtools version|Command line'");
+}
+
+sub test_reset
+{
+    my ($opts, %args) = @_;
+
+    #some tests uses samtools view to skip the header and check data part
+    #basic op 1, from pipe, to std out
+    test_cmd($opts, out=>"reset/basic.1.mp.1.expected", err=>"reset/empty.expected", cmd=>"cat $$opts{bin}/test/dat/mpileup.1.sam | $$opts{bin}/samtools reset | $$opts{bin}/samtools view");
+    #basic op 2, from redirection
+    test_cmd($opts, out=>"reset/basic.1.mp.1.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset < $$opts{bin}/test/dat/mpileup.1.sam | $$opts{bin}/samtools view");
+    #basic op 3, explicit input
+    test_cmd($opts, out=>"reset/basic.1.mp.1.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/dat/mpileup.1.sam | $$opts{bin}/samtools view");
+    #basic op 4, output to given file
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, out_map=>{"reset/output.sam" => 'reset/basic.output.mp.1.expected'}, ignore_pg_header=>1, cmd=>"cat $$opts{bin}/test/dat/mpileup.1.sam | $$opts{bin}/samtools reset -o $$opts{bin}/test/reset/output.sam");
+    #basic op 5, bam input
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, out_map=>{"reset/output.sam" => 'reset/basic.bam.input.expected'}, ignore_pg_header=>1, cmd=>"$$opts{bin}/samtools reset -o $$opts{bin}/test/reset/output.sam $$opts{bin}/test/dat/test_input_1_a.bam");
+    #basic op 6, cram input
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, out_map=>{"reset/output.sam" => 'reset/basic.cram.input.expected'}, ignore_pg_header=>1, cmd=>"$$opts{bin}/samtools reset -o $$opts{bin}/test/reset/output.sam $$opts{bin}/test/dat/test_input_1_a.cram");
+    #reject-PG 1, reject all
+    test_cmd($opts, out=>"reset/reject.1.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset --reject-PG bwa_index $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.sam; grep $$opts{bin}/test/reset/output.sam -e\"\@PG\tID\:samtools\tPN\:samtools\" | wc -l | sed 's/ //g'");
+    #reject-PG 2 keep bwa and remove samtools onwards
+    test_cmd($opts, out=>"reset/reject.2.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset --reject-PG sam_to_fixed_bam $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.sam; grep $$opts{bin}/test/reset/output.sam -e\"\@PG\tID\:\" | wc -l | sed 's/ //g'");
+    #no-PG, grep should fail as no PG entry found
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", want_fail=>1, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa_index --no-PG $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.sam; grep $$opts{bin}/test/reset/output.sam -e\"\@PG\"");
+    #no-RG, no @RG
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.nRG.1.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG -o $$opts{bin}/test/reset/output");
+    #no-RG, no RG:Z even with keep-tag
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.nRG.2.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG --keep-tag RG -o $$opts{bin}/test/reset/output");
+    #keep tag
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.keep.1.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG --keep-tag X0,MD -o $$opts{bin}/test/reset/output");
+    #override remove
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.keep.1.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG --remove-tag X0,X1,MD --keep-tag X0,MD -o $$opts{bin}/test/reset/output");
+    #remove tag
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.keep.2.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG --remove-tag X0,X1,MD -o $$opts{bin}/test/reset/output");
+    #remove through x
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.keep.2.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG -x X0,X1,MD -o $$opts{bin}/test/reset/output");
+    #keep through remove/^ + X1
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.keep.3.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG --remove-tag ^X0,MD --keep-tag X1 -o $$opts{bin}/test/reset/output");
+    #flag update and reverse flip
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.flg.1.expected"}, cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/reset/seq.sam -o $$opts{bin}/test/reset/output");
 }

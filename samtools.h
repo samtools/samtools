@@ -1,6 +1,6 @@
 /*  samtools.h -- utility routines.
 
-    Copyright (C) 2013-2015, 2019 Genome Research Ltd.
+    Copyright (C) 2013-2015, 2019, 2023 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
 
@@ -27,38 +27,9 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "htslib/hts_defs.h"
 #include "htslib/sam.h"
+#include "sam_utils.h"
 
 const char *samtools_version(void);
-
-#define CHECK_PRINTF(fmt,args) HTS_FORMAT(HTS_PRINTF_FMT, (fmt), (args))
-
-void print_error(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);
-void print_error_errno(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);
-
-void check_sam_close(const char *subcmd, samFile *fp, const char *fname, const char *null_fname, int *retp);
-
-/* Utility functions to register an output htsFile/samFile/vcfFile that
- * might be stdout. If FNAME is "-" or NULL, records FP so that print_error()
- * et al can automatically flush it before printing an error message.
- */
-void autoflush_if_stdout(htsFile *fp, const char *fname);
-
-/* Call this before closing FP; check_sam_close() does this automatically.
- */
-void release_autoflush(htsFile *fp);
-
-/*
- * Utility function to add an index to a file we've opened for write.
- * NB: Call this after writing the header and before writing sequences.
- *
- * The returned index filename should be freed by the caller, but only
- * after sam_idx_save has been called.
- *
- * Returns index filename on success,
- *         NULL on failure.
- */
-char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header);
-
 
 /* BAM sanitizer options */
 #define FIX_POS   2
