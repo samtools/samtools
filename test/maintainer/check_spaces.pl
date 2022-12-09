@@ -29,7 +29,8 @@ use File::Find;
 use Getopt::Long;
 
 my $verbose = 0;
-GetOptions('v' => \$verbose);
+my $shownr = 0;
+GetOptions('v' => \$verbose, 'n' => \$shownr);
 
 my ($root) = @ARGV;
 if (!$root) {
@@ -62,10 +63,18 @@ sub check {
     }
     my $tab = 0;
     my $trailing = 0;
+    my $nr = 0;
     while (my $line = <$in>) {
+        $nr++;
         chomp($line);
-        if ($check_tabs && $line =~ /\t/)  { $tab = 1; }
-        if ($line =~ /\s$/) { $trailing = 1; }
+        if ($check_tabs && $line =~ /\t/)  {
+            $tab = 1;
+            if ($shownr) { print "tab: $nr\n"; }
+        }
+        if ($line =~ /\s$/) {
+            $trailing = 1;
+            if ($shownr) { print "space: $nr\n"; }
+        }
     }
     if (!close($in)) {
         print STDERR "Error on closing $_ : $!\n";
