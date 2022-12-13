@@ -138,8 +138,8 @@ rocky_task:
 
 macosx_task:
   name: macosx + clang
-  osx_instance:
-    image: catalina-base
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-ventura-base:latest
 
   environment:
     CC: clang
