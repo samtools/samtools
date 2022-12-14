@@ -1248,10 +1248,14 @@ int main_samview(int argc, char *argv[])
     // Initialize BAM/CRAM index
     char **regs = NULL;
     int nregs = 0;
-    if ( has_index_file && optind < argc - 2 ) regs = &argv[optind+2], nregs = argc - optind - 2, settings.fn_idx_in = argv[optind+1];
-    else if ( !has_index_file && optind < argc - 1 ) regs = &argv[optind+1], nregs = argc - optind - 1;
-    else if ( has_index_file )
-    {
+    if ( has_index_file && optind <= argc - 2 ) {
+        regs = optind < argc-2 ? &argv[optind+2] : NULL;
+        nregs = argc - optind - 2;
+        settings.fn_idx_in = argv[optind+1];
+    } else if (!has_index_file && optind < argc - 1 ) {
+        regs = &argv[optind+1];
+        nregs = argc - optind - 1;
+    } else if ( has_index_file && argc-optind < 2) {
         print_error("view", "Incorrect number of arguments for -X option. Aborting.");
         return 1;
     }
@@ -1277,8 +1281,8 @@ int main_samview(int argc, char *argv[])
         ret = iter ? multi_region_view(&settings, iter) : 1;
         if (ret) goto view_end;
     }
-    else if ( !settings.hts_idx )   // stream through the entire file
-    {
+    else if ( !settings.hts_idx || optind+1 >= argc-has_index_file ) {
+        // stream through the entire file
         ret = stream_view(&settings);
         if (ret) goto view_end;
     } else {   // retrieve alignments in specified regions
