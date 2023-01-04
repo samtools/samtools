@@ -1253,6 +1253,36 @@ int main_samview(int argc, char *argv[])
         }
     }
 
+    if (settings.is_count) {
+        int rf = SAM_FLAG; // don't want 0, and this is quick
+        if (settings.filter)      rf = INT_MAX; // no easy way to know what is needed
+        if (settings.bed || regs) rf |= SAM_POS | SAM_RNAME | SAM_CIGAR;
+        if (settings.rghash)      rf |= SAM_RGAUX;
+        if (settings.library)     rf |= SAM_RGAUX;
+        if (settings.rnhash)      rf |= SAM_QNAME;
+        if (settings.subsam_frac>0) rf |= SAM_QNAME; // -s is via qname hash
+        if (settings.min_mapQ)    rf |= SAM_MAPQ;
+        if (settings.min_qlen)    rf |= SAM_SEQ;
+        if (settings.flag_on)     rf |= SAM_FLAG | SAM_RNEXT; // RNEXT does xref and
+        if (settings.flag_off)    rf |= SAM_FLAG | SAM_RNEXT; // corrects mate flags
+        if (settings.flag_anyon)  rf |= SAM_FLAG | SAM_RNEXT;
+        if (settings.flag_alloff) rf |= SAM_FLAG | SAM_RNEXT;
+
+        // Some tag filtering affects other fields
+        if (settings.tag) {
+            if (memcmp(settings.tag, "NM", 2) == 0 ||
+                memcmp(settings.tag, "MD", 2) == 0)
+                rf |= SAM_AUX | SAM_SEQ;
+            else if (memcmp(settings.tag, "RG", 2) == 0)
+                rf |= SAM_RGAUX;
+            else
+                rf |= SAM_AUX;
+        }
+
+        // Won't fail, but also wouldn't matter if it did
+        hts_set_opt(settings.in, CRAM_OPT_REQUIRED_FIELDS, rf);
+    }
+
     if ( settings.fetch_pairs )
     {
         hts_itr_multi_t *iter = multi_region_init(&settings, regs, nregs);
