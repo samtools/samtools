@@ -1,6 +1,6 @@
 /*  bamtk.c -- main samtools command front-end.
 
-    Copyright (C) 2008-2022 Genome Research Ltd.
+    Copyright (C) 2008-2023 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -191,6 +191,7 @@ static void usage(FILE *fp)
 "     depth          compute the depth\n"
 "     flagstat       simple stats\n"
 "     idxstats       BAM index stats\n"
+"     cram-size      list CRAM Content-ID and Data-Series sizes\n"
 "     phase          phase heterozygotes\n"
 "     stats          generate stats (former bamcheck)\n"
 "     ampliconstats  generate amplicon specific stats\n"
@@ -290,7 +291,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "samples") == 0)     ret = main_samples(argc-1, argv+1);
     else if (strcmp(argv[1], "consensus") == 0) ret = main_consensus(argc-1, argv+1);
     else if (strcmp(argv[1], "reference") == 0) ret = main_reference(argc-1, argv+1);
-    else if (strcmp(argv[1], "cram_size") == 0) ret = main_cram_size(argc-1, argv+1);
+    else if (strcmp(argv[1], "cram-size") == 0) ret = main_cram_size(argc-1, argv+1);
     else if (strcmp(argv[1], "version") == 0 || \
              strcmp(argv[1], "--version") == 0)
         long_version();

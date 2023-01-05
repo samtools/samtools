@@ -61,6 +61,8 @@ samtools consensus -o out.fasta in.bam
 .PP
 samtools coverage aln.sorted.bam
 .PP
+samtools cram_size -v -o out.size in.cram
+.PP
 samtools depad input.bam
 .PP
 samtools depth aln.sorted.bam
@@ -327,6 +329,17 @@ but doesn't make any guarantees about the order of read names between groups.
 
 The output from this command should be suitable for any operation that
 requires all reads from the same template to be grouped together.
+
+.TP \"-------- cram_size
+.B cram_size
+samtools cram_size
+.RI [ options ]
+.IR in.cram
+
+Produces a summary of CRAM block Content ID numbers and their
+associated Data Series stored within them.  Optionally a more detailed
+breakdown of how each data series is encoded per container may also be
+listed using the \fB-e\fR or \fB--encodings\fR option.
 
 .TP \"-------- idxstats
 .B idxstats
@@ -1356,6 +1369,7 @@ for further authorship.
 .IR samtools-collate (1),
 .IR samtools-consensus (1),
 .IR samtools-coverage (1),
+.IR samtools-cram_size (1),
 .IR samtools-depad (1),
 .IR samtools-depth (1),
 .IR samtools-dict (1),

@@ -243,6 +243,7 @@ check test: samtools $(BGZIP) $(TEST_PROGRAMS)
 	cd test/mpileup && AWK="$(AWK)" ../regression.sh mpileup.reg
 	cd test/mpileup && AWK="$(AWK)" ../regression.sh depth.reg
 	cd test/consensus && AWK="$(AWK)" ../regression.sh consensus.reg
+	cd test/cram_size && AWK="$(AWK)" ../regression.sh cram_size.reg
 
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB)
