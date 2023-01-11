@@ -760,6 +760,13 @@ static int is_sam(const char *fn) {
     return (l >= 4 && strcasecmp(fn + l-4, ".sam") == 0);
 }
 
+static void aux_list_free(samview_settings_t *settings) {
+    if (settings->keep_tag)
+        kh_destroy(aux_exists, settings->keep_tag);
+    if (settings->remove_tag)
+        kh_destroy(aux_exists, settings->remove_tag);
+}
+
 int main_samview(int argc, char *argv[])
 {
     samview_settings_t settings;
@@ -1018,17 +1025,23 @@ int main_samview(int argc, char *argv[])
 
         case 'x':
             if (*optarg == '^') {
-                if (parse_aux_list(&settings.keep_tag, optarg+1, "main_samview"))
+                if (parse_aux_list(&settings.keep_tag, optarg+1, "main_samview")) {
+                    aux_list_free(&settings);
                     return usage(stderr, EXIT_FAILURE, 0);
+                }
             } else {
-                if (parse_aux_list(&settings.remove_tag, optarg, "main_samview"))
+                if (parse_aux_list(&settings.remove_tag, optarg, "main_samview")) {
+                    aux_list_free(&settings);
                     return usage(stderr, EXIT_FAILURE, 0);
+                }
             }
             break;
 
         case LONGOPT('x'):
-            if (parse_aux_list(&settings.keep_tag, optarg, "main_samview"))
+            if (parse_aux_list(&settings.keep_tag, optarg, "main_samview")) {
+                aux_list_free(&settings);
                 return usage(stderr, EXIT_FAILURE, 0);
+            }
             break;
 
         default:
@@ -1339,10 +1352,7 @@ view_end:
         free(settings.fn_un_out_idx);
     free(arg_list);
 
-    if (settings.keep_tag)
-        kh_destroy(aux_exists, settings.keep_tag);
-    if (settings.remove_tag)
-        kh_destroy(aux_exists, settings.remove_tag);
+    aux_list_free(&settings);
 
     return ret;
 }
