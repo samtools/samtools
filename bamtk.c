@@ -102,7 +102,7 @@ const char *samtools_feature_string(void) {
 static void long_version(void) {
     printf("samtools %s\n"
            "Using htslib %s\n"
-           "Copyright (C) 2022 Genome Research Ltd.\n",
+           "Copyright (C) 2023 Genome Research Ltd.\n",
            samtools_version(), hts_version());
 
     printf("\nSamtools compilation details:\n");
