@@ -58,14 +58,15 @@ but doesn't make any guarantees about the order of read names between groups.
 The output from this command should be suitable for any operation that
 requires all reads from the same template to be grouped together.
 
-If present, <prefix> is used to name the temporary files that collate
-uses when sorting the data.  If neither the \fB-O\fR nor \fB-o\fR options are used,
-<prefix> must be present and collate will use it to make an output file name
-by appending a suffix depending on the format written (.bam by default).
+Temporary files are written to <prefix>, specified either as the last
+argument or with the \fB-T\fR option.  If prefix is unspecified then
+one will be derived from the output filename (\fB\-o\fR option).
+If no output file was given then the \fBTMPDIR\fR environment variable will be
+used, and finally if that is unset then "/tmp" is used.
 
-If either the \fB-O\fR or \fB-o\fR option is used, <prefix> is optional.  If <prefix>
-is absent, collate will write the temporary files to a system-dependent
-location (/tmp on UNIX).
+Conversely, if prefix is specified but no output filename has been
+given then the output will be written to <prefix>.<fmt> where <fmt>
+is appropriate to the file format is use (e.g. "bam" or "cram").
 
 Using \fB-f\fR for fast mode will output \fBonly\fR primary alignments that have
 either the READ1 \fBor\fR READ2 flags set (but not both).
@@ -94,10 +95,17 @@ sizes on batches of reads.
 .SH OPTIONS
 .TP 8
 .B -O
-Output to stdout.  This option cannot be used with '-o'.
+Output to stdout.  This option cannot be used with \fB-o\fR.
 .TP
-.B -o FILE
-Write output to FILE.  This option cannot be used with '-O'.
+.BI "-o " FILE
+Write output to FILE.  This option cannot be used with \fB-O\fR.  If
+unspecified and \fB-O\fR is not set, the temporary file <prefix> is
+used, appended by the the appropriate file-format suffix.
+.TP
+.BI "-T " PREFIX
+Use \fIPREFIX\fR for temporary files.  This is the same as specifying
+\fIPREFIX\fR as the last argument on the command line.  This option
+is included for consistency with \fBsamtools sort\fR.
 .TP
 .B -u
 Write uncompressed BAM output
