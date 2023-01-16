@@ -1,7 +1,7 @@
 /*  bam2bcf.c -- variant calling.  Used for tview consensus
 
     Copyright (C) 2010-2012 Broad Institute.
-    Copyright (C) 2012-2015, 2021 Genome Research Ltd.
+    Copyright (C) 2012-2015, 2021-2022 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 

@@ -1,6 +1,6 @@
 /*  bam_mate.c -- fix mate pairing information and clean up flags.
 
-    Copyright (C) 2009, 2011-2017, 2019 Genome Research Ltd.
+    Copyright (C) 2009, 2011-2017, 2019, 2022 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
     Portions copyright (C) 2012 Peter Cock, The James Hutton Institute.
 
