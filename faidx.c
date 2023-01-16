@@ -1,6 +1,6 @@
 /*  faidx.c -- faidx subcommand.
 
-    Copyright (C) 2008, 2009, 2013, 2016, 2018-2020 Genome Research Ltd.
+    Copyright (C) 2008, 2009, 2013, 2016, 2018-2020, 2022 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
