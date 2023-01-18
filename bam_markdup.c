@@ -2254,7 +2254,7 @@ static int markdup_usage(void) {
 
 int bam_markdup(int argc, char **argv) {
     int c, ret, bc_name = 0;
-    char wmode[4] = {'w', 'b', 0, 0};
+    char wmode[4] = {'w', 0, 0, 0};
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
     kstring_t tmpprefix = {0, 0, NULL};
@@ -2303,7 +2303,7 @@ int bam_markdup(int argc, char **argv) {
                 }
 
                 break;
-            case 'u': wmode[2] = '0'; break;
+            case 'u': wmode[1] = '0'; break;
             case 1001: param.include_fails = 1; break;
             case 1002: param.no_pg = 1; break;
             case 1003: param.check_chain = 0; break;
@@ -2409,7 +2409,8 @@ int bam_markdup(int argc, char **argv) {
         return 1;
     }
 
-    sam_open_mode(wmode + 1, argv[optind + 1], NULL);
+    strcat(wmode, "b"); // default if unknown suffix
+    sam_open_mode(wmode + strlen(wmode)-1, argv[optind + 1], NULL);
     param.out = sam_open_format(argv[optind + 1], wmode, &ga.out);
 
     if (!param.out) {
