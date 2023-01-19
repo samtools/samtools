@@ -79,6 +79,7 @@ run_test() {
             echo "UNEXPECTED FAIL: Output mismatch for $@" >&2
             echo "See FAIL-$e.${test_iter} expected/$e" >&2
             mv _out FAIL-$e.${test_iter}
+            diff FAIL-$e.${test_iter} expected/$e | head -100
             nufail=`expr $nufail + 1`
             return 0
         fi
