@@ -1,7 +1,7 @@
 '\" t
-.TH samtools-cram_size 1 "11 January 2023" "samtools-1.16.1" "Bioinformatics tools"
+.TH samtools-cram-size 1 "11 January 2023" "samtools-1.16.1" "Bioinformatics tools"
 .SH NAME
-samtools cram_size \- list a break down of data types in a CRAM file
+samtools cram-size \- list a break down of data types in a CRAM file
 .\"
 .\" Copyright (C) 2023 Genome Research Ltd.
 .\"
@@ -40,7 +40,7 @@ samtools cram_size \- list a break down of data types in a CRAM file
 .
 .SH SYNOPSIS
 .PP
-samtools cram_sizee
+samtools cram-size
 .RB [ -ve ]
 .RB [ -o
 .IR file ]
@@ -152,7 +152,7 @@ processing.
 .IP -
 The basic summary of block Content ID sizes for a CRAM file:
 .EX 2
-$ samtools cram_size in.cram
+$ samtools cram-size in.cram
 #   Content_ID  Uncomp.size    Comp.size   Ratio Method  Data_series
 BLOCK     CORE            0            0 100.00% .      
 BLOCK       11    394734019     51023626  12.93% g       RN
@@ -166,7 +166,7 @@ BLOCK       14     26625602      6803930  25.55% Rrg     SC
 Show the same file above with verbose mode.  Here we see the distinct
 compression methods which have been used per block Content ID.
 .EX 2
-$ samtools cram_size -v in.cram
+$ samtools cram-size -v in.cram
 #   Content_ID  Uncomp.size    Comp.size   Ratio Method      Data_series
 BLOCK     CORE            0            0 100.00% raw        
 BLOCK       11    394734019     51023626  12.93% gzip        RN
@@ -187,7 +187,7 @@ the standard CRAM Data Series and the three letter ones are the
 optional auxiliary tags with the tag name and type combined.
 
 .EX 2
-$ samtools cram_size -e in.cram
+$ samtools cram-size -e in.cram
 Container encodings
     RN      BYTE_ARRAY_STOP(stop=0,id=11)
     QS      EXTERNAL(id=12)

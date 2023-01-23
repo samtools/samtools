@@ -61,7 +61,7 @@ samtools consensus -o out.fasta in.bam
 .PP
 samtools coverage aln.sorted.bam
 .PP
-samtools cram_size -v -o out.size in.cram
+samtools cram-size -v -o out.size in.cram
 .PP
 samtools depad input.bam
 .PP
@@ -330,9 +330,9 @@ but doesn't make any guarantees about the order of read names between groups.
 The output from this command should be suitable for any operation that
 requires all reads from the same template to be grouped together.
 
-.TP \"-------- cram_size
-.B cram_size
-samtools cram_size
+.TP \"-------- cram-size
+.B cram-size
+samtools cram-size
 .RI [ options ]
 .IR in.cram
 
@@ -1369,7 +1369,7 @@ for further authorship.
 .IR samtools-collate (1),
 .IR samtools-consensus (1),
 .IR samtools-coverage (1),
-.IR samtools-cram_size (1),
+.IR samtools-cram-size (1),
 .IR samtools-depad (1),
 .IR samtools-depth (1),
 .IR samtools-dict (1),
