@@ -17,7 +17,7 @@ ref=''
 set -x
 git clone --recurse-submodules --shallow-submodules --depth=50 ${ref:+--branch="$branch"} "$repository" "$localdir"
 
-if [ "x$htslib_PR" != "" ]
+if [ "x$htslib_PR" != "x" ]
 then
     cd "$localdir"
     git fetch origin "pull/$htslib_PR/head"
