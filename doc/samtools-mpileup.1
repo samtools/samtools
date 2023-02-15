@@ -271,11 +271,13 @@ two requests.
 Ignore RG tags. Treat all reads in one BAM as one sample.
 .TP
 .BI --rf,\ --incl-flags \ STR|INT
-Required flags: include reads with any of the mask bits set [null]
+Required flags: only include reads with any of the mask bits set [null].
+Note this does not override the \fB--excl-flags\fR option.
 .TP
 .BI --ff,\ --excl-flags \ STR|INT
 Filter flags: skip reads with any of the mask bits set
-[UNMAP,SECONDARY,QCFAIL,DUP]
+[UNMAP,SECONDARY,QCFAIL,DUP].
+Note this does not override the \fB--incl-flags\fR option.
 .TP
 .B -x,\ --ignore-overlaps-removal, --disable-overlap-removal
 Overlap detection and removal is enabled by default.  This option

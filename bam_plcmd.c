@@ -941,9 +941,12 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
     fprintf(fp,
 "  -r, --region REG        region in which pileup is generated\n"
 "  -R, --ignore-RG         ignore RG tags (one BAM = one sample)\n"
-"  --rf, --incl-flags STR|INT  required flags: include reads with any of the mask bits set [%s]\n", tmp_require);
+"  --rf, --incl-flags STR|INT\n"
+"                          required flags: only include reads with any of\n"
+"                          the mask bits set [%s]\n", tmp_require);
     fprintf(fp,
-"  --ff, --excl-flags STR|INT  filter flags: skip reads with any of the mask bits set\n"
+"  --ff, --excl-flags STR|INT\n"
+"                          filter flags: skip reads with any of the mask bits set\n"
 "                                            [%s]\n", tmp_filter);
     fprintf(fp,
 "  -x, --ignore-overlaps-removal, --disable-overlap-removal\n"
