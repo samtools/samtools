@@ -964,7 +964,7 @@ int main_samview(int argc, char *argv[])
 
         case 'd':
             if (strlen(optarg) < 2 || (strlen(optarg) > 2 && optarg[2] != ':')) {
-                print_error_errno("view", "Invalid \"tag:value\" option: \"%s\"", optarg);
+                print_error("view", "Invalid \"tag:value\" option: \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
             }
@@ -1004,7 +1004,7 @@ int main_samview(int argc, char *argv[])
             // path translation as described at:
             // http://www.mingw.org/wiki/Posix_path_conversion
             if (strlen(optarg) < 4 || (optarg[2] != ':' && optarg[2] != ';')) {
-                print_error_errno("view", "Invalid \"tag:file\" option: \"%s\"", optarg);
+                print_error("view", "Invalid \"tag:file\" option: \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
             }
