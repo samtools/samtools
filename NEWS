@@ -15,7 +15,7 @@ New work and changes:
   contained within them, and the compression methods used.
   (PR#1777)
 
-* Added a bam_sanitize function to fixmate and view.  This performs some sanity
+* Added a --sanitize option to fixmate and view.  This performs some sanity
   checks on the state of SAM record fields, fixing up common mistakes made by
   aligners.
   (PR#1698)
@@ -74,7 +74,7 @@ Bug Fixes:
   inconsistent.
   (PR#1727, fixes #1650. Reported by jPontix)
 
-* Fixed SEGV in samtoools collate when no filename given.
+* Fixed SEGV in samtools collate when no filename given.
   (PR#1724)
 
 * Changed the default UMI barcode regex in markdup.  The old regex was too
@@ -89,8 +89,12 @@ Bug Fixes:
   (PR#1747)
 
 * Fix view -X command line parsing that was broken in 1.15.
-  (PR#1772, fixes #1720.  Reported by Francisco Rodríguez-Algarra
+  (PR#1772, fixes #1720.  Reported by Francisco RodrÃ­guez-Algarra
   and Miguel Machado)
+
+* Stop samtools view -d from reporting meaningless system errors when
+  tag validation fails.
+  (PR#1796)
 
 Documentation:
 
