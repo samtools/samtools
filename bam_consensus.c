@@ -879,13 +879,14 @@ int nins(const bam1_t *b){
  */
 void homopoly_qual_fix(bam1_t *b) {
     static double ph2err[256] = {0};
+    int i;
     if (!ph2err[0]) {
-        for (int i = 0; i < 256; i++)
+        for (i = 0; i < 256; i++)
             ph2err[i] = pow(10, i/-10.0);
     }
     uint8_t *seq = bam_get_seq(b);
     uint8_t *qual = bam_get_qual(b);
-    for (int i = 0; i < b->core.l_qseq; i++) {
+    for (i = 0; i < b->core.l_qseq; i++) {
         int s = i; // start of homopoly
         int base = bam_seqi(seq, i);
         while (i+1 < b->core.l_qseq && bam_seqi(seq, i+1) == base)
@@ -900,7 +901,8 @@ void homopoly_qual_fix(bam1_t *b) {
         // Best:      fully redistribute so start/end lower qual than centre
 
         // Middle route of averaging outer pairs is sufficient?
-        for (int j = s, k = i; j < k; j++,k--) {
+        int j, k;
+        for (j = s, k = i; j < k; j++,k--) {
             double e = ph2err[qual[j]] + ph2err[qual[k]];
             qual[j] = qual[k] = -fast_log2(e/2)*3.0104+.49;
         }
@@ -1031,9 +1033,10 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
             // Brute force qminp in polyl to polyr range.
             // TODO: optimise this with sliding window
             qminp = qual[i];
-            for (int j = MAX(polyl,i-qhalop); j <= MIN(polyr,i+qhalop); j++)
-                if (qminp > qual[j])
-                    qminp = qual[j];
+            int k;
+            for (k = MAX(polyl,i-qhalop); k <= MIN(polyr,i+qhalop); k++)
+                if (qminp > qual[k])
+                    qminp = qual[k];
 
             if (qmin > qual[i+qhalo])
                 qmin = qual[i+qhalo];
@@ -1483,15 +1486,16 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
 
     int d1 = 0, d2 = 0;
     double nd1 = 0, nd2 = 0;
-    for (int i = 0; i < 100; i++) {
-        if (!poly_dist[0][i] && !poly_dist[1][i])
+    int k;
+    for (k = 0; k < 100; k++) {
+        if (!poly_dist[0][k] && !poly_dist[1][k])
             continue;
 
-//        fprintf(stdout, "%ld %d %2d %2d\n", pos, i, poly_dist[0][i], poly_dist[1][i]);
-        d1 += (i+1)*poly_dist[0][i];
-        d2 += (i+1)*poly_dist[1][i];
-        nd1 += poly_dist[0][i];
-        nd2 += poly_dist[1][i];
+//        fprintf(stdout, "%ld %d %2d %2d\n", pos, k, poly_dist[0][k], poly_dist[1][k]);
+        d1 += (i+1)*poly_dist[0][k];
+        d2 += (i+1)*poly_dist[1][k];
+        nd1 += poly_dist[0][k];
+        nd2 += poly_dist[1][k];
     }
 //    printf("Avg = %f / %f %f / %f / %f\n",
 //           (d1+d2+1)/(nd1+nd2+1.),
@@ -1501,15 +1505,15 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
 
     // Find the top two frequent lengths
     int n1 = 0, n2 = 0, l1 = 0, l2 = 0;
-    for (int i = 0; i < 100; i++) {
-        int poly12 = poly_dist[0][i]+poly_dist[1][i];
+    for (k = 0; k < 100; k++) {
+        int poly12 = poly_dist[0][k]+poly_dist[1][k];
         if (n1 < poly12) {
             n2 = n1; l2 = l1;
             n1 = poly12;
-            l1 = i;
+            l1 = k;
         } else if (n2 < poly12) {
             n2 = poly12;
-            l2 = i;
+            l2 = k;
         }
     }
 
