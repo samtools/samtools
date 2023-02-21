@@ -1492,8 +1492,8 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
             continue;
 
 //        fprintf(stdout, "%ld %d %2d %2d\n", pos, k, poly_dist[0][k], poly_dist[1][k]);
-        d1 += (i+1)*poly_dist[0][k];
-        d2 += (i+1)*poly_dist[1][k];
+        d1 += (k+1)*poly_dist[0][k];
+        d2 += (k+1)*poly_dist[1][k];
         nd1 += poly_dist[0][k];
         nd2 += poly_dist[1][k];
     }
