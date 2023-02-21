@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-coverage 1 "2 September 2022" "samtools-1.16.1" "Bioinformatics tools"
+.TH samtools-coverage 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools coverage \- produces a histogram or table of coverage per chromosome
 .\"
@@ -47,8 +47,11 @@ samtools coverage
 
 .SH DESCRIPTION
 .PP
-Computes the depth at each position or region and draws an ASCII-art
-histogram or tabulated text.
+Computes the coverage at each position or region and draws an
+ASCII-art histogram or tabulated text.
+
+Coverage is defined as the percentage of positions within each bin with at
+least one base aligned against it.
 
 The tabulated form uses the following headings.
 

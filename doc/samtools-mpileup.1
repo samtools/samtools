@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-mpileup 1 "2 September 2022" "samtools-1.16.1" "Bioinformatics tools"
+.TH samtools-mpileup 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools mpileup \- produces "pileup" textual format from an alignment
 .\"
@@ -271,11 +271,13 @@ two requests.
 Ignore RG tags. Treat all reads in one BAM as one sample.
 .TP
 .BI --rf,\ --incl-flags \ STR|INT
-Required flags: include reads with any of the mask bits set [null]
+Required flags: only include reads with any of the mask bits set [null].
+Note this does not override the \fB--excl-flags\fR option.
 .TP
 .BI --ff,\ --excl-flags \ STR|INT
 Filter flags: skip reads with any of the mask bits set
-[UNMAP,SECONDARY,QCFAIL,DUP]
+[UNMAP,SECONDARY,QCFAIL,DUP].
+Note this does not override the \fB--incl-flags\fR option.
 .TP
 .B -x,\ --ignore-overlaps-removal, --disable-overlap-removal
 Overlap detection and removal is enabled by default.  This option

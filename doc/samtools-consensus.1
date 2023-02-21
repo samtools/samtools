@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-consensus 1 "2 September 2022" "samtools-1.16.1" "Bioinformatics tools"
+.TH samtools-consensus 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools consensus \- produces produce a consensus FASTA/FASTQ/PILEUP
 .\"
-.\" Copyright (C) 2021 Genome Research Ltd.
+.\" Copyright (C) 2021-2022 Genome Research Ltd.
 .\"
 .\" Author: James Bonfield <jkb@sanger.ac.uk>
 .\"
@@ -147,8 +147,15 @@ Output consensus to FILE instead of stdout.
 .TP
 .BI "-m " STR ", --mode " STR
 Select the consensus algorithm.  Valid modes are "simple" frequency
-counting and the "bayesian" (Gap5) method, with Bayesian being the
+counting and the "bayesian" (Gap5) methods, with Bayesian being the
 default.  (Note case does not matter, so "Bayesian" is accepted too.)
+There are a variety of bayesian methods.  Straight "bayesian" is the
+best set suitable for the other parameters selected.  The choice of
+internal parameters may change depending on the "--P-indel" score.
+This method distinguishes between substitution and indel error rates.
+The old Samtools consensus in version 1.16 did not distinguish types
+of errors, but for compatibility the "bayesian_116" mode may be
+selected to replicate this.
 .TP
 .B -a
 Outputs all bases, from start to end of reference, even when the
@@ -171,6 +178,11 @@ Filters out reads with a mapping quality below \fIINT\fR.  This
 defaults to zero.
 
 .TP
+.BI "--min-BQ " INT
+Filters out bases with a base quality below \fIINT\fR.  This defaults
+to zero.
+
+.TP
 .BI --show-del " yes" / "no"
 Whether to show deletions as "*" (no) or to omit from the output
 (yes).  Defaults to no.
@@ -178,6 +190,17 @@ Whether to show deletions as "*" (no) or to omit from the output
 .TP
 .BI --show-ins " yes" / "no"
 Whether to show insertions in the consensus.  Defaults to yes.
+
+.TP
+.BR --mark-ins
+Insertions, when shown, are normally recorded in the consensus with
+plain 7-bit ASCII (ACGT, or acgt if heterozygous).  However this makes
+it impossible to identify the mapping between consensus coordinates
+and the original reference coordinates.  If fasta output is selected
+then the option adds an underscore before every inserted base, plus a
+corresponding character in the quality for fastq format.  When used in
+conjunction with \fB-a --show-del yes\fR, this permits an easy
+derivation of the consensus to reference coordinate mapping.
 
 .TP
 .BR -A ", " --ambig
@@ -204,7 +227,8 @@ sequences, which still get scores with a fixed +1 per base type occurrence.
 .BI "-d " D ", --min-depth " D
 The minimum depth required to make a call.  Defaults to 1.  Failing
 this depth check will produce consensus "N", or absent if it is an
-insertion.
+insertion.  Note this check is performed after filtering by flags
+and mapping/base quality.
 
 .TP
 .BI "-H " H ", --het-fract " H
@@ -228,7 +252,7 @@ use lower-case letter to symbolise a half-present base type.
 .BI "-c " C ", --call-fract " C
 Only used for the simple consensus algorithm.  Require at least
 .I C
-fraction of bases agreeing with the most likely consensus call to omit
+fraction of bases agreeing with the most likely consensus call to emit
 that base type.  This defaults to 0.75.  Failing this check will
 output "N".
 
@@ -279,12 +303,75 @@ consensus algorithm.  Defaults to 1.0, which leaves the values unchanged.
 .TP
 .BI "--P-het " FLOAT
 Controls the likelihood of any position being a heterozygous site.
-Defaults to 1e-4.  Smaller numbers makes the algorithm more likely to
-call a pure base type.  Note the algorithm will always compute the
-probability of the base being homozygous vs heterozygous, irrespective
-of whether the output is reported as ambiguous (it will be "N" if
-deemed to be heterozygous without \fB--ambig\fR mode enabled).
+This is used in the priors for the Bayesian calculations, and has
+little difference on deep data.  Defaults to 1e-3.  Smaller numbers
+makes the algorithm more likely to call a pure base type.  Note the
+algorithm will always compute the probability of the base being
+homozygous vs heterozygous, irrespective of whether the output is
+reported as ambiguous (it will be "N" if deemed to be heterozygous
+without \fB--ambig\fR mode enabled).
 
+.TP
+.BI "--P-indel " FLOAT
+Controls the likelihood of small indels.  This is used in the priors
+for the Bayesian calculations, and has little difference on deep data.
+Defaults to 2e-4.
+
+.TP
+.BI "--het-scale " FLOAT
+This is a multiplicative correction applied per base quality before
+adding to the heterozygous hypotheses.  Reducing it means fewer
+heterozygous calls are made.  This oftens leads a significant
+reduction in false positive het calls, for some increase in false
+negatives (mislabelling real heterozygous sites as homozygous).  It is
+usually beneficial to reduce this on instruments where a significant
+proportion of bases may be aligned in the wrong column due to
+insertions and deletions leading to alignment errors and reference
+bias.  It can be considered as a het sensitivity tuning parameter.
+Defaults to 1.0 (nop).
+
+.TP
+.BR -p ", " --homopoly-fix
+Some technologies that call runs of the same base type together always
+put the lowest quality calls at one end.  This can cause problems when
+reverse complementing and comparing alignments with indels.  This
+option averages the qualities at both ends to avoid orientation
+biases.  Recommended for old 454 or PacBio HiFi data sets.
+
+.TP
+.BI "--homopoly-score " FLOAT
+The \fB-p\fR option also reduces confidence values within homopolymers
+due to an additional likelihood of sequence specific errors.  The
+quality values are multiplied by \fIFLOAT\fR.  This defaults to 0.5,
+but is not used if \fB-p\fR was not specified.  Adjusting this score
+also automatically enables \fB-p\fR.
+
+.TP
+\fB-X\fR, \fB--config \fISTR\fR
+Specifies predefined sets of configuration parameters.  Acceptable
+values for \fISTR\fR are defined below, along with the list of
+parameters they are equivalent to.
+.RS
+.TP 10
+.B hiseq
+--qual-calibration :hiseq
+.TP
+.B hifi
+--qual-calibration :hifi
+--homopoly-fix 0.3 --low-MQ 5 --scale-MQ 1.5 --het-scale 0.37
+.TP
+.B r10.4_sup
+--qual-calibration :r10.4_sup
+--homopoly-fix 0.3 --low-MQ 5 --scale-MQ 1.5 --het-scale 0.37
+.TP
+.B r10.4_dup
+--qual-calibration :r10.4_dup
+--homopoly-fix 0.3 --low-MQ 5 --scale-MQ 1.5 --het-scale 0.37
+.TP
+.B ultima
+--qual-calibration :ultima
+--homopoly-fix 0.3 --low-MQ 10 --scale-MQ 2 --het-scale 0.37
+.RE
 .SH EXAMPLES
 .IP -
 Create a modified FASTA reference that has a 1:1 coordinate correspondence with the original reference used in alignment.

@@ -1,6 +1,6 @@
 /*  stats.c -- This is the former bamcheck integrated into samtools/htslib.
 
-    Copyright (C) 2012-2021 Genome Research Ltd.
+    Copyright (C) 2012-2022 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
     Author: Sam Nicholls <sam@samnicholls.net>
@@ -180,6 +180,7 @@ typedef struct
     uint64_t *insertions, *deletions;
     uint64_t *ins_cycles_1st, *ins_cycles_2nd, *del_cycles_1st, *del_cycles_2nd;
     isize_t *isize;
+    uint64_t* mapping_qualities;
 
     // The extremes encountered
     int max_len;            // Maximum read length
@@ -537,11 +538,24 @@ void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
     }
 }
 
-void read_ref_seq(stats_t *stats, int32_t tid, hts_pos_t pos)
+void read_ref_seq(stats_t *stats, int32_t tid, hts_pos_t pos, hts_pos_t end)
 {
     int i;
     hts_pos_t fai_ref_len;
-    char *fai_ref = faidx_fetch_seq64(stats->info->fai, sam_hdr_tid2name(stats->info->sam_header, tid), pos, pos+stats->mrseq_buf-1, &fai_ref_len);
+    char *fai_ref;
+
+    if (end < pos+stats->mrseq_buf-1)
+        end = pos+stats->mrseq_buf-1;
+    else if (stats->mrseq_buf < end - pos) {
+        size_t sz = end - pos;
+        uint8_t *new_rseq = realloc(stats->rseq_buf, sz);
+        if (!new_rseq)
+            error("Couldn't expand the reference sequence buffer\n");
+        stats->rseq_buf = new_rseq;
+        stats->mrseq_buf = sz;
+    }
+
+    fai_ref = faidx_fetch_seq64(stats->info->fai, sam_hdr_tid2name(stats->info->sam_header, tid), pos, pos+stats->mrseq_buf-1, &fai_ref_len);
     if ( fai_ref_len < 0 ) error("Failed to fetch the sequence \"%s\"\n", sam_hdr_tid2name(stats->info->sam_header, tid));
 
     uint8_t *ptr = stats->rseq_buf;
@@ -1198,6 +1212,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
         stats->max_len_1st = read_len;
     if ( order == READ_ORDER_LAST && stats->max_len_2nd < read_len )
         stats->max_len_2nd = read_len;
+    if ( ( bam_line->core.flag & (BAM_FUNMAP|BAM_FSECONDARY|BAM_FSUPPLEMENTARY|BAM_FQCFAIL|BAM_FDUP) ) == 0 )
+        stats->mapping_qualities[bam_line->core.qual]++;
 
     int i;
     int gc_count = 0;
@@ -1328,16 +1344,19 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
         //  20kbp, so the effect is negligible.
         if ( stats->info->fai )
         {
-            int inc_ref = 0, inc_gcd = 0;
-            // First pass or new chromosome
-            if ( stats->rseq_pos==-1 || stats->tid != bam_line->core.tid ) { inc_ref=1; inc_gcd=1; }
-            // Read goes beyond the end of the rseq buffer
-            else if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+readlen ) { inc_ref=1; inc_gcd=1; }
+            hts_pos_t inc_ref = 0;
+            int inc_gcd = 0;
+            // First pass or new chromosome, or read goes beyond the rseq buffer
+            if ( stats->rseq_pos==-1 || stats->tid != bam_line->core.tid
+                 || stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+readlen) {
+                inc_ref=bam_line->core.pos+readlen;
+                inc_gcd=1;
+            }
             // Read overlaps the next gcd bin
             else if ( stats->gcd_pos+stats->info->gcd_bin_size < bam_line->core.pos+readlen )
             {
                 inc_gcd = 1;
-                if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+stats->info->gcd_bin_size ) inc_ref = 1;
+                if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+stats->info->gcd_bin_size ) inc_ref = bam_line->core.pos+stats->info->gcd_bin_size;
             }
             if ( inc_gcd )
             {
@@ -1345,7 +1364,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
                 if ( stats->igcd >= stats->ngcd )
                     realloc_gcd_buffer(stats, readlen);
                 if ( inc_ref )
-                    read_ref_seq(stats,bam_line->core.tid,bam_line->core.pos);
+                    read_ref_seq(stats, bam_line->core.tid,
+                                 bam_line->core.pos, inc_ref);
                 stats->gcd_pos = bam_line->core.pos;
                 stats->gcd[ stats->igcd ].gc = fai_gc_content(stats, stats->gcd_pos, stats->info->gcd_bin_size);
             }
@@ -1460,7 +1480,7 @@ float gcd_percentile(gc_depth_t *gcd, int N, int p)
 void output_stats(FILE *to, stats_t *stats, int sparse)
 {
     // Calculate average insert size and standard deviation (from the main bulk data only)
-    int isize, ibulk=0, icov;
+    int isize, ibulk=0, icov, imapq=0;
     uint64_t nisize=0, nisize_inward=0, nisize_outward=0, nisize_other=0, cov_sum=0;
     double bulk=0, avg_isize=0, sd_isize=0;
     for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
@@ -1766,6 +1786,13 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     {
         if ( stats->read_lengths_2nd[ilen+1]>0 )
             fprintf(to, "LRL\t%d\t%ld\n", ilen+1, (long)stats->read_lengths_2nd[ilen+1]);
+    }
+
+    fprintf(to, "# Mapping qualities for reads !(UNMAP|SECOND|SUPPL|QCFAIL|DUP). Use `grep ^MAPQ | cut -f 2-` to extract this part. The columns are: mapq, count\n");
+    for (imapq=0; imapq < 256; imapq++)
+    {
+        if ( stats->mapping_qualities[imapq]>0 )
+            fprintf(to, "MAPQ\t%d\t%ld\n", imapq, (long)stats->mapping_qualities[imapq]);
     }
 
     fprintf(to, "# Indel distribution. Use `grep ^ID | cut -f 2-` to extract this part. The columns are: length, number of insertions, number of deletions\n");
@@ -2128,6 +2155,7 @@ void cleanup_stats(stats_t* stats)
     destroy_regions(stats);
     if ( stats->rg_hash ) kh_destroy(rg, stats->rg_hash);
     free(stats->split_name);
+    free(stats->mapping_qualities);
     free(stats);
 }
 
@@ -2317,6 +2345,8 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     if (!stats->del_cycles_1st) goto nomem;
     stats->del_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
     if (!stats->del_cycles_2nd) goto nomem;
+    stats->mapping_qualities = calloc(256,sizeof(uint64_t));
+    if(!stats->mapping_qualities) goto nomem;
     if (init_barcode_tags(stats) < 0)
         goto nomem;
     realloc_rseq_buffer(stats);

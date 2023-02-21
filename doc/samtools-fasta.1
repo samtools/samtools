@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-fasta 1 "2 September 2022" "samtools-1.16.1" "Bioinformatics tools"
+.TH samtools-fasta 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools fasta / fastq \- converts a SAM/BAM/CRAM file to FASTA or FASTQ
 .\"
@@ -56,6 +56,13 @@ samtools fasta
 Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
 command invoked. The files will be automatically compressed if the
 file names have a .gz or .bgzf extension.
+
+Note this command is attempting to reverse the alignment process, so
+if the aligner took a single input FASTQ and produced multiple SAM
+records via supplementary and/or secondary alignments, then converting
+back to FASTQ again should produce the original single FASTA / FASTQ
+record.  By default it will not attempt to records for supplementary
+and secondary alignments, but see the \fB-F\fR option for more details.
 
 If the input contains read-pairs which are to be interleaved or
 written to separate files in the same order, then the input should
@@ -114,6 +121,12 @@ The
 option only affects category 1 and 2 records.
 The output for category 0 will be the same irrespective of the use of this
 option.
+
+The sequence generated will be for the entire sequence recorded in the
+SAM record (and quality if appropriate).  This means if it has
+soft-clipped CIGAR records then the soft-clipped data will be in the
+output FASTA/FASTQ.  Hard-clipped data is, by definition, absent from
+the SAM record and hence will be absent in any FASTA/FASTQ produced.
 
 .SH OPTIONS
 .TP 8

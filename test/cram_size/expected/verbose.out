@@ -1,0 +1,52 @@
+#   Content_ID  Uncomp.size    Comp.size   Ratio Method      Data_series
+BLOCK     CORE            0            0 100.00% raw        
+BLOCK       10         2967         1388  46.78% gzip-min   
+BLOCK       10          935          586  62.67% bzip2-6    
+BLOCK       10          678          254  37.46% gzip        embedded_ref
+BLOCK       11        10295         3112  30.23% gzip        RN
+BLOCK       12        57572        32111  55.78% r4x16-o0    QS
+BLOCK       14          606          264  43.56% r4x16-o0    SC
+BLOCK       14          334          110  32.93% gzip        SC
+BLOCK       14           22           22 100.00% raw         SC
+BLOCK       15          872          438  50.23% r4x16-o0    BF
+BLOCK       17          269          269 100.00% raw         AP
+BLOCK       17          200          183  91.50% gzip        AP
+BLOCK       17          100           97  97.00% r4x16-o0    AP
+BLOCK       18          369          369 100.00% raw         RG
+BLOCK       18          200          191  95.50% gzip        RG
+BLOCK       19          568          166  29.23% rNx16-cat   MQ
+BLOCK       20          300           29   9.67% rNx16-cat   NS
+BLOCK       21          569          120  21.09% rNx16-cat   MF
+BLOCK       22         1527         1171  76.69% gzip-min    TS
+BLOCK       22          362          250  69.06% bzip2-6     TS
+BLOCK       23          738          738 100.00% raw         NP
+BLOCK       23          226          220  97.35% gzip-min    NP
+BLOCK       23          200          194  97.00% rNx16-xo0   NP
+BLOCK       25          569          110  19.33% rNx16-cat   RL
+BLOCK       26          568          248  43.66% r4x16-o0    FN
+BLOCK       27          378          118  31.22% rNx16-cat   FC
+BLOCK       28          378          378 100.00% raw         FP
+BLOCK       30          108           49  45.37% r4x16-o0    BA
+BLOCK       30            3            3 100.00% raw         BA
+BLOCK       31          320          125  39.06% rNx16-cat   BS
+BLOCK       32          569          184  32.34% r4x16-o0    TL
+BLOCK  4279651          468          153  32.69% r4x16-o0    AMc
+BLOCK  4279651          100           29  29.00% rNx16-cat   AMc
+BLOCK  4346202        58600         1562   2.67% bzip2-6     BQZ
+BLOCK  5067107          546          156  28.57% rNx16-cat   MQc
+BLOCK  5459299          300          116  38.67% gzip        SMc
+BLOCK  5459299          200           50  25.00% rNx16-cat   SMc
+BLOCK  5459299           68           29  42.65% r4x16-o0    SMc
+BLOCK  5779555          549           30   5.46% rNx16-cat   X0c
+BLOCK  5779811          549           40   7.29% rNx16-cat   X1c
+BLOCK  5783898           50           43  86.00% rNx16-cat   XAZ
+BLOCK  5784419           33           33 100.00% raw         XCc
+BLOCK  5788737          568           93  16.37% rNx16-cat   XTA
+BLOCK  6506051            1            1 100.00% raw         cFC
+
+Number of containers                   2
+Number of slices                       6
+Number of sequences                  569
+Number of bases                    57572
+Total file size                    60965
+Format overhead size               15133

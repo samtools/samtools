@@ -1,6 +1,6 @@
 /*  bamtk.c -- main samtools command front-end.
 
-    Copyright (C) 2008-2022 Genome Research Ltd.
+    Copyright (C) 2008-2023 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -72,6 +72,8 @@ int main_import(int argc, char *argv[]);
 int main_samples(int argc, char *argv[]);
 int main_consensus(int argc, char *argv[]);
 int main_reference(int argc, char *argv[]);
+int main_reset(int argc, char *argv[]);
+int main_cram_size(int argc, char *argv[]);
 
 const char *samtools_version()
 {
@@ -101,7 +103,7 @@ const char *samtools_feature_string(void) {
 static void long_version(void) {
     printf("samtools %s\n"
            "Using htslib %s\n"
-           "Copyright (C) 2022 Genome Research Ltd.\n",
+           "Copyright (C) 2023 Genome Research Ltd.\n",
            samtools_version(), hts_version());
 
     printf("\nSamtools compilation details:\n");
@@ -181,6 +183,7 @@ static void usage(FILE *fp)
 "     fasta          converts a BAM to a FASTA\n"
 "     import         Converts FASTA or FASTQ files to SAM/BAM/CRAM\n"
 "     reference      Generates a reference from aligned data\n"
+"     reset          Reverts aligner changes in reads\n"
 "\n"
 "  -- Statistics\n"
 "     bedcov         read depth per BED region\n"
@@ -188,6 +191,7 @@ static void usage(FILE *fp)
 "     depth          compute the depth\n"
 "     flagstat       simple stats\n"
 "     idxstats       BAM index stats\n"
+"     cram-size      list CRAM Content-ID and Data-Series sizes\n"
 "     phase          phase heterozygotes\n"
 "     stats          generate stats (former bamcheck)\n"
 "     ampliconstats  generate amplicon specific stats\n"
@@ -287,12 +291,14 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "samples") == 0)     ret = main_samples(argc-1, argv+1);
     else if (strcmp(argv[1], "consensus") == 0) ret = main_consensus(argc-1, argv+1);
     else if (strcmp(argv[1], "reference") == 0) ret = main_reference(argc-1, argv+1);
+    else if (strcmp(argv[1], "cram-size") == 0) ret = main_cram_size(argc-1, argv+1);
     else if (strcmp(argv[1], "version") == 0 || \
              strcmp(argv[1], "--version") == 0)
         long_version();
     else if (strcmp(argv[1], "--version-only") == 0) {
         printf("%s+htslib-%s\n", samtools_version(), hts_version());
     }
+    else if (strcmp(argv[1], "reset") == 0) ret = main_reset(argc-1, argv+1);
     else {
         fprintf(stderr, "[main] unrecognized command '%s'\n", argv[1]);
         return 1;

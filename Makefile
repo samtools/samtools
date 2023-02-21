@@ -44,7 +44,7 @@ AOBJS=      bam_aux.o bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
             bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o \
             bam_ampliconclip.o amplicon_stats.o bam_import.o bam_samples.o \
-            bam_consensus.o consensus_pileup.o reference.o
+            bam_consensus.o consensus_pileup.o reference.o reset.o cram_size.o
 LZ4OBJS  =  $(LZ4DIR)/lz4.o
 
 prefix      = /usr/local
@@ -196,6 +196,7 @@ bamtk.o: bamtk.c config.h $(htslib_hts_h) $(htslib_hfile_h) $(samtools_h) versio
 bedcov.o: bedcov.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h) $(htslib_kseq_h)
 bedidx.o: bedidx.c config.h $(bedidx_h) $(htslib_ksort_h) $(htslib_kseq_h) $(htslib_khash_h)
 consensus_pileup.o: consensus_pileup.c config.h $(htslib_sam_h) $(consensus_pileup_h)
+cram_size.o: cram_size.c config.h $(htslib_sam_h)
 cut_target.o: cut_target.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(samtools_h) $(sam_opts_h)
 dict.o: dict.c config.h $(htslib_khash_h) $(htslib_kseq_h) $(htslib_hts_h) $(samtools_h)
 faidx.o: faidx.c config.h $(htslib_faidx_h) $(htslib_hts_h) $(htslib_hfile_h) $(htslib_kstring_h) $(samtools_h)
@@ -213,6 +214,7 @@ bam_markdup.o: bam_markdup.c config.h $(htslib_thread_pool_h) $(htslib_sam_h) $(
 tmp_file.o: tmp_file.c config.h $(tmp_file_h) $(htslib_sam_h)
 bam_ampliconclip.o: bam_ampliconclip.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_hts_h) $(htslib_hfile_h) $(htslib_kstring_h) $(htslib_sam_h) $(samtools_h) bam_ampliconclip.h
 bam_samples.o: bam_samples.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_kseq_h) $(samtools_h)
+reset.o: reset.c $(samtools_h) $(htslib_sam_h) $(sam_opts_h) $(htslib_thread_pool_h) $(htslib_khash_h)
 
 # Maintainer source code checks
 # - copyright boilerplate presence
@@ -241,6 +243,7 @@ check test: samtools $(BGZIP) $(TEST_PROGRAMS)
 	cd test/mpileup && AWK="$(AWK)" ../regression.sh mpileup.reg
 	cd test/mpileup && AWK="$(AWK)" ../regression.sh depth.reg
 	cd test/consensus && AWK="$(AWK)" ../regression.sh consensus.reg
+	cd test/cram_size && AWK="$(AWK)" ../regression.sh cram_size.reg
 
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB)

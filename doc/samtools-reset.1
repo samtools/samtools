@@ -1,0 +1,153 @@
+'\" t
+.TH samtools-reset 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.SH NAME
+samtools reset \- removes the alignment information added by aligners and updates flags accordingly
+.\"
+.\" Copyright (C) 2022, 2023 Genome Research Ltd.
+.\"
+.\" Author: Vasudeva Sarma <vasudeva.sarma@sanger.ac.uk>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools reset
+.RB [ -o
+.IR FILE "]"
+.RB [ -x,--remove-tag
+.IR STR "]"
+.RB [ --keep-tag
+.IR STR "]"
+.RB [ --reject-PG
+.IR pgid ]
+.RB "["--no-RG "] [" --no-PG "] [...]"
+
+
+.SH DESCRIPTION
+.PP
+
+Removes the alignment information added by the aligner. CIGAR and reference data are removed. Flags are updated as unmapped and as not a proper pair.
+If the alignment was in reverse direction, data and its quality values are reversed and complemented and the reverse flag is reset.
+Supplimentary and secondary alignment data are discarded.
+
+Aux tags that will be retained in output is controlled by keep-tag and remove-tag/x. These options take tags as comma separated lists.
+
+PG and RG tags from input are written on the output by default.
+CO lines are not retained after this operation.
+
+The sort order is unchanged, so users may consider combining this with \fBsamtools collate\fR or \fBsort -n\fR if it is a requirement to group pairs of sequences together.
+
+.SH OPTIONS
+
+.TP 8
+.BI -o\  FILE
+Output file to which reset data is to be written. If not given, standard output will be used.
+
+.TP 8
+.BI "-x " STR ", --remove-tag " STR
+Read tag(s) to exclude from output (repeatable) [null].  This can be a
+single tag or a comma separated list.  Alternatively the option itself
+can be repeated multiple times.
+
+If the list starts with a `^' then it is negated and treated as a
+request to remove all tags except those in \fISTR\fR. The list may be
+empty, so \fB-x ^\fR will remove all tags.
+
+.TP
+.BI "--keep-tag " STR
+This keeps \fIonly\fR tags listed in \fISTR\fR and is directly equivalent
+to \fB--remove-tag ^\fR\fISTR\fR.  Specifying an empty list will remove
+all tags.  If both \fB--keep-tag\fR and \fB--remove-tag\fR are
+specified then \fB--keep-tag\fR has precedence.
+
+.TP 8
+.BI --reject-PG\  pgid
+The PG line which has the ID matching \fIpgid\fR and all subsequent PG lines will be removed. If the option itself is absent, the default,
+all PG entries will be in output.
+
+.TP 8
+.BI --no-RG
+RG lines in input will be discarded with this option. By default, RG lines will be present in ouput.
+
+With this option, RG aux tags will also be discarded.
+
+.TP 8
+.BI --no-PG
+Do not add a @PG line to the header of the output file listing the \fBreset\fR command.
+By default the PG entry for reset will be present in the output.
+
+.TP
+.BI -@,--thread\  N
+This gives the number of worker threads to be used.
+
+.TP
+.BI -O,--output-fmt\  FMT[,options]
+Sets the format of the output file and any associated format-specific options.
+If this option is not present, the format is identified from the output file name extension.
+
+.SH EXAMPLES
+Basic usage, to reset the data:
+
+.EX
+samtools reset -o out.bam in.bam
+.EE
+
+To keep aux tags RG and BC in the output:
+
+.EX
+samtools reset -o out.sam --keep-tag RG,BC in.bam
+.EE
+
+To discard PG entries from 'bwa_index' onwards,
+
+.EX
+samtools reset -o out.sam --reject-PG=bwa_index
+.EE
+
+To set output format for use within a pipeline:
+
+.EX
+samtools collate -O -u input.cram | \\
+  samtools reset --output-fmt BAM,level=0 | \\
+  myaligner -I bam -o out.bam
+.EE
+
+.SH AUTHOR
+.PP
+Written by Vasudeva Sarma of the Wellcome Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-collate (1)
+.PP
+Samtools website: <http://www.htslib.org/>

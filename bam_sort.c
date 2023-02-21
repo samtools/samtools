@@ -48,11 +48,14 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "htslib/hts_endian.h"
 #include "htslib/cram.h"
+#include "htslib/thread_pool.h"
 #include "sam_opts.h"
 #include "samtools.h"
 #include "bedidx.h"
 #include "bam.h"
 
+#define BAM_BLOCK_SIZE 2*1024*1024
+#define MAX_TMP_FILES 64
 
 // Struct which contains the sorting key for TemplateCoordinate sort.
 typedef struct {
@@ -161,25 +164,36 @@ typedef enum {Coordinate, QueryName, TagCoordinate, TagQueryName, MinHash, Templ
 static SamOrder g_sam_order = Coordinate;
 static char g_sort_tag[2] = {0,0};
 
+#define is_digit(c) ((c)<='9' && (c)>='0')
 static int strnum_cmp(const char *_a, const char *_b)
 {
     const unsigned char *a = (const unsigned char*)_a, *b = (const unsigned char*)_b;
     const unsigned char *pa = a, *pb = b;
     while (*pa && *pb) {
-        if (isdigit(*pa) && isdigit(*pb)) {
+        if (!is_digit(*pa) || !is_digit(*pb)) {
+            if (*pa != *pb)
+                return (int)*pa - (int)*pb;
+            ++pa; ++pb;
+        } else {
+            // skip leading zeros
             while (*pa == '0') ++pa;
             while (*pb == '0') ++pb;
-            while (isdigit(*pa) && isdigit(*pb) && *pa == *pb) ++pa, ++pb;
-            if (isdigit(*pa) && isdigit(*pb)) {
-                int i = 0;
-                while (isdigit(pa[i]) && isdigit(pb[i])) ++i;
-                return isdigit(pa[i])? 1 : isdigit(pb[i])? -1 : (int)*pa - (int)*pb;
-            } else if (isdigit(*pa)) return 1;
-            else if (isdigit(*pb)) return -1;
-            else if (pa - a != pb - b) return pa - a < pb - b? 1 : -1;
-        } else {
-            if (*pa != *pb) return (int)*pa - (int)*pb;
-            ++pa; ++pb;
+
+            // skip matching digits
+            while (is_digit(*pa) && *pa == *pb)
+                pa++, pb++;
+
+            // Now mismatching, so see which ends the number sooner
+            int diff = (int)*pa - (int)*pb;
+            while (is_digit(*pa) && is_digit(*pb))
+                pa++, pb++;
+
+            if (is_digit(*pa))
+                return  1; // pa still going, so larger
+            else if (is_digit(*pb))
+                return -1; // pb still going, so larger
+            else if (diff)
+                return diff; // same length, so earlier diff
         }
     }
     return *pa? 1 : *pb? -1 : 0;
@@ -1165,6 +1179,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             print_error_errno(cmd, "fail to open \"%s\"", fn[i]);
             goto fail;
         }
+        hts_set_opt(fp[i], HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
         hin = sam_hdr_read(fp[i]);
         if (hin == NULL) {
             print_error(cmd, "failed to read header from \"%s\"", fn[i]);
@@ -1362,6 +1377,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         print_error_errno(cmd, "failed to create \"%s\"", out);
         return -1;
     }
+    hts_set_opt(fpout, HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
     if (!no_pg && sam_hdr_add_pg(hout, "samtools",
                                  "VN", samtools_version(),
                                  arg_list ? "CL": NULL,
@@ -1763,7 +1779,8 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
                             int n, char * const *fn, int num_in_mem,
                             buf_region *in_mem, bam1_tag *buf,
                             template_coordinate_keys_t *keys,
-                            khash_t(const_c2c) *lib_lookup, int n_threads,
+                            khash_t(const_c2c) *lib_lookup,
+                            htsThreadPool *htspool,
                             const char *cmd, const htsFormat *in_fmt,
                             const htsFormat *out_fmt, char *arg_list, int no_pg,
                             int write_index) {
@@ -1800,6 +1817,9 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
                 print_error_errno(cmd, "fail to open \"%s\"", fn[i]);
                 goto fail;
             }
+            hts_set_opt(fp[i], HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
+            if (htspool->pool)
+                hts_set_opt(fp[i], HTS_OPT_THREAD_POOL, htspool);
 
             // Read header ...
             hin = sam_hdr_read(fp[i]);
@@ -1832,6 +1852,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
         print_error_errno(cmd, "failed to create \"%s\"", out);
         return -1;
     }
+    hts_set_opt(fpout, HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
 
     if (!no_pg && sam_hdr_add_pg(hout, "samtools",
                                  "VN", samtools_version(),
@@ -1843,7 +1864,8 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
         return -1;
     }
 
-    if (n_threads > 1) hts_set_threads(fpout, n_threads);
+    if (htspool->pool)
+        hts_set_opt(fpout, HTS_OPT_THREAD_POOL, htspool);
 
     if (sam_hdr_write(fpout, hout) != 0) {
         print_error_errno(cmd, "failed to write header to \"%s\"", out);
@@ -2216,13 +2238,9 @@ KSORT_INIT(sort, bam1_tag, bam1_lt)
 
 typedef struct {
     size_t buf_len;
-    const char *prefix;
     bam1_tag *buf;
     const sam_hdr_t *h;
-    char *tmpfile_name;
-    int index;
     int error;
-    int no_save;
     int large_pos;
     int minimiser_kmer;
 } worker_t;
@@ -2239,6 +2257,7 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
 
     fp = sam_open_format(fn, mode, fmt);
     if (fp == NULL) return -1;
+    hts_set_opt(fp, HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
     if (!no_pg && sam_hdr_add_pg((sam_hdr_t *)h, "samtools", "VN", samtools_version(),
                                  arg_list ? "CL": NULL,
                                  arg_list ? arg_list : NULL,
@@ -2555,10 +2574,7 @@ static inline void worker_minhash(worker_t *w) {
 static void *worker(void *data)
 {
     worker_t *w = (worker_t*)data;
-    char *name;
-    size_t name_len;
     w->error = 0;
-    w->tmpfile_name = NULL;
 
     switch (g_sam_order) {
         case Coordinate:
@@ -2574,45 +2590,12 @@ static void *worker(void *data)
             ks_mergesort(sort, w->buf_len, w->buf, 0);
     }
 
-    if (w->no_save)
-        return 0;
-
-    name_len = strlen(w->prefix) + 30;
-    name = (char*)calloc(name_len, 1);
-    if (!name) { w->error = errno; return 0; }
-    const int MAX_TRIES = 1000;
-    int tries = 0;
-    for (;;) {
-        if (tries) {
-            snprintf(name, name_len, "%s.%.4d-%.3d.bam",
-                     w->prefix, w->index, tries);
-        } else {
-            snprintf(name, name_len, "%s.%.4d.bam", w->prefix, w->index);
-        }
-
-        if (write_buffer(name, w->large_pos ? "wzx1" : "wbx1",
-                         w->buf_len, w->buf, w->h, 0, NULL, 0, NULL, 1, 0) == 0) {
-            break;
-        }
-        if (errno == EEXIST && tries < MAX_TRIES) {
-            tries++;
-        } else {
-            w->error = errno;
-            break;
-        }
-    }
-
-    if (w->error) {
-        free(name);
-    } else {
-        w->tmpfile_name = name;
-    }
     return 0;
 }
 
-static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
-                       const sam_hdr_t *h, int n_threads, buf_region *in_mem,
-                       int large_pos, int minimiser_kmer, char **fns, size_t fns_size)
+static int sort_blocks(size_t k, bam1_tag *buf, const sam_hdr_t *h,
+                       int n_threads, buf_region *in_mem,
+                       int large_pos, int minimiser_kmer)
 {
     int i;
     size_t pos, rest;
@@ -2633,49 +2616,26 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
     for (i = 0; i < n_threads; ++i) {
         w[i].buf_len = rest / (n_threads - i);
         w[i].buf = &buf[pos];
-        w[i].prefix = prefix;
         w[i].h = h;
-        w[i].index = n_files + i;
-        w[i].tmpfile_name = NULL;
         w[i].large_pos = large_pos;
         w[i].minimiser_kmer = minimiser_kmer;
-        if (in_mem) {
-            w[i].no_save = 1;
-            in_mem[i].from = pos;
-            in_mem[i].to = pos + w[i].buf_len;
-        } else {
-            w[i].no_save = 0;
-        }
+        in_mem[i].from = pos;
+        in_mem[i].to = pos + w[i].buf_len;
         pos += w[i].buf_len; rest -= w[i].buf_len;
         pthread_create(&tid[i], &attr, worker, &w[i]);
     }
     for (i = 0; i < n_threads; ++i) {
         pthread_join(tid[i], 0);
-        if (!in_mem) {
-            assert(w[i].index >= 0 && w[i].index < fns_size);
-            fns[w[i].index] = w[i].tmpfile_name;
-        }
         if (w[i].error != 0) {
             errno = w[i].error;
-            print_error_errno("sort", "failed to create temporary file \"%s.%.4d.bam\"", prefix, w[i].index);
+            print_error_errno("sort", "failed to sort block %d", i);
             n_failed++;
         }
     }
-    if (n_failed && !in_mem) {
-        // Clean up any temporary files that did get made, as we're
-        // about to lose track of them
-        for (i = 0; i < n_threads; ++i) {
-            if (fns[w[i].index]) {
-                unlink(fns[w[i].index]);
-                free(fns[w[i].index]);
-                fns[w[i].index] = NULL;
-            }
-        }
-    }
-    free(tid); free(w);
-    if (n_failed) return -1;
-    if (in_mem) return n_threads;
-    return n_files + n_threads;
+    free(w);
+    free(tid);
+
+    return n_failed ? -1 : n_threads;
 }
 
 static void lib_lookup_destroy(khash_t(const_c2c) *lib_lookup) {
@@ -2763,7 +2723,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
                       const htsFormat *in_fmt, const htsFormat *out_fmt,
                       char *arg_list, int no_pg, int write_index)
 {
-    int ret = -1, res, i, nref, n_files = 0;
+    int ret = -1, res, i, nref, n_files = 0, n_big_files = 0, fn_counter = 0;
     size_t max_k, k, max_mem, bam_mem_offset;
     sam_hdr_t *header = NULL;
     samFile *fp = NULL;
@@ -2778,6 +2738,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     const char *new_ss = NULL;
     buf_region *in_mem = NULL;
     khash_t(const_c2c) *lib_lookup = NULL;
+    htsThreadPool htspool = { NULL, 0 };
     int num_in_mem = 0;
     int large_pos = 0;
 
@@ -2811,6 +2772,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         print_error_errno("sort", "can't open \"%s\"", fn);
         goto err;
     }
+    hts_set_opt(fp, HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
     header = sam_hdr_read(fp);
     if (header == NULL) {
         print_error("sort", "failed to read header from \"%s\"", fn);
@@ -2919,19 +2881,26 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         }
     }
 
-    // No gain to using the thread pool here as the flow of this code
-    // is such that we are *either* reading *or* sorting.  Hence a shared
-    // pool makes no real difference except to reduce the thread count a little.
-    if (n_threads > 1)
-        hts_set_threads(fp, n_threads);
+    if (n_threads > 1) {
+        htspool.pool = hts_tpool_init(n_threads);
+        if (!htspool.pool) {
+            print_error_errno("sort", "failed to set up thread pool");
+            goto err;
+        }
+        hts_set_opt(fp, HTS_OPT_THREAD_POOL, &htspool);
+    }
 
     if ((bam_mem = malloc(max_mem)) == NULL) {
         print_error("sort", "couldn't allocate memory for bam_mem");
         goto err;
     }
 
+    in_mem = calloc(n_threads > 0 ? n_threads : 1, sizeof(in_mem[0]));
+    if (!in_mem) goto err;
+
     // write sub files
     k = max_k = bam_mem_offset = 0;
+    size_t name_len = strlen(prefix) + 30;
     while ((res = sam_read1(fp, header, b)) >= 0) {
         int mem_full = 0;
 
@@ -2985,19 +2954,73 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         ++k;
 
         if (mem_full) {
-            if (hts_resize(char *, n_files + (n_threads > 0 ? n_threads : 1),
-                           &fns_size, &fns, 0) < 0)
+            if (hts_resize(char *, n_files + 1, &fns_size, &fns, 0) < 0)
                 goto err;
-            int new_n = sort_blocks(n_files, k, buf, prefix, header, n_threads,
-                                    NULL, large_pos, minimiser_kmer, fns, fns_size);
-            if (new_n < 0) {
+
+            int sort_res = sort_blocks(k, buf, header, n_threads,
+                                       in_mem, large_pos, minimiser_kmer);
+            if (sort_res < 0)
                 goto err;
-            } else {
-                n_files = new_n;
+
+            fns[n_files] = calloc(name_len, 1);
+            if (!fns[n_files])
+                goto err;
+            const int MAX_TRIES = 1000;
+            int tries = 0, merge_res = -1;
+            char *sort_by_tag = (g_sam_order == TagQueryName || g_sam_order == TagCoordinate) ? sort_tag : NULL;
+            int consolidate_from = n_files;
+            if (n_files - n_big_files >= MAX_TMP_FILES/2)
+                consolidate_from = n_big_files;
+            else if (n_files >= MAX_TMP_FILES)
+                consolidate_from = 0;
+
+            for (;;) {
+                if (tries) {
+                    snprintf(fns[n_files], name_len, "%s.%.4d-%.3d.bam",
+                             prefix, fn_counter, tries);
+                } else {
+                    snprintf(fns[n_files], name_len, "%s.%.4d.bam", prefix,
+                             fn_counter);
+                }
+                if (bam_merge_simple(g_sam_order, sort_by_tag, fns[n_files],
+                                     large_pos ? "wzx1" : "wbx1", header,
+                                     n_files - consolidate_from,
+                                     &fns[consolidate_from], n_threads,
+                                     in_mem, buf, keys,
+                                     lib_lookup, &htspool, "sort", NULL, NULL,
+                                     NULL, 1, 0) >= 0) {
+                    merge_res = 0;
+                    break;
+                }
+                if (errno == EEXIST && tries < MAX_TRIES) {
+                    tries++;
+                } else {
+                    break;
+                }
             }
+            fn_counter++;
+            if (merge_res < 0) {
+                if (errno != EEXIST)
+                    unlink(fns[n_files]);
+                free(fns[n_files]);
+                goto err;
+            }
+
+            if (consolidate_from < n_files) {
+                for (i = consolidate_from; i < n_files; i++) {
+                    unlink(fns[i]);
+                    free(fns[i]);
+                }
+                fns[consolidate_from] = fns[n_files];
+                n_files = consolidate_from;
+                n_big_files = consolidate_from + 1;
+            }
+
+            n_files++;
             k = 0;
             if (keys != NULL) keys->n = 0;
             bam_mem_offset = 0;
+
         }
     }
     if (res != -1) {
@@ -3007,10 +3030,8 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
 
     // Sort last records
     if (k > 0) {
-        in_mem = calloc(n_threads > 0 ? n_threads : 1, sizeof(in_mem[0]));
-        if (!in_mem) goto err;
-        num_in_mem = sort_blocks(n_files, k, buf, prefix, header, n_threads,
-                                 in_mem, large_pos, minimiser_kmer, fns, fns_size);
+        num_in_mem = sort_blocks(k, buf, header, n_threads,
+                                 in_mem, large_pos, minimiser_kmer);
         if (num_in_mem < 0) goto err;
     } else {
         num_in_mem = 0;
@@ -3038,7 +3059,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         char *sort_by_tag = (sam_order == TagQueryName || sam_order == TagCoordinate) ? sort_tag : NULL;
         if (bam_merge_simple(sam_order, sort_by_tag, fnout, modeout, header,
                              n_files, fns, num_in_mem, in_mem, buf, keys,
-                             lib_lookup, n_threads, "sort", in_fmt, out_fmt,
+                             lib_lookup, &htspool, "sort", in_fmt, out_fmt,
                              arg_list, no_pg, write_index) < 0) {
             // Propagate bam_merge_simple() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
@@ -3073,6 +3094,9 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     lib_lookup_destroy(lib_lookup);
     sam_hdr_destroy(header);
     if (fp) sam_close(fp);
+    if (htspool.pool)
+        hts_tpool_destroy(htspool.pool);
+
     return ret;
 }
 

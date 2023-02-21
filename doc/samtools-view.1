@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-view 1 "2 September 2022" "samtools-1.16.1" "Bioinformatics tools"
+.TH samtools-view 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools view \- views and converts SAM/BAM/CRAM files
 .\"
@@ -487,6 +487,55 @@ of input.
 Include customized index file as a part of arguments. See
 .B EXAMPLES
 section for sample of usage.
+.TP
+.BI "-z " FLAGs ", --sanitize " FLAGs
+Perform some sanity checks on the state of SAM record fields, fixing
+up common mistakes made by aligners.  These include soft-clipping
+alignments when they extend beyond the end of the reference, marking
+records as unmapped when they have reference * or position 0, and
+ensuring unmapped alignments have no CIGAR or mapping quality for
+unmapped alignments and no MD, NM, CG or SM tags.
+
+\fIFLAGs\fR is a comma-separated list of keywords chosen from the
+following list.
+
+.RS
+.TP
+unmap
+The UNMAPPED BAM flag. This is set for reads with position <= 0,
+reference name "*" or reads starting beyond the end of the
+reference. Note CIGAR "*" is permitted for mapped data so does not
+trigger this.
+.TP
+pos
+Position and reference name fields.  These may be cleared when a
+sequence is unmapped due to the coordinates being beyond the end of
+the reference.  Selecting this may change the sort order of the file,
+so it is not a part of the \fBon\fR compound argument.
+.TP
+mqual
+Mapping quality.  This is set to zero for unmapped reads.
+.TP
+cigar
+Modifies CIGAR fields, either by adding soft-clips for reads that
+overlap the end of the reference or by clearing it for unmapped
+reads.
+.TP
+aux
+For unmapped data, some auxiliary fields are meaningless and will be
+removed.  These include NM, MD, CG and SM.
+.TP
+off
+Perform no sanity fixing.  This is the default
+.TP
+on
+Sanitize data in a way that guarantees the same sort order.  This is
+everything except for \fBpos\fR.
+.TP
+all
+All sanitizing options, including \fBpos\fR.
+.RE
+
 .TP
 .B --no-PG
 Do not add a @PG line to the header of the output file.

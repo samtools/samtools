@@ -76,6 +76,7 @@ test_large_positions($opts);
 test_ampliconclip($opts);
 test_ampliconclip($opts, threads=>2);
 test_ampliconstats($opts, threads=>2);
+test_reset($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -841,6 +842,7 @@ sub test_index
 
     cmd("$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai");
     test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai ref2");
+    test_cmd($opts,out=>'dat/test_input_1_b.X2.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai");
     test_cmd($opts,out=>'dat/test_input_1_ab.X.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -O sam - -X -cp -R ref2 $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_a.bam.bai $$opts{tmp}/test_input_1_b.bam.bai");
 
     # Check -o option
@@ -3127,6 +3129,7 @@ sub test_stats
     test_cmd($opts,out=>'stat/14.rg.grp2.expected',cmd=>"$$opts{bin}/samtools stats -I grp2 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/14.rg.grp3.expected',cmd=>"$$opts{bin}/samtools stats -I grp3 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/14.rg.Sample.expected',cmd=>"$$opts{bin}/samtools stats -I Sample $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/15.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/mpileup/ce.fa $$opts{path}/stat/15.big_del.sam | tail -n+4", exp_fix=>$efix);
 }
 
 sub test_merge
@@ -3267,13 +3270,14 @@ sub test_fixmate
 
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
     test_cmd($opts,out=>'fixmate/1_coord_sort.sam.expected', err=>'fixmate/1_coord_sort.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/1_coord_sort.sam -", expect_fail=>1);
-    test_cmd($opts,out=>'fixmate/2_isize_overflow.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/2_isize_overflow.sam -");
+    test_cmd($opts,out=>'fixmate/2_isize_overflow.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/2_isize_overflow.sam -");
     test_cmd($opts,out=>'fixmate/3_reverse_read_pp_lt.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/3_reverse_read_pp_lt.sam -");
     test_cmd($opts,out=>'fixmate/4_reverse_read_pp_equal.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/4_reverse_read_pp_equal.sam -");
     test_cmd($opts,out=>'fixmate/5_ct.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/5_ct.sam -");
     test_cmd($opts,out=>'fixmate/6_ct_replace.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/6_ct_replace.sam -");
-    test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
-    test_cmd($opts,out=>'fixmate/8_isize_overflow_64bit.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/8_isize_overflow_64bit.sam -");
+    test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
+    test_cmd($opts,out=>'fixmate/8_isize_overflow_64bit.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/8_isize_overflow_64bit.sam -");
+    test_cmd($opts,out=>'fixmate/sanitize.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/sanitize.sam -");
 }
 
 sub test_reference
@@ -3461,6 +3465,7 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/14_optical_barcode_name.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-name -O sam --no-PG $$opts{path}/markdup/14_optical_barcode_name.sam -");
     test_cmd($opts, out=>'markdup/15_optical_barcode_rgx_name.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-rgx '^([!-9;-?A-~]+):[0-9]+:' --read-coords '^[!-9;-?A-~]+:([0-9]+):([0-9]+)' --coords-order xy -O sam --no-PG $$opts{path}/markdup/15_optical_barcode_rgx_name.sam -");
     test_cmd($opts, out=>'markdup/16_optical_barcode_rgx_name_test_2.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-rgx '^([!-9;-?A-~]+):[0-9]+:' --read-coords '^[!-9;-?A-~]+:([0-9]{4})([0-9]{4})' --coords-order xy -O sam --no-PG $$opts{path}/markdup/16_optical_barcode_rgx_name_test_2.sam -");
+    test_cmd($opts, out=>'markdup/17_read_group.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -d 100 --mode s -t --use-read-groups -O sam --no-PG $$opts{path}/markdup/17_read_group.sam -");
 }
 
 sub test_bedcov
@@ -3504,6 +3509,7 @@ sub test_ampliconclip
     test_cmd($opts, out=>'ampliconclip/1_original_tag.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG  --keep-tag --output-fmt=sam --original -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
     test_cmd($opts, out=>'ampliconclip/1_delete_tag.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
     test_cmd($opts, out=>'ampliconclip/2_both_clipped.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG  --keep-tag --output-fmt=sam --strand --both-ends -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/2_both_test_data.sam");
+    test_cmd($opts, out=>'ampliconclip/4_total_hc_data.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam --hard-clip -b $$opts{path}/ampliconclip/ac_test2.bed $$opts{path}/ampliconclip/4_total_hc_data.sam");
 }
 
 sub test_ampliconstats
@@ -3516,6 +3522,48 @@ sub test_ampliconstats
                   "$$opts{path}/ampliconclip/2_both_clipped.expected.sam");
 
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
-    test_cmd($opts, out=>'ampliconstats/stats.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -S -t 50 -d 1,20,100 $$opts{path}/ampliconclip/ac_test.bed @inputs | egrep -v 'Samtools version|Command line'");
-    test_cmd($opts, out=>'ampliconstats/stats_mixed.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -c 0 $$opts{path}/ampliconclip/multi_ref.bed $$opts{path}/ampliconstats/mixed_clipped.sam | egrep -v 'Samtools version|Command line'");
+    test_cmd($opts, out=>'ampliconstats/stats.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -S -t 50 -d 1,20,100 $$opts{path}/ampliconclip/ac_test.bed @inputs | grep -E -v 'Samtools version|Command line'");
+    test_cmd($opts, out=>'ampliconstats/stats_mixed.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -c 0 $$opts{path}/ampliconclip/multi_ref.bed $$opts{path}/ampliconstats/mixed_clipped.sam | grep -E -v 'Samtools version|Command line'");
+    test_cmd($opts, out=>'ampliconstats/stats_partial.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -c 0 $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconstats/mixed_clipped.sam | grep -E -v 'Samtools version|Command line'");
+}
+
+sub test_reset
+{
+    my ($opts, %args) = @_;
+
+    #some tests uses samtools view to skip the header and check data part
+    #basic op 1, from pipe, to std out
+    test_cmd($opts, out=>"reset/basic.1.mp.1.expected", err=>"reset/empty.expected", cmd=>"cat $$opts{bin}/test/dat/mpileup.1.sam | $$opts{bin}/samtools reset | $$opts{bin}/samtools view");
+    #basic op 2, from redirection
+    test_cmd($opts, out=>"reset/basic.1.mp.1.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset < $$opts{bin}/test/dat/mpileup.1.sam | $$opts{bin}/samtools view");
+    #basic op 3, explicit input
+    test_cmd($opts, out=>"reset/basic.1.mp.1.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/dat/mpileup.1.sam | $$opts{bin}/samtools view");
+    #basic op 4, output to given file
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, out_map=>{"reset/output.sam" => 'reset/basic.output.mp.1.expected'}, ignore_pg_header=>1, cmd=>"cat $$opts{bin}/test/dat/mpileup.1.sam | $$opts{bin}/samtools reset -o $$opts{bin}/test/reset/output.sam");
+    #basic op 5, bam input
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, out_map=>{"reset/output.sam" => 'reset/basic.bam.input.expected'}, ignore_pg_header=>1, cmd=>"$$opts{bin}/samtools reset -o $$opts{bin}/test/reset/output.sam $$opts{bin}/test/dat/test_input_1_a.bam");
+    #basic op 6, cram input
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, out_map=>{"reset/output.sam" => 'reset/basic.cram.input.expected'}, ignore_pg_header=>1, cmd=>"$$opts{bin}/samtools reset -o $$opts{bin}/test/reset/output.sam $$opts{bin}/test/dat/test_input_1_a.cram");
+    #reject-PG 1, reject all
+    test_cmd($opts, out=>"reset/reject.1.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset --reject-PG bwa_index $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.sam; grep $$opts{bin}/test/reset/output.sam -e\"\@PG\tID\:samtools\tPN\:samtools\" | wc -l | sed 's/ //g'");
+    #reject-PG 2 keep bwa and remove samtools onwards
+    test_cmd($opts, out=>"reset/reject.2.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset --reject-PG sam_to_fixed_bam $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.sam; grep $$opts{bin}/test/reset/output.sam -e\"\@PG\tID\:\" | wc -l | sed 's/ //g'");
+    #no-PG, grep should fail as no PG entry found
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", want_fail=>1, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa_index --no-PG $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.sam; grep $$opts{bin}/test/reset/output.sam -e\"\@PG\"");
+    #no-RG, no @RG
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.nRG.1.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG -o $$opts{bin}/test/reset/output");
+    #no-RG, no RG:Z even with keep-tag
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.nRG.2.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG --keep-tag RG -o $$opts{bin}/test/reset/output");
+    #keep tag
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.keep.1.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG --keep-tag X0,MD -o $$opts{bin}/test/reset/output");
+    #override remove
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.keep.1.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG --remove-tag X0,X1,MD --keep-tag X0,MD -o $$opts{bin}/test/reset/output");
+    #remove tag
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.keep.2.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG --remove-tag X0,X1,MD -o $$opts{bin}/test/reset/output");
+    #remove through x
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.keep.2.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG -x X0,X1,MD -o $$opts{bin}/test/reset/output");
+    #keep through remove/^ + X1
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.keep.3.expected"}, cmd=>"$$opts{bin}/samtools reset --reject-PG bwa $$opts{bin}/test/dat/mpileup.1.sam --no-RG --remove-tag ^X0,MD --keep-tag X1 -o $$opts{bin}/test/reset/output");
+    #flag update and reverse flip
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.flg.1.expected"}, cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/reset/seq.sam -o $$opts{bin}/test/reset/output");
 }

@@ -1,0 +1,278 @@
+# CHK, Checksum	[2]Read Names	[3]Sequences	[4]Qualities
+# CHK, CRC32 of reads which passed filtering followed by addition (32bit overflow)
+CHK	0d0e09b1	c6b1072c	349a0886
+# Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.
+SN	raw total sequences:	1	# excluding supplementary and secondary reads
+SN	filtered sequences:	0
+SN	sequences:	1
+SN	is sorted:	1
+SN	1st fragments:	1
+SN	last fragments:	0
+SN	reads mapped:	1
+SN	reads mapped and paired:	0	# paired-end technology bit set + both mates mapped
+SN	reads unmapped:	0
+SN	reads properly paired:	0	# proper-pair bit set
+SN	reads paired:	0	# paired-end technology bit set
+SN	reads duplicated:	0	# PCR or optical duplicate bit set
+SN	reads MQ0:	0	# mapped and MQ=0
+SN	reads QC failed:	0
+SN	non-primary alignments:	0
+SN	supplementary alignments:	0
+SN	total length:	40	# ignores clipping
+SN	total first fragment length:	40	# ignores clipping
+SN	total last fragment length:	0	# ignores clipping
+SN	bases mapped:	40	# ignores clipping
+SN	bases mapped (cigar):	40	# more accurate
+SN	bases trimmed:	0
+SN	bases duplicated:	0
+SN	mismatches:	0	# from NM fields
+SN	error rate:	0.000000e+00	# mismatches / bases mapped (cigar)
+SN	average length:	40
+SN	average first fragment length:	40
+SN	average last fragment length:	0
+SN	maximum length:	40
+SN	maximum first fragment length:	40
+SN	maximum last fragment length:	0
+SN	average quality:	32.5
+SN	insert size average:	0.0
+SN	insert size standard deviation:	0.0
+SN	inward oriented pairs:	0
+SN	outward oriented pairs:	0
+SN	pairs with other orientation:	0
+SN	pairs on different chromosomes:	0
+SN	percentage of properly paired reads (%):	0.0
+# First Fragment Qualities. Use `grep ^FFQ | cut -f 2-` to extract this part.
+# Columns correspond to qualities and rows to cycles. First column is the cycle number.
+FFQ	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	2	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	3	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	4	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	5	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	6	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	7	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	8	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	9	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	10	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	11	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	12	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	13	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	14	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	15	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	16	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	17	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	18	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	19	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	20	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0
+FFQ	21	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	22	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	23	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	24	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	25	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	26	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	27	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	28	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	29	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	30	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	31	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	32	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	33	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	34	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	35	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	36	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	37	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	38	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	39	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+FFQ	40	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0
+# Last Fragment Qualities. Use `grep ^LFQ | cut -f 2-` to extract this part.
+# Columns correspond to qualities and rows to cycles. First column is the cycle number.
+# Mismatches per cycle and quality. Use `grep ^MPC | cut -f 2-` to extract this part.
+# Columns correspond to qualities, rows to cycles. First column is the cycle number, second
+# is the number of N's and the rest is the number of mismatches
+MPC	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	2	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	3	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	4	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	5	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	6	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	7	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	8	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	9	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	10	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	11	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	12	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	13	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	14	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	15	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	16	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	17	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	18	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	19	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	20	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	21	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	22	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	23	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	24	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	25	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	26	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	27	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	28	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	29	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	30	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	31	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	32	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	33	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	34	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	35	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	36	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	37	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	38	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	39	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	40	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+MPC	41	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+# GC Content of first fragments. Use `grep ^GCF | cut -f 2-` to extract this part.
+GCF	12.31	0
+GCF	25.88	1
+# GC Content of last fragments. Use `grep ^GCL | cut -f 2-` to extract this part.
+# ACGT content per cycle. Use `grep ^GCC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%]; and N and O counts as a percentage of all A/C/G/T bases [%]
+GCC	1	100.00	0.00	0.00	0.00	0.00	0.00
+GCC	2	100.00	0.00	0.00	0.00	0.00	0.00
+GCC	3	0.00	100.00	0.00	0.00	0.00	0.00
+GCC	4	100.00	0.00	0.00	0.00	0.00	0.00
+GCC	5	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	6	100.00	0.00	0.00	0.00	0.00	0.00
+GCC	7	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	8	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	9	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	10	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	11	0.00	100.00	0.00	0.00	0.00	0.00
+GCC	12	100.00	0.00	0.00	0.00	0.00	0.00
+GCC	13	0.00	0.00	100.00	0.00	0.00	0.00
+GCC	14	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	15	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	16	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	17	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	18	0.00	100.00	0.00	0.00	0.00	0.00
+GCC	19	100.00	0.00	0.00	0.00	0.00	0.00
+GCC	20	0.00	0.00	100.00	0.00	0.00	0.00
+GCC	21	0.00	100.00	0.00	0.00	0.00	0.00
+GCC	22	0.00	100.00	0.00	0.00	0.00	0.00
+GCC	23	0.00	0.00	100.00	0.00	0.00	0.00
+GCC	24	100.00	0.00	0.00	0.00	0.00	0.00
+GCC	25	100.00	0.00	0.00	0.00	0.00	0.00
+GCC	26	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	27	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	28	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	29	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	30	100.00	0.00	0.00	0.00	0.00	0.00
+GCC	31	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	32	0.00	0.00	100.00	0.00	0.00	0.00
+GCC	33	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	34	100.00	0.00	0.00	0.00	0.00	0.00
+GCC	35	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	36	0.00	0.00	100.00	0.00	0.00	0.00
+GCC	37	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	38	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	39	0.00	0.00	0.00	100.00	0.00	0.00
+GCC	40	0.00	0.00	0.00	100.00	0.00	0.00
+# ACGT content per cycle, read oriented. Use `grep ^GCT | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%]
+GCT	1	100.00	0.00	0.00	0.00
+GCT	2	100.00	0.00	0.00	0.00
+GCT	3	0.00	100.00	0.00	0.00
+GCT	4	100.00	0.00	0.00	0.00
+GCT	5	0.00	0.00	0.00	100.00
+GCT	6	100.00	0.00	0.00	0.00
+GCT	7	0.00	0.00	0.00	100.00
+GCT	8	0.00	0.00	0.00	100.00
+GCT	9	0.00	0.00	0.00	100.00
+GCT	10	0.00	0.00	0.00	100.00
+GCT	11	0.00	100.00	0.00	0.00
+GCT	12	100.00	0.00	0.00	0.00
+GCT	13	0.00	0.00	100.00	0.00
+GCT	14	0.00	0.00	0.00	100.00
+GCT	15	0.00	0.00	0.00	100.00
+GCT	16	0.00	0.00	0.00	100.00
+GCT	17	0.00	0.00	0.00	100.00
+GCT	18	0.00	100.00	0.00	0.00
+GCT	19	100.00	0.00	0.00	0.00
+GCT	20	0.00	0.00	100.00	0.00
+GCT	21	0.00	100.00	0.00	0.00
+GCT	22	0.00	100.00	0.00	0.00
+GCT	23	0.00	0.00	100.00	0.00
+GCT	24	100.00	0.00	0.00	0.00
+GCT	25	100.00	0.00	0.00	0.00
+GCT	26	0.00	0.00	0.00	100.00
+GCT	27	0.00	0.00	0.00	100.00
+GCT	28	0.00	0.00	0.00	100.00
+GCT	29	0.00	0.00	0.00	100.00
+GCT	30	100.00	0.00	0.00	0.00
+GCT	31	0.00	0.00	0.00	100.00
+GCT	32	0.00	0.00	100.00	0.00
+GCT	33	0.00	0.00	0.00	100.00
+GCT	34	100.00	0.00	0.00	0.00
+GCT	35	0.00	0.00	0.00	100.00
+GCT	36	0.00	0.00	100.00	0.00
+GCT	37	0.00	0.00	0.00	100.00
+GCT	38	0.00	0.00	0.00	100.00
+GCT	39	0.00	0.00	0.00	100.00
+GCT	40	0.00	0.00	0.00	100.00
+# ACGT content per cycle for first fragments. Use `grep ^FBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%]; and N and O counts as a percentage of all A/C/G/T bases [%]
+FBC	1	100.00	0.00	0.00	0.00	0.00	0.00
+FBC	2	100.00	0.00	0.00	0.00	0.00	0.00
+FBC	3	0.00	100.00	0.00	0.00	0.00	0.00
+FBC	4	100.00	0.00	0.00	0.00	0.00	0.00
+FBC	5	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	6	100.00	0.00	0.00	0.00	0.00	0.00
+FBC	7	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	8	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	9	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	10	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	11	0.00	100.00	0.00	0.00	0.00	0.00
+FBC	12	100.00	0.00	0.00	0.00	0.00	0.00
+FBC	13	0.00	0.00	100.00	0.00	0.00	0.00
+FBC	14	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	15	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	16	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	17	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	18	0.00	100.00	0.00	0.00	0.00	0.00
+FBC	19	100.00	0.00	0.00	0.00	0.00	0.00
+FBC	20	0.00	0.00	100.00	0.00	0.00	0.00
+FBC	21	0.00	100.00	0.00	0.00	0.00	0.00
+FBC	22	0.00	100.00	0.00	0.00	0.00	0.00
+FBC	23	0.00	0.00	100.00	0.00	0.00	0.00
+FBC	24	100.00	0.00	0.00	0.00	0.00	0.00
+FBC	25	100.00	0.00	0.00	0.00	0.00	0.00
+FBC	26	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	27	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	28	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	29	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	30	100.00	0.00	0.00	0.00	0.00	0.00
+FBC	31	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	32	0.00	0.00	100.00	0.00	0.00	0.00
+FBC	33	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	34	100.00	0.00	0.00	0.00	0.00	0.00
+FBC	35	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	36	0.00	0.00	100.00	0.00	0.00	0.00
+FBC	37	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	38	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	39	0.00	0.00	0.00	100.00	0.00	0.00
+FBC	40	0.00	0.00	0.00	100.00	0.00	0.00
+# ACGT raw counters for first fragments. Use `grep ^FTC | cut -f 2-` to extract this part. The columns are: A,C,G,T,N base counters
+FTC	10	5	5	20	0
+# ACGT content per cycle for last fragments. Use `grep ^LBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%]; and N and O counts as a percentage of all A/C/G/T bases [%]
+# ACGT raw counters for last fragments. Use `grep ^LTC | cut -f 2-` to extract this part. The columns are: A,C,G,T,N base counters
+LTC	0	0	0	0	0
+# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs
+# Read lengths. Use `grep ^RL | cut -f 2-` to extract this part. The columns are: read length, count
+RL	40	1
+# Read lengths - first fragments. Use `grep ^FRL | cut -f 2-` to extract this part. The columns are: read length, count
+FRL	40	1
+# Read lengths - last fragments. Use `grep ^LRL | cut -f 2-` to extract this part. The columns are: read length, count
+# Mapping qualities for reads !(UNMAP|SECOND|SUPPL|QCFAIL|DUP). Use `grep ^MAPQ | cut -f 2-` to extract this part. The columns are: mapq, count
+MAPQ	40	1
+# Indel distribution. Use `grep ^ID | cut -f 2-` to extract this part. The columns are: length, number of insertions, number of deletions
+# Indels per cycle. Use `grep ^IC | cut -f 2-` to extract this part. The columns are: cycle, number of insertions (fwd), .. (rev) , number of deletions (fwd), .. (rev)
+IC	20	0	0	1	0
+# Coverage distribution. Use `grep ^COV | cut -f 2-` to extract this part.
+COV	[1-1]	1	40
+# GC-depth. Use `grep ^GCD | cut -f 2-` to extract this part. The columns are: GC%, unique sequence percentiles, 10th, 25th, 50th, 75th and 90th depth percentile
+GCD	0.0	100.000	0.000	0.000	0.000	0.000	0.000

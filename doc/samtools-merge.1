@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-merge 1 "2 September 2022" "samtools-1.16.1" "Bioinformatics tools"
+.TH samtools-merge 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools merge \- merges multiple sorted files into a single file
 .\"
@@ -87,6 +87,18 @@ The ordering of the records in the input files must match the usage of the
 order will be undefined.  See
 .B sort
 for information about record ordering.
+
+Problems may arise when attempting to merge thousands of files
+together.  The operating system may impose a limit on the maximum
+number of simultaneously open files.  See \fBulimit -n\fR for more
+information.  Additionally many files being read from simultaneously
+may cause a certain amount of "disk thrashing".  To partially
+alleviate this the merge command will load 1MB of data at a time from
+each file, but this in turn adds to the overal merge program memory
+usage.  Please take this into account when setting memory limits.
+
+In extreme cases, it may be necessary to reduce the problem to fewer
+files by successively merging subsets before a second round of merging.
 
 .TP 8
 .B -1

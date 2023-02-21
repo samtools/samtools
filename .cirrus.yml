@@ -21,7 +21,8 @@ timeout_in: 10m
 # clone with our own commands too.
 clone_template: &HTSLIB_CLONE
   htslib_clone_script: |
-    .ci_helpers/clone "https://github.com/${CIRRUS_REPO_OWNER}/htslib" "${HTSDIR}" "${CIRRUS_BRANCH}"
+    printenv CIRRUS_CHANGE_TITLE
+    .ci_helpers/clone "https://github.com/${CIRRUS_REPO_OWNER}/htslib" "${HTSDIR}" "${CIRRUS_BRANCH}" `printenv CIRRUS_CHANGE_TITLE | sed -n 's/.*htslib#\([0-9]*\).*/\1/p'`
 
 htslib_compile_template: &HTSLIB_COMPILE
   << : *HTSLIB_CLONE
@@ -138,8 +139,8 @@ rocky_task:
 
 macosx_task:
   name: macosx + clang
-  osx_instance:
-    image: catalina-base
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-ventura-base:latest
 
   environment:
     CC: clang

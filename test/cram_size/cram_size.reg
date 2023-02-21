@@ -1,0 +1,8 @@
+# Don't do this here as it varies in size based on libraries used.
+# This is purely for information on how the file was produced.
+#
+# INIT x $samtools view -O cram,version=3.1,small,embed_ref=2,seqs_per_slice=100,slices_per_container=3 -o mpileup.1.cram ../mpileup/mpileup.1.bam
+
+P normal.out    $samtools cram-size mpileup.1.cram
+P verbose.out   $samtools cram-size -v mpileup.1.cram
+P encodings.out $samtools cram-size -e mpileup.1.cram

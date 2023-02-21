@@ -1,3 +1,124 @@
+Release 1.17 (21st February 2023)
+---------------------------------
+
+New work and changes:
+
+* New samtools reset subcommand.  Removes alignment information.  Alignment
+  location, CIGAR, mate mapping and flags are updated. If the alignment was in
+  reverse direction, sequence and its quality values are reversed and
+  complemented and the reverse flag is reset.  Supplementary and secondary
+  alignment data are discarded.
+  (PR#1767, implements #1682. Requested by dkj)
+
+* New samtools cram-size subcommand.  It writes out metrics about a CRAM file
+  reporting aggregate sizes per block "Content ID" fields, the data-series
+  contained within them, and the compression methods used.
+  (PR#1777)
+
+* Added a --sanitize option to fixmate and view.  This performs some sanity
+  checks on the state of SAM record fields, fixing up common mistakes made by
+  aligners.
+  (PR#1698)
+
+* Permit 1 thread with samtools view.  All other subcommands already allow this
+  and it does provide a modest speed increase.
+  (PR#1755, fixes #1743. Reported by Goran Vinterhalter)
+
+* Add CRAM_OPT_REQUIRED_FIELDS option for view -c.  This is a big speed up for
+  CRAM (maybe 5-fold), but it depends on which filtering options are being used.
+  (PR#1776, fixes #1775. Reported by Chang Y)
+
+* New filtering options in samtools depth.  The new --excl-flags option is a
+  synonym for -G, with --incl-flags and --require-flags added to match view
+  logic.
+  (PR#1718, fixes #1702. Reported by Dario Beraldi)
+
+* Speed up calmd's slow handling of non-position-sorted data by adding caching.
+  This uses more memory but is only activated when needed.
+  (PR#1723, fixes #1595. Reported by lxwgcool)
+
+* Improve samtools consensus for platforms with instrument specific profiles,
+  considerably helping for data with very different indel error models and
+  providing base quality recalibration tables. On PacBio HiFi, ONT and 
+  Ultima Genomics consensus qualities are also redistributed within homopolymers
+  and the likelihood of nearby indel errors is raised.
+  (PR#1721, PR#1733)
+
+* Consensus --mark-ins option.  This permits he consensus output to include a
+  markup indicating the next base is an insertion. This is necessary as we need
+  a way of outputting both consensus and also how that consensus marries up with
+  the reference coordinates.
+  (PR#1746)
+
+* Make faidx/fqidx output line length default to the input line length.
+  (PR#1738, fixes #1734. Reported by John Marshall)
+
+* Speed up optical duplicate checking where data has a lot of duplicates
+  compared to non-duplicates.
+  (PR#1779, fixes #1771. Reported by Poshi)
+
+* For collate use TMPDIR environment variable, when looking for a temporary
+  folder.
+  (PR#1782, based on PR#1178 and fixes #1172.  Reported by Martin Pollard)
+
+Bug Fixes:
+
+* Fix stats breakage on long deletions when given a reference.
+  (PR#1712, fixes #1707. Reported by John Didion)
+
+* In ampliconclip, stop hard clipping from wrongly removing entire reads.
+  (PR#1722, fixes #1717. Reported by Kevin Xu)
+
+* Fix bug in ampliconstats where references mentioned in the input file headers
+  but not in the bed file would cause it to complain that the SAM headers were
+  inconsistent.
+  (PR#1727, fixes #1650. Reported by jPontix)
+
+* Fixed SEGV in samtools collate when no filename given.
+  (PR#1724)
+
+* Changed the default UMI barcode regex in markdup.  The old regex was too
+  restrictive.  This version will at least allow the default read name UMI as
+  given in the Illumina example documentation.
+  (PR#1737, fixes #1730. Reported by yloemie)
+
+* Fix samtools consensus buffer overrun with MD:Z handling.
+  (PR#1745, fixes #1744. Reported by trilisser)
+
+* Fix a buffer read-overflow in mpileup and tview on sequences with seq "*".
+  (PR#1747)
+
+* Fix view -X command line parsing that was broken in 1.15.
+  (PR#1772, fixes #1720.  Reported by Francisco Rodríguez-Algarra
+  and Miguel Machado)
+
+* Stop samtools view -d from reporting meaningless system errors when
+  tag validation fails.
+  (PR#1796)
+
+Documentation:
+
+* Add a description of the samtools tview display layout to the man page.
+  Documents . vs , and upper vs lowercase. Adds a -s sample example, and
+  documents the -w option.
+  (PR#1765, fixes #1759. Reported by Lucas Ferreira da Silva)
+
+* Clarify intention of samtools fasta/q in man page and soft vs hard
+  clipping.
+  (PR#1794, fixes #1792. Reported by Ryan Lorig-Roach)
+
+* Minor fix to wording of mpileup --rf usage and man page.
+  (PR#1795, fixes #1791. Reported by Luka Pavageau)
+
+Non user-visible changes and build improvements:
+
+* Use POSIX grep in testing as egrep and fgrep are considered obsolete.
+  (PR#1726, thanks to David Seifert)
+
+* Switch MacOS CI tests to an ARM-based image.
+  (PR#1770)
+
+
 Release 1.16.1 (2nd September 2022)
 -----------------------------------
 
@@ -726,7 +847,7 @@ Changes affecting the whole of samtools, or multiple sub-commands:
    version 4 signatures are in use.  See HTSlib's NEWS file and
    htslib-s3-plugin manual page for more information.
 
- * HTSlib (and therefore SAMtools) no longer considers a zero-length
+ * HTSlib (and therefore SAMtools) no longer considers a zero-length empty
    file to be a valid SAM file.  This has been changed so that pipelines such
    as `somecmd | samtools ...` with `somecmd` aborting before outputting
    anything will now propagate the error to the second command.

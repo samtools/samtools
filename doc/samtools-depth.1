@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-depth 1 "2 September 2022" "samtools-1.16.1" "Bioinformatics tools"
+.TH samtools-depth 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools depth \- computes the read depth at each position or region
 .\"
-.\" Copyright (C) 2008-2011, 2013-2021 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2022 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -122,12 +122,28 @@ not beginning with '0' or as a comma-separated list of flag names. [0]
 For a list of flag names see
 .IR samtools-flags (1).
 .TP
-.BI "-G " FLAGS
-Discard any read that has any of the flags specified by
+.BI "-G " FLAGS ", --excl-flags " FLAGS
+Discard reads that have any of the flags specified by
 .I FLAGS
 set.  FLAGS are specified as for the
 .B "-g"
 option. [UNMAP,SECONDARY,QCFAIL,DUP]
+.TP
+.BI "--incl-flags " FLAGS
+Only include reads with at least one bit set in
+.I FLAGS
+present in the FLAG field.
+FLAGS are specified as for the
+.B "-g"
+option. [0]
+.TP
+.BI "--require-flags " FLAGS
+Only include reads with all bits set in
+.I FLAGS
+present in the FLAG field.
+FLAGS are specified as for the
+.B "-g"
+option. [0]
 .TP
 .B -J
 Include reads with deletions in depth computation.

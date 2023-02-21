@@ -8,6 +8,7 @@
 repository=$1
 localdir=$2
 branch=$3
+htslib_PR=$4
 
 ref=''
 [ -n "$branch" ] && ref=$(git ls-remote --heads "$repository" "$branch" 2>/dev/null)
@@ -15,3 +16,10 @@ ref=''
 
 set -x
 git clone --recurse-submodules --shallow-submodules --depth=50 ${ref:+--branch="$branch"} "$repository" "$localdir"
+
+if [ "x$htslib_PR" != "x" ]
+then
+    cd "$localdir"
+    git fetch origin "pull/$htslib_PR/head"
+    git checkout FETCH_HEAD
+fi

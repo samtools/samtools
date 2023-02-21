@@ -1,7 +1,7 @@
 /*  bam_markdup.c -- Mark duplicates from a coord sorted file that has gone
                      through fixmates with the mate scoring option on.
 
-    Copyright (C) 2017-2022 Genome Research Ltd.
+    Copyright (C) 2017-2023 Genome Research Ltd.
 
     Author: Andrew Whitwham <aw7@sanger.ac.uk>
 
@@ -74,6 +74,8 @@ typedef struct {
     int rgx_t;
     char *barcode;
     regex_t *bc_rgx;
+    int read_groups;
+    int json;
 } md_param_t;
 
 typedef struct {
@@ -82,6 +84,7 @@ typedef struct {
     int32_t this_ref;
     int32_t other_ref;
     int32_t barcode;
+    int32_t read_group;
     int8_t single;
     int8_t leftmost;
     int8_t orientation;
@@ -92,8 +95,10 @@ typedef struct read_queue_s {
     key_data_t single_key;
     bam1_t *b;
     struct read_queue_s *duplicate;
+    struct read_queue_s *original;
     hts_pos_t pos;
     int dup_checked;
+    int read_group;
 } read_queue_t;
 
 typedef struct {
@@ -103,6 +108,7 @@ typedef struct {
 typedef struct {
     char *name;
     char type;
+    int read_group;
 } dup_map_t;
 
 typedef struct {
@@ -116,12 +122,26 @@ typedef struct {
     int end;
 } check_t;
 
-
 typedef struct {
     check_t *c;
     size_t size;
     size_t length;
 } check_list_t;
+
+typedef struct {
+    long reading;
+    long writing;
+    long excluded;
+    long duplicate;
+    long single;
+    long pair;
+    long single_dup;
+    long examined;
+    long optical;
+    long single_optical;
+    long np_duplicate;
+    long np_opt_duplicate;
+} stats_block_t;
 
 static khint32_t do_hash(unsigned char *key, khint32_t len);
 
@@ -130,16 +150,17 @@ static khint_t hash_key(key_data_t key) {
     khint_t hash;
 
     if (key.single) {
-        unsigned char sig[17];
+        unsigned char sig[21];
 
         memcpy(sig + i, &key.this_ref, 4);      i += 4;
         memcpy(sig + i, &key.this_coord, 8);    i += 8;
         memcpy(sig + i, &key.orientation, 1);   i += 1;
         memcpy(sig + i, &key.barcode, 4);       i += 4;
+        memcpy(sig + i, &key.read_group, 4);    i += 4;
 
         hash = do_hash(sig, i);
     } else {
-        unsigned char sig[30];
+        unsigned char sig[34];
 
         memcpy(sig + i, &key.this_ref, 4);      i += 4;
         memcpy(sig + i, &key.this_coord, 8);    i += 8;
@@ -148,6 +169,7 @@ static khint_t hash_key(key_data_t key) {
         memcpy(sig + i, &key.leftmost, 1);      i += 1;
         memcpy(sig + i, &key.orientation, 1);   i += 1;
         memcpy(sig + i, &key.barcode, 4);       i += 4;
+        memcpy(sig + i, &key.read_group, 4);    i += 4;
 
         hash = do_hash(sig, i);
     }
@@ -168,6 +190,8 @@ static int key_equal(key_data_t a, key_data_t b) {
     else if (a.single != b.single)
         match = 0;
     else if (a.barcode != b.barcode)
+        match = 0;
+    else if (a.read_group != b.read_group)
         match = 0;
 
     if (!a.single) {
@@ -206,6 +230,7 @@ static int key_equal(key_data_t a, key_data_t b) {
 KHASH_INIT(reads, key_data_t, in_hash_t, 1, hash_key, key_equal) // read map hash
 KLIST_INIT(read_queue, read_queue_t, __free_queue_element) // the reads buffer
 KHASH_MAP_INIT_STR(duplicates, dup_map_t) // map of duplicates for supplementary dup id
+KHASH_MAP_INIT_STR(read_groups, int) // read group lookup
 
 /* The Bob Jenkins one_at_a_time hash to reduce the key to a 32 bit value. */
 
@@ -235,7 +260,7 @@ static int64_t get_mate_score(bam1_t *b) {
     if ((data = bam_aux_get(b, "ms"))) {
         score = bam_aux2i(data);
     } else {
-        fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+        print_error("markdup", "error, no ms score tag. Please run samtools fixmate on file first.\n");
         return -1;
     }
 
@@ -265,7 +290,7 @@ static int64_t calc_score(bam1_t *b)
    read is leftmost of the pair. */
 
 
-static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, long *warnings) {
+static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, int rg_num, long *warnings) {
      hts_pos_t this_coord, this_end, other_coord, other_end, leftmost;
     int32_t this_ref, other_ref, barcode = 0;
     int8_t orientation, left_read;
@@ -281,14 +306,14 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, long *
 
     if ((data = bam_aux_get(bam, "MC"))) {
         if (!(cig = bam_aux2Z(data))) {
-            fprintf(stderr, "[markdup] error: MC tag wrong type. Please use the MC tag provided by samtools fixmate.\n");
+            print_error("markdup", "error, MC tag wrong type. Please use the MC tag provided by samtools fixmate.\n");
             return 1;
         }
 
         other_end   = unclipped_other_end(bam->core.mpos, cig);
         other_coord = unclipped_other_start(bam->core.mpos, cig);
     } else {
-        fprintf(stderr, "[markdup] error: no MC tag. Please run samtools fixmate on file first.\n");
+        print_error("markdup", "error, no MC tag. Please run samtools fixmate on file first.\n");
         return 1;
     }
 
@@ -464,7 +489,7 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, long *
                 (*warnings)++;
 
                 if (*warnings <= BMD_WARNING_MAX) {
-                    fprintf(stderr, "[markdup] warning: %s tag wrong type. Aux tag needs to be a string type.\n", param->barcode);
+                    print_error("markdup", "warning, %s tag wrong type. Aux tag needs to be a string type.\n", param->barcode);
                 }
             } else {
                 barcode = do_hash((unsigned char *)bar, strlen(bar));
@@ -488,7 +513,7 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, long *
                 (*warnings)++;
 
                 if (*warnings <= BMD_WARNING_MAX) {
-                    fprintf(stderr, "[markdup] warning: barcode regex unable to match substring on %s.\n", qname);
+                    print_error("markdup", "warning, barcode regex unable to match substring on %s.\n", qname);
                 }
             }
         } else {
@@ -498,13 +523,13 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, long *
                 char warn_msg[256];
 
                 regerror(result, param->bc_rgx, warn_msg, 256);
-                fprintf(stderr, "[markdup] warning: barcode regex match error \"%s\" on %s.\n", warn_msg, qname);
+                print_error("markdup", "warning, barcode regex match error \"%s\" on %s.\n", warn_msg, qname);
             }
         }
     }
 
     if ((*warnings == BMD_WARNING_MAX) && (incoming_warnings != *warnings)) {
-        fprintf(stderr, "[markdup] warning: %ld barcode read warnings.  New warnings will not be reported.\n",
+        print_error("markdup", "warning, %ld barcode read warnings.  New warnings will not be reported.\n",
                         *warnings);
     }
 
@@ -516,6 +541,7 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, long *
     key->leftmost      = left_read;
     key->orientation   = orientation;
     key->barcode       = barcode;
+    key->read_group    = rg_num;
 
     return 0;
 }
@@ -525,7 +551,7 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, long *
    Uses unclipped start (or end depending on orientation), reference id,
    and orientation. */
 
-static void make_single_key(md_param_t *param, key_data_t *key, bam1_t *bam, long *warnings) {
+static void make_single_key(md_param_t *param, key_data_t *key, bam1_t *bam, int rg_num, long *warnings) {
     hts_pos_t this_coord;
     int32_t this_ref, barcode = 0;
     int8_t orientation;
@@ -549,7 +575,7 @@ static void make_single_key(md_param_t *param, key_data_t *key, bam1_t *bam, lon
                 (*warnings)++;
 
                 if (*warnings <= BMD_WARNING_MAX) {
-                    fprintf(stderr, "[markdup] warning: %s tag wrong type. Aux tag needs to be a string type.\n", param->barcode);
+                    print_error("markdup", "warning, %s tag wrong type. Aux tag needs to be a string type.\n", param->barcode);
                 }
             } else {
                 barcode = do_hash((unsigned char *)bar, strlen(bar));
@@ -573,7 +599,7 @@ static void make_single_key(md_param_t *param, key_data_t *key, bam1_t *bam, lon
                 (*warnings)++;
 
                 if (*warnings <= BMD_WARNING_MAX) {
-                    fprintf(stderr, "[markdup] warning: barcode regex unable to match substring on %s.\n", qname);
+                    print_error("markdup", "warning, barcode regex unable to match substring on %s.\n", qname);
                 }
             }
         } else {
@@ -583,27 +609,29 @@ static void make_single_key(md_param_t *param, key_data_t *key, bam1_t *bam, lon
                 char warn_msg[256];
 
                 regerror(result, param->bc_rgx, warn_msg, 256);
-                fprintf(stderr, "[markdup] warning: barcode regex match error \"%s\" on %s.\n", warn_msg, qname);
+                print_error("markdup", "warning, barcode regex match error \"%s\" on %s.\n", warn_msg, qname);
             }
         }
     }
 
     if ((*warnings == BMD_WARNING_MAX) && (incoming_warnings != *warnings)) {
-        fprintf(stderr, "[markdup] warning: %ld barcode read warnings.  New warnings will not be reported.\n",
+        print_error("markdup", "warning, %ld barcode read warnings.  New warnings will not be reported.\n",
                         *warnings);
     }
+
 
     key->single        = 1;
     key->this_ref      = this_ref;
     key->this_coord    = this_coord;
     key->orientation   = orientation;
     key->barcode       = barcode;
+    key->read_group    = rg_num;
 }
 
 
 /* Add the duplicate name to a hash if it does not exist. */
 
-static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_name, char type) {
+static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_name, char type, int group) {
     khiter_t d;
     int ret;
 
@@ -628,7 +656,7 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_n
                 kh_value(d_hash, d).name = strdup(orig_name);
 
                 if (kh_value(d_hash, d).name == NULL) {
-                    fprintf(stderr, "[markdup] error: unable to allocate memory for duplicate original name.\n");
+                    print_error("markdup", "error, unable to allocate memory for duplicate original name.\n");
                     return 1;
                 }
             } else {
@@ -636,8 +664,9 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_n
             }
 
             kh_value(d_hash, d).type = type;
+            kh_value(d_hash, d).read_group = group;
         } else {
-            fprintf(stderr, "[markdup] error: unable to store supplementary duplicates.\n");
+            print_error("markdup", "error, unable to store supplementary duplicates.\n");
             free(name);
             return 1;
         }
@@ -690,7 +719,7 @@ static int get_coordinates_colons(md_param_t *param, const char *qname, int *t_b
         (*warnings)++;
 
         if (*warnings <= BMD_WARNING_MAX) {
-            fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", qname);
+            print_error("markdup", "warning, cannot decipher read name %s for optical duplicate marking.\n", qname);
         }
 
         return 1;
@@ -701,7 +730,7 @@ static int get_coordinates_colons(md_param_t *param, const char *qname, int *t_b
             (*warnings)++;
 
             if (*warnings <= BMD_WARNING_MAX) {
-                fprintf(stderr, "[markdup] warning: cannot decipher x coordinate in %s .\n", qname);
+                print_error("markdup", "warning, cannot decipher x coordinate in %s .\n", qname);
             }
 
             return 1;
@@ -713,7 +742,7 @@ static int get_coordinates_colons(md_param_t *param, const char *qname, int *t_b
             (*warnings)++;
 
             if (*warnings <= BMD_WARNING_MAX) {
-                fprintf(stderr, "[markdup] warning: cannot decipher y coordinate in %s .\n", qname);
+                print_error("markdup", "warning, cannot decipher y coordinate in %s .\n", qname);
             }
 
             return 1;
@@ -763,7 +792,7 @@ static inline int get_coordinates_regex(md_param_t *param, const char *qname, in
         (*warnings)++;
 
         if (*warnings <= BMD_WARNING_MAX) {
-            fprintf(stderr, "[markdup] warning: x coordinate string longer than allowed qname length in %s (%d long).\n", qname, xlen);
+            print_error("markdup", "warning, x coordinate string longer than allowed qname length in %s (%d long).\n", qname, xlen);
         }
 
         return 1;
@@ -777,7 +806,7 @@ static inline int get_coordinates_regex(md_param_t *param, const char *qname, in
         (*warnings)++;
 
         if (*warnings <= BMD_WARNING_MAX) {
-            fprintf(stderr, "[markdup] warning: cannot decipher x coordinate in %s (%s).\n", qname, coord);
+            print_error("markdup", "warning, cannot decipher x coordinate in %s (%s).\n", qname, coord);
         }
 
         return 1;
@@ -787,7 +816,7 @@ static inline int get_coordinates_regex(md_param_t *param, const char *qname, in
         (*warnings)++;
 
         if (*warnings <= BMD_WARNING_MAX) {
-            fprintf(stderr, "[markdup] warning: y coordinate string longer than allowed qname length in %s (%d long).\n", qname, ylen);
+            print_error("markdup", "warning, y coordinate string longer than allowed qname length in %s (%d long).\n", qname, ylen);
         }
 
         return 1;
@@ -801,7 +830,7 @@ static inline int get_coordinates_regex(md_param_t *param, const char *qname, in
         (*warnings)++;
 
         if (*warnings <= BMD_WARNING_MAX) {
-            fprintf(stderr, "[markdup] warning: cannot decipher y coordinate in %s (%s).\n", qname, coord);
+            print_error("markdup", "warning, cannot decipher y coordinate in %s (%s).\n", qname, coord);
         }
 
         return 1;
@@ -921,7 +950,7 @@ static int optical_duplicate_partial(md_param_t *param, const char *name, const 
 
 /* Mark the read as a duplicate and update the duplicate hash (if needed) */
 static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam1_t *ori, bam1_t *dup,
-                           long *optical, long *warn) {
+                           int read_group, long *optical, long *warn) {
     char dup_type = 0;
     long incoming_warnings = *warn;
 
@@ -929,7 +958,7 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
 
     if (param->tag) {
         if (bam_aux_update_str(dup, "do", strlen(bam_get_qname(ori)) + 1, bam_get_qname(ori))) {
-            fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
+            print_error("markdup", "error, unable to append 'do' tag.\n");
             return -1;
         }
     }
@@ -946,7 +975,7 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
     }
 
     if ((*warn == BMD_WARNING_MAX) && (incoming_warnings != *warn)) {
-        fprintf(stderr, "[markdup] warning: %ld decipher read name warnings.  New warnings will not be reported.\n",
+        print_error("markdup", "warning, %ld decipher read name warnings.  New warnings will not be reported.\n",
                         *warn);
     }
 
@@ -958,7 +987,7 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
                 original = bam_get_qname(ori);
             }
 
-            if (add_duplicate(dup_hash, dup, original, dup_type))
+            if (add_duplicate(dup_hash, dup, original, dup_type, read_group))
                 return -1;
         }
     }
@@ -968,18 +997,18 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
 
 
 /* If the duplicate type has changed to optical then retag and duplicate hash. */
-static inline int optical_retag(md_param_t *param, khash_t(duplicates) *dup_hash, bam1_t *b, int paired, long *optical_single, long *optical_pair) {
+static inline int optical_retag(md_param_t *param, khash_t(duplicates) *dup_hash, bam1_t *b, int paired, stats_block_t *stats) {
     int ret = 0;
 
     if (bam_aux_update_str(b, "dt", 3, "SQ")) {
-        fprintf(stderr, "[markdup] error: unable to update 'dt' tag.\n");
+        print_error("markdup", "error, unable to update 'dt' tag.\n");
         ret = -1;
     }
 
     if (paired) {
-        (*optical_pair)++;
+        stats->optical++;
     } else {
-        (*optical_single)++;
+        stats->single_optical++;
     }
 
     if (param->supp) {
@@ -993,7 +1022,7 @@ static inline int optical_retag(md_param_t *param, khash_t(duplicates) *dup_hash
 
             if (d == kh_end(dup_hash)) {
                 // error, name should already be in dup hash
-                fprintf(stderr, "[markdup] error: duplicate name %s not found in hash.\n",
+                print_error("markdup", "error, duplicate name %s not found in hash.\n",
                     bam_get_qname(b));
                 ret = -1;
             } else {
@@ -1011,7 +1040,7 @@ static inline int optical_retag(md_param_t *param, khash_t(duplicates) *dup_hash
    Returns 0 on success, >0 on coordinate reading error (program can continue) or
    <0 on an error (program should not continue. */
 static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *dup_hash, read_queue_t *ori,
-             check_list_t *list, long *warn, long *optical_single, long *optical_pair) {
+             check_list_t *list, long *warn, stats_block_t *stats) {
 
     int ret = 0, coord_fail = 0;
     char *ori_name = bam_get_qname(ori->b);
@@ -1034,7 +1063,7 @@ static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *
             list->size *= 2;
 
             if (!(tmp = realloc(list->c, list->size * sizeof(check_t)))) {
-                fprintf(stderr, "[markdup] error: Unable to expand opt check list.\n");
+                print_error("markdup", "error, Unable to expand optical check list.\n");
                 return -1;
             }
 
@@ -1062,13 +1091,13 @@ static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *
                 if (old_name) {
                     if (strcmp(old_name, ori_name) != 0) {
                         if (bam_aux_update_str(current->b, "do", strlen(ori_name) + 1, (const char *)ori_name)) {
-                            fprintf(stderr, "[markdup] error: unable to update 'do' tag.\n");
+                            print_error("markdup", "error, unable to update 'do' tag.\n");
                             ret =  -1;
                             break;
                         }
                     }
                 } else {
-                    fprintf(stderr, "[markdup] error: 'do' tag has wrong type for read %s.\n", bam_get_qname(current->b));
+                    print_error("markdup", "error, 'do' tag has wrong type for read %s.\n", bam_get_qname(current->b));
                     ret = -1;
                     break;
                 }
@@ -1093,7 +1122,7 @@ static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *
             is_opt = optical_duplicate_partial(param, ori_name, t_beg, t_end, x, y, current->b, c, param->opt_dist, warn);
 
             if (!c->opt && is_opt) {
-                if (optical_retag(param, dup_hash, current->b, current_paired, optical_single, optical_pair)) {
+                if (optical_retag(param, dup_hash, current->b, current_paired, stats)) {
                     ret = -1;
                     break;
                 }
@@ -1105,7 +1134,7 @@ static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *
 
             if (current_paired) {
                 if ((c->mate_score = get_mate_score(current->b)) == -1) {
-                     fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+                     print_error("markdup", "error, no ms score tag. Please run samtools fixmate on file first.\n");
                      ret = -1;
                      break;
                 }
@@ -1118,6 +1147,8 @@ static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *
 
     if (!ret && coord_fail)
         ret = coord_fail;
+
+    ori->dup_checked = 1;
 
     return ret;
 }
@@ -1133,7 +1164,7 @@ static int xcoord_sort(const void *a, const void *b) {
 
 /* Check all the duplicates against each other to see if they are optical duplicates. */
 static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_hash, check_list_t *list,
-             long *warn, long *optical_single, long *optical_pair) {
+             long *warn, stats_block_t *stats) {
     int ret = 0;
     size_t curr = 0;
 
@@ -1217,7 +1248,7 @@ static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_has
             if (chk_dup) {
                 // the duplicate is the optical duplicate
                 if (!chk->opt) { // only change if not already an optical duplicate
-                    if (optical_retag(param, dup_hash, chk->b, chk_paired, optical_single, optical_pair)) {
+                    if (optical_retag(param, dup_hash, chk->b, chk_paired, stats)) {
                         ret = -1;
                         goto fail;
                     }
@@ -1226,7 +1257,7 @@ static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_has
                 }
             } else {
                 if (!current->opt) {
-                    if (optical_retag(param, dup_hash, current->b, current_paired, optical_single, optical_pair)) {
+                    if (optical_retag(param, dup_hash, current->b, current_paired, stats)) {
                         ret = -1;
                         goto fail;
                     }
@@ -1246,53 +1277,24 @@ static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_has
 
 /* Where there is more than one duplicate go down the list and check for optical duplicates and change
    do tags (where used) to point to original (non-duplicate) read. */
-static int find_duplicate_chains(md_param_t *param, klist_t(read_queue) *read_buffer, khash_t(duplicates) *dup_hash, check_list_t *dup_list,
-                                const hts_pos_t prev_coord, const int32_t prev_tid, long *warn, long *optical_single,
-                                long *optical_pair, const int check_range) {
+static int find_duplicate_chains(md_param_t *param, read_queue_t *in_read , khash_t(duplicates) *dup_hash, check_list_t *dup_list,
+                                long *warn, stats_block_t *stats) {
     int ret = 0;
-    kliter_t(read_queue) *rq;
 
-    rq = kl_begin(read_buffer);
+    while (in_read->original) in_read = in_read->original;
 
-    while (rq != kl_end(read_buffer)) {
-        read_queue_t *in_read = &kl_val(rq);
-
-        if (check_range) {
-            /* Just check against the moving window of reads based on coordinates and max read length. */
-            if (in_read->pos + param->max_length > prev_coord && in_read->b->core.tid == prev_tid && (prev_tid != -1 || prev_coord != -1)) {
-                break;
-            }
-        } else {
-            // this is the last set of results and the end entry will be blank
-            if (!bam_get_qname(in_read->b)) {
-                break;
-            }
+    // check against the original for tagging and optical duplication
+    if ((ret = check_chain_against_original(param, dup_hash, in_read, dup_list, warn, stats + in_read->read_group))) {
+        if (ret < 0) { // real error
+            ret = -1;
+        } else { // coordinate decoding error
+            ret = 0;
         }
-
-        if (!(in_read->b->core.flag & BAM_FDUP) && in_read->duplicate) { // is the head of a duplicate chain
-
-            // check against the original for tagging and optical duplication
-            if ((ret = check_chain_against_original(param, dup_hash, in_read, dup_list, warn, optical_single, optical_pair))) {
-                if (ret < 0) { // real error
-                    ret = -1;
-                    break;
-                } else { // coordinate decoding error
-                    ret = 0;
-                    in_read->duplicate = NULL;
-                    continue;
-                }
-            }
-
-            // check the rest of the duplicates against each other for optical duplication
-            if (param->opt_dist && check_duplicate_chain(param, dup_hash, dup_list, warn, optical_single, optical_pair)) {
-                ret = -1;
-                break;
-            }
-
-            in_read->duplicate = NULL;
+    } else {
+        // check the rest of the duplicates against each other for optical duplication
+        if (param->opt_dist && check_duplicate_chain(param, dup_hash, dup_list, warn, stats + in_read->read_group)) {
+            ret = -1;
         }
-
-        rq = kl_next(rq);
     }
 
     return ret;
@@ -1339,7 +1341,7 @@ static unsigned long estimate_library_size(unsigned long paired_reads, unsigned 
         int i;
 
         if (coverage_equation(m * (double)unique_pairs, (double)unique_pairs, (double)non_optical_pairs) < 0) {
-            fprintf(stderr, "[markdup] warning: unable to calculate estimated library size.\n");
+            print_error("markdup", "warning, unable to calculate estimated library size.\n");
             return  estimated_size;
         }
 
@@ -1362,13 +1364,74 @@ static unsigned long estimate_library_size(unsigned long paired_reads, unsigned 
 
         estimated_size = (unsigned long)(unique_pairs * (m + M) / 2);
     } else {
-        fprintf(stderr, "[markdup] warning: unable to calculate estimated library size."
+        print_error("markdup", "warning, unable to calculate estimated library size."
                         " Read pairs %ld should be greater than duplicate pairs %ld,"
                         " which should both be non zero.\n",
                         non_optical_pairs, duplicate_pairs);
     }
 
     return estimated_size;
+}
+
+
+static void write_stats(FILE *fp, const char *title,  const char *title_con, stats_block_t *stats) {
+    unsigned long els;
+
+    els = estimate_library_size(stats->pair, stats->duplicate, stats->optical);
+
+    if (title) {
+        fprintf(fp, "%s%s\n", title, title_con);
+    }
+
+    fprintf(fp,
+            "READ: %ld\n"
+            "WRITTEN: %ld\n"
+            "EXCLUDED: %ld\n"
+            "EXAMINED: %ld\n"
+            "PAIRED: %ld\n"
+            "SINGLE: %ld\n"
+            "DUPLICATE PAIR: %ld\n"
+            "DUPLICATE SINGLE: %ld\n"
+            "DUPLICATE PAIR OPTICAL: %ld\n"
+            "DUPLICATE SINGLE OPTICAL: %ld\n"
+            "DUPLICATE NON PRIMARY: %ld\n"
+            "DUPLICATE NON PRIMARY OPTICAL: %ld\n"
+            "DUPLICATE PRIMARY TOTAL: %ld\n"
+            "DUPLICATE TOTAL: %ld\n"
+            "ESTIMATED_LIBRARY_SIZE: %ld\n", stats->reading, stats->writing, stats->excluded, stats->examined, stats->pair, stats->single,
+                            stats->duplicate, stats->single_dup, stats->optical, stats->single_optical, stats->np_duplicate, stats->np_opt_duplicate,
+                            stats->single_dup + stats->duplicate, stats->single_dup + stats->duplicate + stats->np_duplicate, els);
+}
+
+
+static void write_json_stats(FILE *fp, const char *offset, const char *group_name, stats_block_t *stats, const char *end) {
+    unsigned long  els;
+
+    els = estimate_library_size(stats->pair, stats->duplicate, stats->optical);
+
+    if (group_name) {
+        fprintf(fp, "%s\"READ GROUP\": \"%s\",\n", offset, group_name);
+    }
+
+    fprintf(fp, "%s\"READ\": %ld,\n", offset, stats->reading);
+    fprintf(fp, "%s\"WRITTEN\": %ld,\n", offset, stats->writing);
+    fprintf(fp, "%s\"EXCLUDED\": %ld,\n", offset, stats->excluded);
+    fprintf(fp, "%s\"EXAMINED\": %ld,\n", offset, stats->examined);
+    fprintf(fp, "%s\"PAIRED\": %ld,\n", offset, stats->pair);
+    fprintf(fp, "%s\"SINGLE\": %ld,\n", offset, stats->single);
+    fprintf(fp, "%s\"DUPLICATE PAIR\": %ld,\n", offset, stats->duplicate);
+    fprintf(fp, "%s\"DUPLICATE SINGLE\": %ld,\n", offset, stats->single_dup);
+    fprintf(fp, "%s\"DUPLICATE PAIR OPTICAL\": %ld,\n", offset, stats->optical);
+    fprintf(fp, "%s\"DUPLICATE SINGLE OPTICAL\": %ld,\n", offset, stats->single_optical);
+    fprintf(fp, "%s\"DUPLICATE NON PRIMARY\": %ld,\n", offset, stats->np_duplicate);
+    fprintf(fp, "%s\"DUPLICATE NON PRIMARY OPTICAL\": %ld,\n", offset, stats->np_opt_duplicate);
+    fprintf(fp, "%s\"DUPLICATE PRIMARY TOTAL\": %ld,\n", offset, stats->single_dup + stats->duplicate);
+    fprintf(fp, "%s\"DUPLICATE TOTAL\": %ld,\n", offset, stats->single_dup + stats->duplicate + stats->np_duplicate);
+    fprintf(fp, "%s\"ESTIMATED_LIBRARY_SIZE\": %ld", offset, els);
+
+    if (end) {
+        fprintf(fp, "%s", end);
+    }
 }
 
 
@@ -1389,25 +1452,26 @@ static int bam_mark_duplicates(md_param_t *param) {
     klist_t(read_queue) *read_buffer = kl_init(read_queue);
     kliter_t(read_queue) *rq;
     khash_t(duplicates) *dup_hash    = kh_init(duplicates);
+    khash_t(read_groups) *rg_hash    = kh_init(read_groups);
     int32_t prev_tid;
     hts_pos_t prev_coord;
     read_queue_t *in_read;
     int ret;
-    long reading, writing, excluded, duplicate, single, pair, single_dup, examined, optical, single_optical;
-    long np_duplicate, np_opt_duplicate;
+    stats_block_t *stats, *stat_array = NULL;
+    int num_groups = 0;
     long opt_warnings = 0, bc_warnings = 0;
     tmp_file_t temp;
     char *idx_fn = NULL;
     int exclude = 0;
     check_list_t dup_list = {NULL, 0, 0};
 
-    if (!pair_hash || !single_hash || !read_buffer || !dup_hash) {
-        fprintf(stderr, "[markdup] out of memory\n");
+    if (!pair_hash || !single_hash || !read_buffer || !dup_hash || !rg_hash) {
+        print_error("markdup", "error, unable to allocate memory to initialise structures.\n");
         goto fail;
     }
 
     if ((header = sam_hdr_read(param->in)) == NULL) {
-        fprintf(stderr, "[markdup] error reading header\n");
+        print_error("markdup", "error reading header\n");
         goto fail;
     }
 
@@ -1415,7 +1479,7 @@ static int bam_mark_duplicates(md_param_t *param) {
     // only really works on coordinate sorted files.
     kstring_t str = KS_INITIALIZE;
     if (!sam_hdr_find_tag_hd(header, "SO", &str) && str.s && !strcmp(str.s, "queryname")) {
-        fprintf(stderr, "[markdup] error: queryname sorted, must be sorted by coordinate.\n");
+        print_error("markdup", "error, queryname sorted, must be sorted by coordinate.\n");
         ks_free(&str);
         goto fail;
     }
@@ -1425,16 +1489,76 @@ static int bam_mark_duplicates(md_param_t *param) {
                         param->arg_list ? "CL" : NULL,
                         param->arg_list ? param->arg_list : NULL,
                         NULL) != 0) {
-        fprintf(stderr, "[markdup] warning: unable to add @PG line to header.\n");
+        print_error("markdup", "warning, unable to add @PG line to header.\n");
     }
 
     if (sam_hdr_write(param->out, header) < 0) {
-        fprintf(stderr, "[markdup] error writing header.\n");
+        print_error("markdup", "error writing header.\n");
         goto fail;
     }
     if (param->write_index) {
         if (!(idx_fn = auto_index(param->out, param->out_fn, header)))
             goto fail;
+    }
+
+    if (param->read_groups) {
+        num_groups = sam_hdr_count_lines(header, "RG");
+        int g_ret = 0;
+
+        if (num_groups > 0) {
+            int i;
+
+            for (i = 0; i < num_groups; i++) {
+                const char *rg_key;
+                khiter_t rg;
+
+                rg_key = sam_hdr_line_name(header, "RG", i);
+
+                if (rg_key) {
+                    rg = kh_get(read_groups, rg_hash, rg_key);
+
+                    if (rg == kh_end(rg_hash)) { // new entry
+                        rg = kh_put(read_groups, rg_hash, rg_key, &g_ret);
+
+                        if (g_ret > 0) {
+                            kh_value(rg_hash, rg) = i + 1;
+                        } else {
+                            print_error("markdup", "error, unable to populate read group ids.  "
+                                     "Read groups will not be used\n");
+                            g_ret = -1;
+                            break;
+                        }
+                    } else {
+                        print_error("markdup", "error, duplicate read group ids %s."
+                                  "Read groups will not be used\n", rg_key);
+                        g_ret = -1;
+                        break;
+                    }
+                } else {
+                    print_error("markdup", "error, Unable to retrieve read group at position %d."
+                              "Read groups will not be used\n", i);
+                    g_ret = -1;
+                    break;
+                }
+            }
+        } else {
+            print_error("markdup", "error, no read groups found.\n");
+            g_ret = -1;
+        }
+
+        if (g_ret < 0) {
+            print_error("markdup", "error, read groups will not be used.\n");
+            param->read_groups = 0;
+            num_groups = 0;
+        }
+    }
+
+    // stat_array[0] will be for ungrouped reads
+    stat_array = calloc(num_groups + 1, sizeof(stats_block_t));
+
+    if (stat_array == NULL) {
+        print_error("markdup", "error, unable to allocate memory for stats.\n");
+        goto fail;
     }
 
     // used for coordinate order checks
@@ -1443,20 +1567,20 @@ static int bam_mark_duplicates(md_param_t *param) {
     // get the buffer going
     in_read = kl_pushp(read_queue, read_buffer);
     if (!in_read) {
-        fprintf(stderr, "[markdup] out of memory\n");
+        print_error("markdup", "error, unable to allocate memory to hold reads.\n");
         goto fail;
     }
 
     // handling supplementary reads needs a temporary file
     if (param->supp) {
         if (tmp_file_open_write(&temp, param->prefix, 1)) {
-            fprintf(stderr, "[markdup] error: unable to open tmp file %s.\n", param->prefix);
+            print_error("markdup", "error, unable to open tmp file %s.\n", param->prefix);
             goto fail;
         }
     }
 
     if ((in_read->b = bam_init1()) == NULL) {
-        fprintf(stderr, "[markdup] error: unable to allocate memory for alignment.\n");
+        print_error("markdup", "error, unable to allocate memory for alignment.\n");
         goto fail;
     }
 
@@ -1468,22 +1592,18 @@ static int bam_mark_duplicates(md_param_t *param) {
         dup_list.c = NULL;
 
         if ((dup_list.c = malloc(dup_list.size * sizeof(check_t))) == NULL) {
-            fprintf(stderr, "[markdup] error: unable to allocate memory for dup_list.\n");
+            print_error("markdup", "error, unable to allocate memory for dup_list.\n");
             goto fail;
         }
     }
 
-    reading = writing = excluded = single_dup = duplicate = examined = pair = single = optical = single_optical = 0;
-    np_duplicate = np_opt_duplicate = 0;
-
     while ((ret = sam_read1(param->in, header, in_read->b)) >= 0) {
-        int dup_checked = 0;
 
         // do some basic coordinate order checks
         if (in_read->b->core.tid >= 0) { // -1 for unmapped reads
             if (in_read->b->core.tid < prev_tid ||
                ((in_read->b->core.tid == prev_tid) && (in_read->b->core.pos < prev_coord))) {
-                fprintf(stderr, "[markdup] error: not in coordinate sorted order.\n");
+                print_error("markdup", "error, not in coordinate sorted order.\n");
                 goto fail;
             }
         }
@@ -1493,9 +1613,30 @@ static int bam_mark_duplicates(md_param_t *param) {
         in_read->pair_key.single   = 1;
         in_read->single_key.single = 0;
         in_read->duplicate = NULL;
+        in_read->original = NULL;
         in_read->dup_checked = 0;
+        in_read->read_group = 0;
 
-        reading++;
+        if (param->read_groups) {
+            uint8_t *data;
+            char *rg;
+
+            if ((data = bam_aux_get(in_read->b, "RG"))) {
+                if ((rg = bam_aux2Z(data))) {
+                    khiter_t r;
+
+                    r = kh_get(read_groups, rg_hash, rg);
+
+                    if (r != kh_end(rg_hash)) {
+                        in_read->read_group = kh_value(rg_hash, r);
+                    }
+                }
+            }
+        }
+
+        stats = stat_array + in_read->read_group;
+
+        stats->reading++;
 
         if (param->clear && (in_read->b->core.flag & BAM_FDUP)) {
             uint8_t *data;
@@ -1519,7 +1660,7 @@ static int bam_mark_duplicates(md_param_t *param) {
 
         // read must not be secondary, supplementary, unmapped or (possibly) failed QC
         if (!(in_read->b->core.flag & exclude)) {
-            examined++;
+            stats->examined++;
 
 
             // look at the pairs first
@@ -1529,14 +1670,14 @@ static int bam_mark_duplicates(md_param_t *param) {
                 key_data_t single_key;
                 in_hash_t *bp;
 
-                if (make_pair_key(param, &pair_key, in_read->b, &bc_warnings)) {
-                    fprintf(stderr, "[markdup] error: unable to assign pair hash key.\n");
+                if (make_pair_key(param, &pair_key, in_read->b, in_read->read_group, &bc_warnings)) {
+                    print_error("markdup", "error, unable to assign pair hash key.\n");
                     goto fail;
                 }
 
-                make_single_key(param, &single_key, in_read->b, &bc_warnings);
+                make_single_key(param, &single_key, in_read->b, in_read->read_group, &bc_warnings);
 
-                pair++;
+                stats->pair++;
                 in_read->pos = single_key.this_coord; // cigar/orientation modified pos
 
                 // put in singles hash for checking against non paired reads
@@ -1556,18 +1697,20 @@ static int bam_mark_duplicates(md_param_t *param) {
                        // scores more than one read of the pair
                         bam1_t *dup = bp->p->b;
 
-                        if (param->check_chain)
+                        if (param->check_chain) {
                             in_read->duplicate = bp->p;
+                            bp->p->original = in_read;
+                        }
 
                         bp->p = in_read;
 
-                        if (mark_duplicates(param, dup_hash, bp->p->b, dup, &single_optical, &opt_warnings))
+                        if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->single_optical, &opt_warnings))
                             goto fail;
 
-                        single_dup++;
+                        stats->single_dup++;
                     }
                 } else {
-                    fprintf(stderr, "[markdup] error: single hashing failure.\n");
+                    print_error("markdup", "error, single hashing failure for paired read.\n");
                     goto fail;
                 }
 
@@ -1595,14 +1738,14 @@ static int bam_mark_duplicates(md_param_t *param) {
                         }
                     } else {
                         if ((mate_tmp = get_mate_score(bp->p->b)) == -1) {
-                            fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+                            print_error("markdup", "error, no ms score tag. Please run samtools fixmate on file first.\n");
                             goto fail;
                         } else {
                             old_score = calc_score(bp->p->b) + mate_tmp;
                         }
 
                         if ((mate_tmp = get_mate_score(in_read->b)) == -1) {
-                            fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+                            print_error("markdup", "error, no ms score tag. Please run samtools fixmate on file first.\n");
                             goto fail;
                         } else {
                             new_score = calc_score(in_read->b) + mate_tmp;
@@ -1636,6 +1779,8 @@ static int bam_mark_duplicates(md_param_t *param) {
                             } else {
                                 in_read->duplicate = bp->p;
                             }
+
+                            bp->p->original = in_read;
                         }
 
                         bp->p = in_read;
@@ -1656,17 +1801,18 @@ static int bam_mark_duplicates(md_param_t *param) {
                             }
 
                             bp->p->duplicate = in_read;
+                            in_read->original = bp->p;
                         }
 
                         dup = in_read->b;
                     }
 
-                    if (mark_duplicates(param, dup_hash, bp->p->b, dup, &optical, &opt_warnings))
+                    if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->optical, &opt_warnings))
                         goto fail;
 
-                    duplicate++;
+                    stats->duplicate++;
                 } else {
-                    fprintf(stderr, "[markdup] error: pair hashing failure.\n");
+                    print_error("markdup", "error, pair hashing failure.\n");
                     goto fail;
                 }
             } else { // do the single (or effectively single) reads
@@ -1674,9 +1820,9 @@ static int bam_mark_duplicates(md_param_t *param) {
                 key_data_t single_key;
                 in_hash_t *bp;
 
-                make_single_key(param, &single_key, in_read->b, &bc_warnings);
+                make_single_key(param, &single_key, in_read->b, in_read->read_group, &bc_warnings);
 
-                single++;
+                stats->single++;
                 in_read->pos = single_key.this_coord; // cigar/orientation modified pos
 
                 k = kh_put(reads, single_hash, single_key, &ret);
@@ -1697,9 +1843,10 @@ static int bam_mark_duplicates(md_param_t *param) {
                             }
 
                             bp->p->duplicate = in_read;
+                            in_read->original = bp->p;
                         }
 
-                        if (mark_duplicates(param, dup_hash, bp->p->b, in_read->b, &single_optical, &opt_warnings))
+                        if (mark_duplicates(param, dup_hash, bp->p->b, in_read->b, in_read->read_group, &stats->single_optical, &opt_warnings))
                             goto fail;
 
                     } else {
@@ -1714,8 +1861,10 @@ static int bam_mark_duplicates(md_param_t *param) {
                         if (new_score > old_score) { // swap reads
                             dup = bp->p->b;
 
-                            if (param->check_chain)
+                            if (param->check_chain) {
                                 in_read->duplicate = bp->p;
+                                bp->p->original = in_read;
+                            }
 
                             bp->p = in_read;
                         } else {
@@ -1725,23 +1874,24 @@ static int bam_mark_duplicates(md_param_t *param) {
                                 }
 
                                 bp->p->duplicate = in_read;
+                                in_read->original = bp->p;
                             }
 
                             dup = in_read->b;
                         }
 
-                        if (mark_duplicates(param, dup_hash, bp->p->b, dup, &single_optical, &opt_warnings))
+                        if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->single_optical, &opt_warnings))
                             goto fail;
                     }
 
-                    single_dup++;
+                    stats->single_dup++;
                 } else {
-                    fprintf(stderr, "[markdup] error: single hashing failure.\n");
+                    print_error("markdup", "error, single hashing failure for single read.\n");
                     goto fail;
                 }
             }
         } else {
-            excluded++;
+            stats->excluded++;
         }
 
         // loop through the stored reads and write out those we
@@ -1756,36 +1906,27 @@ static int bam_mark_duplicates(md_param_t *param) {
                 break;
             }
 
-            if (!dup_checked && param->check_chain) {
-                // check for multiple optical duplicates of the same original read
-
-                if (find_duplicate_chains(param, read_buffer, dup_hash, &dup_list, prev_coord, prev_tid, &opt_warnings, &single_optical, &optical, 1)) {
-                    fprintf(stderr, "[markdup] error: duplicate checking failed.\n");
+            if (param->check_chain && !in_read->dup_checked && (in_read->original || in_read->duplicate)) {
+                if (find_duplicate_chains(param, in_read, dup_hash, &dup_list, &opt_warnings, stat_array)) {
+                    print_error("markdup", "error, duplicate checking failed.\n");
                     goto fail;
                 }
-
-                dup_checked = 1;
-            }
-
-
-            if (param->check_chain && (in_read->b->core.flag & BAM_FDUP) && !in_read->dup_checked && !(in_read->b->core.flag & exclude)) {
-                break;
             }
 
             if (!param->remove_dups || !(in_read->b->core.flag & BAM_FDUP)) {
                 if (param->supp) {
                     if (tmp_file_write(&temp, in_read->b)) {
-                        fprintf(stderr, "[markdup] error: writing temp output failed.\n");
+                        print_error("markdup", "error, writing temp output failed.\n");
                         goto fail;
                     }
                 } else {
                     if (sam_write1(param->out, header, in_read->b) < 0) {
-                        fprintf(stderr, "[markdup] error: writing output failed.\n");
+                        print_error("markdup", "error, writing output failed.\n");
                         goto fail;
                     }
                 }
 
-                writing++;
+                stat_array[in_read->read_group].writing++;
             }
 
             // remove from hash
@@ -1807,27 +1948,19 @@ static int bam_mark_duplicates(md_param_t *param) {
         // set the next one up for reading
         in_read = kl_pushp(read_queue, read_buffer);
         if (!in_read) {
-            fprintf(stderr, "[markdup] out of memory\n");
+            print_error("markdup", "error, unable to allocate memory for read in queue.\n");
             goto fail;
         }
 
         if ((in_read->b = bam_init1()) == NULL) {
-            fprintf(stderr, "[markdup] error: unable to allocate memory for alignment.\n");
+            print_error("markdup", "error, unable to allocate memory for alignment.\n");
             goto fail;
         }
     }
 
     if (ret < -1) {
-        fprintf(stderr, "[markdup] error: truncated input file.\n");
+        print_error("markdup", "error, truncated input file.\n");
         goto fail;
-    }
-
-    // one last check
-    if (param->tag || param->opt_dist) {
-        if (find_duplicate_chains(param, read_buffer, dup_hash, &dup_list, prev_coord, prev_tid, &opt_warnings, &single_optical, &optical, 0)) {
-            fprintf(stderr, "[markdup] error: duplicate checking failed.\n");
-            goto fail;
-        }
     }
 
     // write out the end of the list
@@ -1836,20 +1969,27 @@ static int bam_mark_duplicates(md_param_t *param) {
         in_read = &kl_val(rq);
 
         if (bam_get_qname(in_read->b)) { // last entry will be blank
+            if (param->check_chain && !in_read->dup_checked && (in_read->original || in_read->duplicate)) {
+                if (find_duplicate_chains(param, in_read, dup_hash, &dup_list, &opt_warnings, stat_array)) {
+                    print_error("markdup", "error, duplicate checking failed.\n");
+                    goto fail;
+                }
+            }
+
             if (!param->remove_dups || !(in_read->b->core.flag & BAM_FDUP)) {
                 if (param->supp) {
                     if (tmp_file_write(&temp, in_read->b)) {
-                        fprintf(stderr, "[markdup] error: writing temp output failed.\n");
+                        print_error("markdup", "error, writing temp output failed on final write.\n");
                         goto fail;
                     }
                 } else {
                     if (sam_write1(param->out, header, in_read->b) < 0) {
-                        fprintf(stderr, "[markdup] error: writing output failed.\n");
+                        print_error("markdup", "error, writing output failed on final write.\n");
                         goto fail;
                     }
                 }
 
-                writing++;
+                stat_array[in_read->read_group].writing++;
             }
         }
 
@@ -1862,7 +2002,7 @@ static int bam_mark_duplicates(md_param_t *param) {
         bam1_t *b;
 
         if (tmp_file_end_write(&temp)) {
-            fprintf(stderr, "[markdup] error: unable to end tmp writing.\n");
+            print_error("markdup", "error, unable to end tmp writing.\n");
             goto fail;
         }
 
@@ -1883,11 +2023,11 @@ static int bam_mark_duplicates(md_param_t *param) {
                 if (k != kh_end(dup_hash)) {
 
                     b->core.flag  |= BAM_FDUP;
-                    np_duplicate++;
+                    stat_array[kh_val(dup_hash, k).read_group].np_duplicate++;
 
                     if (param->tag && kh_val(dup_hash, k).name) {
                         if (bam_aux_update_str(b, "do", strlen(kh_val(dup_hash, k).name) + 1, (char*)kh_val(dup_hash, k).name)) {
-                            fprintf(stderr, "[markdup] error: unable to append supplementary 'do' tag.\n");
+                            print_error("markdup", "error, unable to append supplementary 'do' tag.\n");
                             goto fail;
                         }
                     }
@@ -1895,7 +2035,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                     if (param->opt_dist) {
                         if (kh_val(dup_hash, k).type) {
                             bam_aux_update_str(b, "dt", 3, "SQ");
-                            np_opt_duplicate++;
+                            stat_array[kh_val(dup_hash, k).read_group].np_opt_duplicate++;
                         } else {
                             bam_aux_update_str(b, "dt", 3, "LB");
                         }
@@ -1905,14 +2045,14 @@ static int bam_mark_duplicates(md_param_t *param) {
 
             if (!param->remove_dups || !(b->core.flag & BAM_FDUP)) {
                 if (sam_write1(param->out, header, b) < 0) {
-                    fprintf(stderr, "[markdup] error: writing final output failed.\n");
+                    print_error("markdup", "error, writing final output failed.\n");
                     goto fail;
                 }
             }
         }
 
         if (ret == -1) {
-            fprintf(stderr, "[markdup] error: failed to read tmp file.\n");
+            print_error("markdup", "error, failed to read tmp file.\n");
             goto fail;
         }
 
@@ -1929,22 +2069,23 @@ static int bam_mark_duplicates(md_param_t *param) {
     }
 
     if (opt_warnings) {
-        fprintf(stderr, "[markdup] warning: number of failed attempts to get coordinates from read names = %ld\n",
+        print_error("markdup", "warning, number of failed attempts to get coordinates from read names = %ld\n",
                         opt_warnings);
     }
 
     if (bc_warnings) {
-        fprintf(stderr, "[markdup] warning: number of failed attempts to get barcodes = %ld\n", bc_warnings);
+        print_error("markdup", "warning, number of failed attempts to get barcodes = %ld\n", bc_warnings);
     }
 
     if (param->do_stats) {
         FILE *fp;
         int file_open = 0;
-        unsigned long els;
+        stats_block_t total;
+        int i;
 
         if (param->stats_file) {
             if (NULL == (fp = fopen(param->stats_file, "w"))) {
-                fprintf(stderr, "[markdup] warning: cannot write stats to %s.\n", param->stats_file);
+                print_error("markdup", "warning, cannot write stats to %s.\n", param->stats_file);
                 fp = stderr;
             } else {
                 file_open = 1;
@@ -1953,27 +2094,75 @@ static int bam_mark_duplicates(md_param_t *param) {
             fp = stderr;
         }
 
-        els = estimate_library_size(pair, duplicate, optical);
+        total = stat_array[0];
 
-        fprintf(fp,
-                "COMMAND: %s\n"
-                "READ: %ld\n"
-                "WRITTEN: %ld\n"
-                "EXCLUDED: %ld\n"
-                "EXAMINED: %ld\n"
-                "PAIRED: %ld\n"
-                "SINGLE: %ld\n"
-                "DUPLICATE PAIR: %ld\n"
-                "DUPLICATE SINGLE: %ld\n"
-                "DUPLICATE PAIR OPTICAL: %ld\n"
-                "DUPLICATE SINGLE OPTICAL: %ld\n"
-                "DUPLICATE NON PRIMARY: %ld\n"
-                "DUPLICATE NON PRIMARY OPTICAL: %ld\n"
-                "DUPLICATE PRIMARY TOTAL: %ld\n"
-                "DUPLICATE TOTAL: %ld\n"
-                "ESTIMATED_LIBRARY_SIZE: %ld\n", param->arg_list, reading, writing, excluded, examined, pair, single,
-                                duplicate, single_dup, optical, single_optical, np_duplicate, np_opt_duplicate,
-                                single_dup + duplicate, single_dup + duplicate + np_duplicate, els);
+        if (param->read_groups) {
+            for (i = 1; i <= num_groups; i++) {
+                total.reading += stat_array[i].reading;
+                total.writing += stat_array[i].writing;
+                total.excluded += stat_array[i].excluded;
+                total.duplicate += stat_array[i].duplicate;
+                total.single += stat_array[i].single;
+                total.pair += stat_array[i].pair;
+                total.single_dup += stat_array[i].single_dup;
+                total.examined += stat_array[i].examined;
+                total.optical += stat_array[i].optical;
+                total.single_optical += stat_array[i].single_optical;
+                total.np_duplicate += stat_array[i].np_duplicate;
+                total.np_opt_duplicate += stat_array[i].np_opt_duplicate;
+            }
+        }
+
+        if (!param->json) {
+            write_stats(fp, "COMMAND: ", param->arg_list, &total);
+            fprintf(fp, "\n");
+
+            if (param->read_groups) {
+                if (stat_array[0].reading) {
+                    write_stats(fp, "READ GROUP: ", "ungrouped", stat_array);
+                    fprintf(fp, "\n");
+                }
+
+                for (i = 0; i < num_groups; i++) {
+                    write_stats(fp, "READ GROUP: ", sam_hdr_line_name(header, "RG", i), stat_array + i + 1);
+                    fprintf(fp, "\n");
+                }
+            }
+        } else {
+            char space4[]  = "    ";
+            char space8[]  = "        ";
+            char space12[] = "            ";
+
+            fprintf(fp, "{\n");
+            fprintf(fp, "%s\"COMMAND\": \"%s\",\n", space4, param->arg_list);
+            write_json_stats(fp, space4, NULL, &total, param->read_groups ? ",\n" : "\n");
+
+            if (param->read_groups) {
+                fprintf(fp, "%s\"READ GROUPS\": [\n", space4);
+
+                if (stat_array[0].reading) {
+                    fprintf(fp, "%s{\n", space8);
+                    write_json_stats(fp, space12, "ungrouped", stat_array, "\n");
+                    fprintf(fp, "%s},\n", space8);
+                }
+
+                for (i = 0; i < num_groups; i++) {
+                    fprintf(fp, "%s{\n", space8);
+
+                    write_json_stats(fp, space12,  sam_hdr_line_name(header, "RG", i), stat_array + i + 1, "\n");
+
+                    if (i < num_groups -1 ) {
+                        fprintf(fp, "%s},\n", space8);
+                    } else {
+                        fprintf(fp, "%s}\n", space8);
+                    }
+                }
+
+                fprintf(fp, "%s]\n", space4);
+            }
+
+            fprintf(fp, "}\n");
+        }
 
         if (file_open) {
             fclose(fp);
@@ -1982,7 +2171,7 @@ static int bam_mark_duplicates(md_param_t *param) {
 
     if (param->write_index) {
         if (sam_idx_save(param->out) < 0) {
-            print_error_errno("markdup", "writing index failed");
+            print_error_errno("markdup", "error, writing index failed");
             goto fail;
         }
     }
@@ -1990,10 +2179,12 @@ static int bam_mark_duplicates(md_param_t *param) {
     if (param->check_chain && (param->tag || param->opt_dist))
         free(dup_list.c);
 
+    free(stat_array);
     kh_destroy(reads, pair_hash);
     kh_destroy(reads, single_hash);
     kl_destroy(read_queue, read_buffer);
     kh_destroy(duplicates, dup_hash);
+    kh_destroy(read_groups, rg_hash);
     sam_hdr_destroy(header);
 
     return 0;
@@ -2009,10 +2200,12 @@ static int bam_mark_duplicates(md_param_t *param) {
         }
     }
     kh_destroy(duplicates, dup_hash);
+    kh_destroy(read_groups, rg_hash);
 
     if (param->check_chain && (param->tag || param->opt_dist))
         free(dup_list.c);
 
+    free(stat_array);
     kh_destroy(reads, pair_hash);
     kh_destroy(reads, single_hash);
     sam_hdr_destroy(header);
@@ -2029,6 +2222,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  -S                 Mark supplementary alignments of duplicates as duplicates (slower).\n");
     fprintf(stderr, "  -s                 Report stats.\n");
     fprintf(stderr, "  -f NAME            Write stats to named file.  Implies -s.\n");
+    fprintf(stderr, "  --json             Output stats in JSON.  Also implies -s\n");
     fprintf(stderr, "  -T PREFIX          Write temporary files to PREFIX.samtools.nnnn.nnnn.tmp.\n");
     fprintf(stderr, "  -d INT             Optical distance (if set, marks with dt tag)\n");
     fprintf(stderr, "  -c                 Clear previous duplicate settings and tags.\n");
@@ -2045,6 +2239,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  --barcode-tag STR  Use barcode a tag that duplicates much match.\n");
     fprintf(stderr, "  --barcode-name     Use the UMI/barcode in the read name (eigth colon delimited part).\n");
     fprintf(stderr, "  --barcode-rgx STR  Regex for barcode in the readname (alternative to --barcode-name).\n");
+    fprintf(stderr, "  --use-read-groups  Use the read group tags in duplicate matching.\n");
     fprintf(stderr, "  -t                 Mark primary duplicates with the name of the original in a \'do\' tag."
                                         " Mainly for information and debugging.\n");
 
@@ -2059,7 +2254,7 @@ static int markdup_usage(void) {
 
 int bam_markdup(int argc, char **argv) {
     int c, ret, bc_name = 0;
-    char wmode[4] = {'w', 'b', 0, 0};
+    char wmode[4] = {'w', 0, 0, 0};
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
     kstring_t tmpprefix = {0, 0, NULL};
@@ -2068,7 +2263,7 @@ int bam_markdup(int argc, char **argv) {
     char *regex = NULL, *bc_regex = NULL;
     char *regex_order = "txy";
     md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL};
+                        1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL, 0, 0};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -2081,6 +2276,8 @@ int bam_markdup(int argc, char **argv) {
         {"barcode-tag", required_argument, NULL, 1006},
         {"barcode-name", no_argument, NULL, 1007},
         {"barcode-rgx", required_argument, NULL, 1008},
+        {"use-read-groups", no_argument, NULL, 1009},
+        {"json", no_argument, NULL, 1010},
         {NULL, 0, NULL, 0}
     };
 
@@ -2101,12 +2298,12 @@ int bam_markdup(int argc, char **argv) {
                 } else if (strcmp(optarg, "s") == 0) {
                     param.mode = MD_MODE_SEQUENCE;
                 } else {
-                    fprintf(stderr, "[markdup] error: unknown mode '%s'.\n", optarg);
+                    print_error("markdup", "error, unknown mode '%s'.\n", optarg);
                     return markdup_usage();
                 }
 
                 break;
-            case 'u': wmode[2] = '0'; break;
+            case 'u': wmode[1] = '0'; break;
             case 1001: param.include_fails = 1; break;
             case 1002: param.no_pg = 1; break;
             case 1003: param.check_chain = 0; break;
@@ -2115,6 +2312,8 @@ int bam_markdup(int argc, char **argv) {
             case 1006: param.barcode = optarg; break;
             case 1007: bc_name = 1; break;
             case 1008: bc_name = 1, bc_regex = optarg; break;
+            case 1009: param.read_groups = 1; break;
+            case 1010: param.json = 1; param.do_stats = 1; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
@@ -2125,7 +2324,7 @@ int bam_markdup(int argc, char **argv) {
         return markdup_usage();
 
     if (param.barcode && bc_name) {
-        fprintf(stderr, "[markdup] Error: cannot specify --barcode-tag and "
+        print_error("markdup", "error, cannot specify --barcode-tag and "
                         "--barcode-name (or --barcode-rgx) at same time.\n");
         return 1;
     }
@@ -2158,12 +2357,12 @@ int bam_markdup(int argc, char **argv) {
             param.rgx_y = 2;
             param.rgx_t = 0;
         } else {
-            fprintf(stderr, "[markdup] error:  could not recognise regex coordinate order \"%s\".\n", regex_order);
+            print_error("markdup", "error,  could not recognise regex coordinate order \"%s\".\n", regex_order);
             return 1;
         }
 
         if ((param.rgx = malloc(sizeof(regex_t))) == NULL) {
-            fprintf(stderr, "[markdup] error:  could not allocate memory for regex.\n");
+            print_error("markdup", "error,  could not allocate memory for regex.\n");
             return 1;
         }
 
@@ -2171,7 +2370,7 @@ int bam_markdup(int argc, char **argv) {
             char err_msg[256];
 
             regerror(result, param.rgx, err_msg, 256);
-            fprintf(stderr, "[markdup] error: regex error \"%s\"\n", err_msg);
+            print_error("markdup", "error, regex fail \"%s\"\n", err_msg);
             free(param.rgx);
             return 1;
         }
@@ -2182,10 +2381,10 @@ int bam_markdup(int argc, char **argv) {
 
         /* From Illumina UMI documentation: "The UMI sequence is located in the
            eighth colon-delimited field of the read name (QNAME)". */
-        char *rgx = "[0-9A-Za-z]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:([!-?A-~]+)";
+        char *rgx = "[0-9A-Za-z]+:[0-9A-Za-z]+:[0-9A-Za-z]+:[0-9A-Za-z]+:[0-9A-Za-z]+:[0-9A-Za-z]+:[0-9A-Za-z]+:([!-?A-~]+)";
 
         if ((param.bc_rgx = malloc(sizeof(regex_t))) == NULL) {
-            fprintf(stderr, "[markdup] error:  could not allocate memory for barcode regex.\n");
+            print_error("markdup", "error,  could not allocate memory for barcode regex.\n");
             return 1;
         }
 
@@ -2197,7 +2396,7 @@ int bam_markdup(int argc, char **argv) {
             char err_msg[256];
 
             regerror(result, param.bc_rgx, err_msg, 256);
-            fprintf(stderr, "[markdup] error: barcode regex error \"%s\"\n", err_msg);
+            print_error("markdup", "error, barcode regex fail \"%s\"\n", err_msg);
             free(param.bc_rgx);
             return 1;
         }
@@ -2206,21 +2405,22 @@ int bam_markdup(int argc, char **argv) {
     param.in = sam_open_format(argv[optind], "r", &ga.in);
 
     if (!param.in) {
-        print_error_errno("markdup", "failed to open \"%s\" for input", argv[optind]);
+        print_error_errno("markdup", "error, failed to open \"%s\" for input", argv[optind]);
         return 1;
     }
 
-    sam_open_mode(wmode + 1, argv[optind + 1], NULL);
+    strcat(wmode, "b"); // default if unknown suffix
+    sam_open_mode(wmode + strlen(wmode)-1, argv[optind + 1], NULL);
     param.out = sam_open_format(argv[optind + 1], wmode, &ga.out);
 
     if (!param.out) {
-        print_error_errno("markdup", "failed to open \"%s\" for output", argv[optind + 1]);
+        print_error_errno("markdup", "error, failed to open \"%s\" for output", argv[optind + 1]);
         return 1;
     }
 
     if (ga.nthreads > 0)  {
         if (!(p.pool = hts_tpool_init(ga.nthreads))) {
-            fprintf(stderr, "[markdup] error creating thread pool\n");
+            print_error("markdup", "error creating thread pool.\n");
             return 1;
         }
 
@@ -2256,7 +2456,7 @@ int bam_markdup(int argc, char **argv) {
     sam_close(param.in);
 
     if (sam_close(param.out) < 0) {
-        fprintf(stderr, "[markdup] error closing output file\n");
+        print_error("markdup", "error closing output file.\n");
         ret = 1;
     }
 

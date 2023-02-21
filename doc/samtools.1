@@ -1,5 +1,5 @@
 '\" t
-.TH samtools 1 "2 September 2022" "samtools-1.16.1" "Bioinformatics tools"
+.TH samtools 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
@@ -61,6 +61,8 @@ samtools consensus -o out.fasta in.bam
 .PP
 samtools coverage aln.sorted.bam
 .PP
+samtools cram-size -v -o out.size in.cram
+.PP
 samtools depad input.bam
 .PP
 samtools depth aln.sorted.bam
@@ -102,6 +104,8 @@ samtools quickcheck in1.bam in2.cram
 samtools reference -o ref.fa in.cram
 .PP
 samtools reheader in.header.sam in.bam > out.bam
+.PP
+samtools reset -o /tmp/reset.bam processed.bam
 .PP
 samtools samples input.bam
 .PP
@@ -325,6 +329,17 @@ but doesn't make any guarantees about the order of read names between groups.
 
 The output from this command should be suitable for any operation that
 requires all reads from the same template to be grouped together.
+
+.TP \"-------- cram-size
+.B cram-size
+samtools cram-size
+.RI [ options ]
+.IR in.cram
+
+Produces a summary of CRAM block Content ID numbers and their
+associated Data Series stored within them.  Optionally a more detailed
+breakdown of how each data series is encoded per container may also be
+listed using the \fB-e\fR or \fB--encodings\fR option.
 
 .TP \"-------- idxstats
 .B idxstats
@@ -813,6 +828,26 @@ samtools samples
 
 Prints the samples from alignment files
 
+.TP 10 \"-------- reset
+.B reset
+samtools reset
+.RB [ -o
+.IR FILE ]
+.RB [ -x / --remove-tag
+.IR tag_list ]
+.RB [ --keep-tag
+.IR tag_list ]
+.RB [  --reject-PG
+.IR pgid ]
+.RB [ --no-RG ]
+.RB [ --no-PG ]
+[...]
+
+Removes alignment information from records, producing an unaligned
+SAM, BAM or CRAM file.  Flags are reset, header tags are updated or
+removed as appropriate, and auxiliary tags are removed or retained as
+specified.  Note that the sort order is unchanged.
+
 .SH SAMTOOLS OPTIONS
 These are options that are passed after the \fBsamtools\fR command,
 before any sub-command is specified.
@@ -839,8 +874,8 @@ Several long-options are shared between multiple samtools sub-commands:
 \fB--input-fmt\fR, \fB--input-fmt-option\fR, \fB--output-fmt\fR,
 \fB--output-fmt-option\fR, \fB--reference\fR, \fB--write-index\fR,
 and \fB--verbosity\fR.
-The input format is typically auto-detected so specifying the format
-is usually unnecessary and the option is included for completeness.
+The input format is auto-detected and specifying the format
+is unnecessary, so this option is rarely offered.
 Note that not all subcommands have all options.  Consult the subcommand
 help for more details.
 .PP
@@ -1334,6 +1369,7 @@ for further authorship.
 .IR samtools-collate (1),
 .IR samtools-consensus (1),
 .IR samtools-coverage (1),
+.IR samtools-cram-size (1),
 .IR samtools-depad (1),
 .IR samtools-depth (1),
 .IR samtools-dict (1),
@@ -1355,6 +1391,7 @@ for further authorship.
 .IR samtools-quickcheck (1),
 .IR samtools-reference (1),
 .IR samtools-reheader (1),
+.IR samtools-reset (1),
 .IR samtools-rmdup (1),
 .IR samtools-sort (1),
 .IR samtools-split (1),
