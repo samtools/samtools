@@ -2243,6 +2243,7 @@ typedef struct {
     int error;
     int large_pos;
     int minimiser_kmer;
+    bool try_rev;
 } worker_t;
 
 // Returns 0 for success
@@ -2382,7 +2383,8 @@ err:
 }
 
 /*
- * Computes the minhash of a sequence using both forward and reverse strands.
+ * Computes the minhash of a sequence using forward strand and if requested
+ * reverse strand.
  *
  * This is used as a sort key for unmapped data, to collate like sequences
  * together and to improve compression ratio.
@@ -2390,10 +2392,9 @@ err:
  * The minhash is returned and *pos filled out with location of this hash
  * key in the sequence if pos != NULL.
  */
-static uint64_t minhash(bam1_t *b, int kmer, int *pos, int *rev) {
+static uint64_t minhash(bam1_t *b, int kmer, int *pos, int *rev, bool try_rev) {
     uint64_t hashf = 0, minhashf = UINT64_MAX;
-    uint64_t hashr = 0, minhashr = UINT64_MAX;
-    int minhashpf = 0, minhashpr = 0, i;
+    int minhashpf = 0, i;
     uint64_t mask = (1L<<(2*kmer))-1;
     unsigned char *seq = bam_get_seq(b);
     int len = b->core.l_qseq;
@@ -2417,32 +2418,42 @@ static uint64_t minhash(bam1_t *b, int kmer, int *pos, int *rev) {
     for (i = 0; i < kmer-1 && i < len; i++) {
         int base = bam_seqi(seq, i);
         hashf = (hashf<<2) | L[base];
-        hashr = (hashr>>2) | R[base];
     }
 
     // Loop to find minimum
     for (; i < len; i++) {
         int base = bam_seqi(seq, i);
-
         hashf = ((hashf<<2) | L[base]) & mask;
-        hashr =  (hashr>>2) | R[base];
-
         if (minhashf > (hashf^XOR))
             minhashf = (hashf^XOR), minhashpf = i;
-        if (minhashr > (hashr^XOR))
-            minhashr = (hashr^XOR), minhashpr = len-i+kmer-2;
-
     }
 
-    if (minhashf <= minhashr) {
-        if (rev) *rev = 0;
-        if (pos) *pos = minhashpf;
-        return minhashf;
-    } else {
-        if (rev) *rev = 1;
-        if (pos) *pos = minhashpr;
-        return minhashr;
+    // Same as above for the reverse strand
+    if (try_rev) {
+        uint64_t hashr = 0, minhashr = UINT64_MAX;
+        int minhashpr = 0;
+
+        for (i = 0; i < kmer-1 && i < len; i++) {
+            int base = bam_seqi(seq, i);
+            hashr = (hashr>>2) | R[base];
+        }
+        for (; i < len; i++) {
+            int base = bam_seqi(seq, i);
+            hashr =  (hashr>>2) | R[base];
+            if (minhashr > (hashr^XOR))
+                minhashr = (hashr^XOR), minhashpr = len-i+kmer-2;
+        }
+
+        if (minhashr < minhashf) {
+            if (rev) *rev = 1;
+            if (pos) *pos = minhashpr;
+            return minhashr;
+        }
     }
+
+    if (rev) *rev = 0;
+    if (pos) *pos = minhashpf;
+    return minhashf;
 }
 
 //--- Start of candidates to punt to htslib
@@ -2556,7 +2567,7 @@ static inline void worker_minhash(worker_t *w) {
             continue;
 
         int pos = 0, rev = 0;
-        uint64_t mh = minhash(b, w->minimiser_kmer, &pos, &rev);
+        uint64_t mh = minhash(b, w->minimiser_kmer, &pos, &rev, w->try_rev);
         if (rev)
             reverse_complement(b);
 
@@ -2595,7 +2606,7 @@ static void *worker(void *data)
 
 static int sort_blocks(size_t k, bam1_tag *buf, const sam_hdr_t *h,
                        int n_threads, buf_region *in_mem,
-                       int large_pos, int minimiser_kmer)
+                       int large_pos, int minimiser_kmer, bool try_rev)
 {
     int i;
     size_t pos, rest;
@@ -2619,6 +2630,7 @@ static int sort_blocks(size_t k, bam1_tag *buf, const sam_hdr_t *h,
         w[i].h = h;
         w[i].large_pos = large_pos;
         w[i].minimiser_kmer = minimiser_kmer;
+        w[i].try_rev = try_rev;
         in_mem[i].from = pos;
         in_mem[i].to = pos + w[i].buf_len;
         pos += w[i].buf_len; rest -= w[i].buf_len;
@@ -2700,6 +2712,7 @@ static khash_t(const_c2c) * lookup_libraries(sam_hdr_t *header)
   @param  sam_order the order in which the sort should occur
   @param  sort_tag  the tag to use if sorting by Tag
   @param  minimiser_kmer the kmer size when sorting by MinHash
+  @param  try_rev  try reverse strand when sorting by MinHash
   @param  fn       name of the file to be sorted
   @param  prefix   prefix of the temporary files (prefix.NNNN.bam are written)
   @param  fnout    name of the final output file to be written
@@ -2717,7 +2730,7 @@ static khash_t(const_c2c) * lookup_libraries(sam_hdr_t *header)
   NOT thread safe.
  */
 int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
-                      const char *fn, const char *prefix,
+                      bool try_rev, const char *fn, const char *prefix,
                       const char *fnout, const char *modeout,
                       size_t _max_mem, int n_threads,
                       const htsFormat *in_fmt, const htsFormat *out_fmt,
@@ -2958,7 +2971,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
                 goto err;
 
             int sort_res = sort_blocks(k, buf, header, n_threads,
-                                       in_mem, large_pos, minimiser_kmer);
+                                       in_mem, large_pos, minimiser_kmer, try_rev);
             if (sort_res < 0)
                 goto err;
 
@@ -3031,7 +3044,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     // Sort last records
     if (k > 0) {
         num_in_mem = sort_blocks(k, buf, header, n_threads,
-                                 in_mem, large_pos, minimiser_kmer);
+                                 in_mem, large_pos, minimiser_kmer, try_rev);
         if (num_in_mem < 0) goto err;
     } else {
         num_in_mem = 0;
@@ -3109,7 +3122,7 @@ int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t ma
     sprintf(fnout, "%s.bam", prefix);
     SamOrder sam_order = is_by_qname ? QueryName : Coordinate;
     g_sam_order = sam_order;
-    ret = bam_sort_core_ext(sam_order, NULL, 0, fn, prefix, fnout, "wb", max_mem, 0, NULL, NULL, NULL, 1, 0);
+    ret = bam_sort_core_ext(sam_order, NULL, 0, false, fn, prefix, fnout, "wb", max_mem, 0, NULL, NULL, NULL, 1, 0);
     free(fnout);
     return ret;
 }
@@ -3124,6 +3137,7 @@ static void sort_usage(FILE *fp)
 "  -m INT     Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
 "  -M         Use minimiser for clustering unaligned/unplaced reads\n"
 "  -K INT     Kmer size to use for minimiser [20]\n"
+"  -R         Do not use reverse strand (only compatible with -M)\n"
 "  -n         Sort by read name (not compatible with samtools index command)\n"
 "  -t TAG     Sort by value of TAG. Uses position as secondary index (or read name if -n is set)\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"
@@ -3159,6 +3173,7 @@ int bam_sort(int argc, char *argv[])
     SamOrder sam_order = Coordinate;
     bool by_tag = false;
     int minimiser_kmer = 20;
+    bool try_rev = true;
     char* sort_tag = NULL, *arg_list = NULL;
     char *fnout = "-", modeout[12];
     kstring_t tmpprefix = { 0, 0, NULL };
@@ -3173,7 +3188,7 @@ int bam_sort(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "l:m:no:O:T:@:t:MK:u", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "l:m:no:O:T:@:t:MK:uR", lopts, NULL)) >= 0) {
         switch (c) {
         case 'o': fnout = optarg; o_seen = 1; break;
         case 'n': sam_order = QueryName; break;
@@ -3192,6 +3207,7 @@ int bam_sort(int argc, char *argv[])
         case   1: no_pg = 1; break;
         case   2: sam_order = TemplateCoordinate; break;
         case 'M': sam_order = MinHash; break;
+        case 'R': try_rev = false; break;
         case 'K':
             minimiser_kmer = atoi(optarg);
             if (minimiser_kmer < 1)
@@ -3263,7 +3279,7 @@ int bam_sort(int argc, char *argv[])
     }
 
     ret = bam_sort_core_ext(sam_order, sort_tag, (sam_order == MinHash) ? minimiser_kmer : 0,
-                            (nargs > 0) ? argv[optind] : "-",
+                            try_rev, (nargs > 0) ? argv[optind] : "-",
                             tmpprefix.s, fnout, modeout, max_mem, ga.nthreads,
                             &ga.in, &ga.out, arg_list, no_pg, ga.write_index);
     if (ret >= 0)
