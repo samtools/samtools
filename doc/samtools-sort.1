@@ -55,6 +55,7 @@ samtools sort
 .RB [ -M ]
 .RB [ -K
 .IR kmerLen ]
+.RB [ -R ]
 .RB [ -n ]
 .RB [ -t
 .IR tag ]
@@ -140,6 +141,9 @@ option.  Note data compressed in this manner may need to be name
 collated prior to conversion back to fastq.
 .IP
 Mapped sequences are sorted by chromosome and position.
+.TP
+.B "-R "
+Do not use reverse strand (only compatible with -M).
 .TP
 .B -n
 Sort by read names (i.e., the
