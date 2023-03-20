@@ -43,33 +43,14 @@ samtools sort \- sorts SAM/BAM/CRAM files
 .
 .SH SYNOPSIS
 samtools sort
-.RB [ -l
-.IR level ]
-.RB [ -u ]
-.RB [ -m
-.IR maxMem ]
-.RB [ -o
-.IR out.bam ]
-.RB [ -O
-.IR format ]
-.RB [ -M ]
-.RB [ -K
-.IR kmerLen ]
-.RB [ -R ]
-.RB [ -n ]
-.RB [ -t
-.IR tag ]
-.RB [ -T
-.IR tmpprefix ]
-.RB [ -@
-.IR threads "] [" in.sam | in.bam | in.cram ]
+.RI [ options ]
+.RI "[" in.sam | in.bam | in.cram "]"
 
 .SH DESCRIPTION
 .PP
-Sort alignments by leftmost coordinates, or by read name when
-.B -n
-is used.
-An appropriate
+Sort alignments by leftmost coordinates, by read name when \fB-n\fR
+is used, by tag contents with \fB-t\fR, or a minimiser-based collation
+order with \fB-M\fR.  An appropriate
 .B @HD-SO
 sort order header tag will be added or an existing one updated if necessary.
 
@@ -93,19 +74,19 @@ instead if you need name collated data without a full lexicographical sort.
 Note that if the sorted output file is to be indexed with
 .BR "samtools index" ,
 the default coordinate sort must be used.
-Thus the
-.B -n
-and
-.B -t
-options are incompatible with
+Thus the \fB-n\fR, \fB-t\fR and \fB-M\fR options are incompatible with
 .BR "samtools index" .
+
+When sorting by minimisier (\fB-M\fR), the sort order is defined by
+the whole-read minimiser value and the offset into the read that this
+minimiser was observed.  This produces small clusters (contig-like,
+but unaligned) and helps to improve compression with LZ algorithms.
+This can be improved by supplying a known reference to build a
+minimiser index (\fB-I\fR and \fB-w\fR options).
 
 .SH OPTIONS
 
 .TP 11
-.BI "-K " INT
-Sets the kmer size to be used in the \fB-M\fR option. [20]
-.TP
 .BI "-l " INT
 Set the desired compression level for the final output file, ranging from 0
 (uncompressed) or 1 (fastest but minimal compression) to 9 (best compression
@@ -131,6 +112,15 @@ suffix.
 To prevent sort from creating a huge number of temporary files, it enforces a
 minimum value of 1M for this setting.
 .TP
+.B -n
+Sort by read names (i.e., the
+.B QNAME
+field) rather than by chromosomal coordinates.
+.TP
+.BI "-t " TAG
+Sort first by the value in the alignment tag TAG, then by position or name (if
+also using \fB-n\fP).
+.TP
 .B "-M "
 Sort unmapped reads (those in chromosome "*") by their sequence
 minimiser (Schleimer et al., 2003; Roberts et al., 2004), also reverse
@@ -145,14 +135,23 @@ Mapped sequences are sorted by chromosome and position.
 .B "-R "
 Do not use reverse strand with minimiser sort (only compatible with -M).
 .TP
-.B -n
-Sort by read names (i.e., the
-.B QNAME
-field) rather than by chromosomal coordinates.
+.BI "-K " INT
+Sets the kmer size to be used in the \fB-M\fR option. [20]
 .TP
-.BI "-t " TAG
-Sort first by the value in the alignment tag TAG, then by position or name (if
-also using \fB-n\fP).
+.BI "-I " FILE
+Build a minimiser index over \fIFILE\fR.  The per-read minimisers
+produced by \fB-M\fR are no longer sorted by their numeric value, but
+by the reference coordinate this minimiser was found to come from (if
+found in the index).  This further improves compression due to
+improved sequence similarity between sequences, albeit with a small
+CPU cost of building and querying the index.  Specifying \fB-I\fR
+automatically implies \fB-M\fR.
+.TP
+.BI "-w " INT
+Specifies the window size for building the minimiser index on the file
+specified in \fB-I\fR.  This defaults to 100.  It may be better to set
+this closer to 50 for short-read data sets (at a higher CPU and
+memory cost), or for more speed up to 1000 for long-read data sets.
 .TP
 .BI "-o " FILE
 Write the final sorted output to
