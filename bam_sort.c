@@ -1783,7 +1783,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
                             htsThreadPool *htspool,
                             const char *cmd, const htsFormat *in_fmt,
                             const htsFormat *out_fmt, char *arg_list, int no_pg,
-                            int write_index) {
+                            int write_index, int final_out) {
     samFile *fpout = NULL, **fp = NULL;
     heap1_t *heap = NULL;
     uint64_t idx = 0;
@@ -1884,7 +1884,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
     ks_heapmake(heap, heap_size, heap);
     while (heap->pos != HEAP_EMPTY) {
         bam1_t *b = heap->entry.bam_record;
-        if (g_sam_order == MinHash && b->core.tid == -1) {
+        if (g_sam_order == MinHash && b->core.tid == -1 && final_out) {
             // Remove the cached minhash value
             b->core.pos = -1;
             b->core.mpos = -1;
@@ -3001,7 +3001,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
                                      &fns[consolidate_from], n_threads,
                                      in_mem, buf, keys,
                                      lib_lookup, &htspool, "sort", NULL, NULL,
-                                     NULL, 1, 0) >= 0) {
+                                     NULL, 1, 0, 0) >= 0) {
                     merge_res = 0;
                     break;
                 }
@@ -3073,7 +3073,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         if (bam_merge_simple(sam_order, sort_by_tag, fnout, modeout, header,
                              n_files, fns, num_in_mem, in_mem, buf, keys,
                              lib_lookup, &htspool, "sort", in_fmt, out_fmt,
-                             arg_list, no_pg, write_index) < 0) {
+                             arg_list, no_pg, write_index, 1) < 0) {
             // Propagate bam_merge_simple() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
             goto err;
