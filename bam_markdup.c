@@ -2066,6 +2066,10 @@ static int bam_mark_duplicates(md_param_t *param) {
             }
 
             if (!param->remove_dups || !(b->core.flag & BAM_FDUP)) {
+                if (param->sr && (b->core.flag & BAM_FDUP)) {
+                    uint8_t* data = bam_aux_get(b, "sr");
+                    if(data) bam_aux_del(b, data);
+                }
                 if (sam_write1(param->out, header, b) < 0) {
                     print_error("markdup", "error, writing final output failed.\n");
                     goto fail;
