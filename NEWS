@@ -1,8 +1,548 @@
 Release a.b
 -----------
 
+Release 1.17 (21st February 2023)
+---------------------------------
+
+New work and changes:
+
+* New samtools reset subcommand.  Removes alignment information.  Alignment
+  location, CIGAR, mate mapping and flags are updated. If the alignment was in
+  reverse direction, sequence and its quality values are reversed and
+  complemented and the reverse flag is reset.  Supplementary and secondary
+  alignment data are discarded.
+  (PR#1767, implements #1682. Requested by dkj)
+
+* New samtools cram-size subcommand.  It writes out metrics about a CRAM file
+  reporting aggregate sizes per block "Content ID" fields, the data-series
+  contained within them, and the compression methods used.
+  (PR#1777)
+
+* Added a --sanitize option to fixmate and view.  This performs some sanity
+  checks on the state of SAM record fields, fixing up common mistakes made by
+  aligners.
+  (PR#1698)
+
+* Permit 1 thread with samtools view.  All other subcommands already allow this
+  and it does provide a modest speed increase.
+  (PR#1755, fixes #1743. Reported by Goran Vinterhalter)
+
+* Add CRAM_OPT_REQUIRED_FIELDS option for view -c.  This is a big speed up for
+  CRAM (maybe 5-fold), but it depends on which filtering options are being used.
+  (PR#1776, fixes #1775. Reported by Chang Y)
+
+* New filtering options in samtools depth.  The new --excl-flags option is a
+  synonym for -G, with --incl-flags and --require-flags added to match view
+  logic.
+  (PR#1718, fixes #1702. Reported by Dario Beraldi)
+
+* Speed up calmd's slow handling of non-position-sorted data by adding caching.
+  This uses more memory but is only activated when needed.
+  (PR#1723, fixes #1595. Reported by lxwgcool)
+
+* Improve samtools consensus for platforms with instrument specific profiles,
+  considerably helping for data with very different indel error models and
+  providing base quality recalibration tables. On PacBio HiFi, ONT and 
+  Ultima Genomics consensus qualities are also redistributed within homopolymers
+  and the likelihood of nearby indel errors is raised.
+  (PR#1721, PR#1733)
+
+* Consensus --mark-ins option.  This permits he consensus output to include a
+  markup indicating the next base is an insertion. This is necessary as we need
+  a way of outputting both consensus and also how that consensus marries up with
+  the reference coordinates.
+  (PR#1746)
+
+* Make faidx/fqidx output line length default to the input line length.
+  (PR#1738, fixes #1734. Reported by John Marshall)
+
+* Speed up optical duplicate checking where data has a lot of duplicates
+  compared to non-duplicates.
+  (PR#1779, fixes #1771. Reported by Poshi)
+
+* For collate use TMPDIR environment variable, when looking for a temporary
+  folder.
+  (PR#1782, based on PR#1178 and fixes #1172.  Reported by Martin Pollard)
+
+Bug Fixes:
+
+* Fix stats breakage on long deletions when given a reference.
+  (PR#1712, fixes #1707. Reported by John Didion)
+
+* In ampliconclip, stop hard clipping from wrongly removing entire reads.
+  (PR#1722, fixes #1717. Reported by Kevin Xu)
+
+* Fix bug in ampliconstats where references mentioned in the input file headers
+  but not in the bed file would cause it to complain that the SAM headers were
+  inconsistent.
+  (PR#1727, fixes #1650. Reported by jPontix)
+
+* Fixed SEGV in samtools collate when no filename given.
+  (PR#1724)
+
+* Changed the default UMI barcode regex in markdup.  The old regex was too
+  restrictive.  This version will at least allow the default read name UMI as
+  given in the Illumina example documentation.
+  (PR#1737, fixes #1730. Reported by yloemie)
+
+* Fix samtools consensus buffer overrun with MD:Z handling.
+  (PR#1745, fixes #1744. Reported by trilisser)
+
+* Fix a buffer read-overflow in mpileup and tview on sequences with seq "*".
+  (PR#1747)
+
+* Fix view -X command line parsing that was broken in 1.15.
+  (PR#1772, fixes #1720.  Reported by Francisco Rodríguez-Algarra
+  and Miguel Machado)
+
+* Stop samtools view -d from reporting meaningless system errors when
+  tag validation fails.
+  (PR#1796)
+
+Documentation:
+
+* Add a description of the samtools tview display layout to the man page.
+  Documents . vs , and upper vs lowercase. Adds a -s sample example, and
+  documents the -w option.
+  (PR#1765, fixes #1759. Reported by Lucas Ferreira da Silva)
+
+* Clarify intention of samtools fasta/q in man page and soft vs hard
+  clipping.
+  (PR#1794, fixes #1792. Reported by Ryan Lorig-Roach)
+
+* Minor fix to wording of mpileup --rf usage and man page.
+  (PR#1795, fixes #1791. Reported by Luka Pavageau)
+
+Non user-visible changes and build improvements:
+
+* Use POSIX grep in testing as egrep and fgrep are considered obsolete.
+  (PR#1726, thanks to David Seifert)
+
+* Switch MacOS CI tests to an ARM-based image.
+  (PR#1770)
+
+
+Release 1.16.1 (2nd September 2022)
+-----------------------------------
+
+Bug fixes:
+
+ * Fixed a bug with the template-coordinate sort which caused incorrect
+   ordering when using threads, or processing large files that don't
+   fit completely in memory.
+   (PR#1703, thanks to Nils Homer)
+
+ * Fixed a crash that occurred when trying to use `samtools merge` in
+   template-coordinate mode.
+   (PR#1705, thanks to Nils Homer)
+
+Release 1.16 (18th August 2022)
+-------------------------------
+
+New work and changes:
+
+ * samtools reference command added.  This subcommand extracts the embedded
+   reference out of a CRAM file.
+   (PR#1649, addresses #723.  Requested by Torsten Seemann)
+
+ * samtools import now adds grouped by query-name to the header.
+   (PR#1633, thanks to Nils Homer)
+
+ * Made samtools view read error messages more generic.  Former error message
+   would claim that there was a "truncated file or corrupt BAM index file" with
+   no real justification.  Also reset errno in stream_view which could lead to
+   confusing error messages.
+   (PR#1645, addresses some of the issues in #1640.  Reported by Jian-Guo Zhou)
+
+ * Make samtools view -p also clear mqual, tlen and cigar.
+   (PR#1647, fixes #1606.  Reported by eboyden)
+
+ * Add bedcov option -c to report read count.
+   (PR#1644, fixes #1629.  Reported by Natchaphon Rajudom)
+
+ * Add UMI/barcode handling to samtools markdup.
+   (PR#1630, fixes #1358 and #1514.  Reported by Gert Hulselmans and Poshi)
+
+ * Add a new template coordinate sort order to samtools sort and
+   samtools merge.  This is useful when working with unique molecular
+   identifiers (UMIs).
+   (PR#1605, fixes #1591.  Thanks to Nils Homer)
+
+ * Rename mpileup --ignore-overlaps to --ignore-overlaps-removal
+   or --disable-overlap-removal.  The previous name was ambiguous and was often
+   read as an option to enable removal of overlapping bases, while in reality
+   this is on by default and the option turns off the ability to remove
+   overlapping bases.
+   (PR#1666, fixes #1663.  Reported by yangdingyangding)
+
+ * The dict command can now read BWA's .alt file and add AH:* tags
+   indicating reference sequences that represent alternate loci.
+   (PR#1676.  Thanks to John Marshall)
+
+ * The "samtools index" command can now accept multiple alignment filenames
+   with the new -M option, and will index each of them separately. (Specifying
+   the output index filename via out.index or the new -o option is currently
+   only applicable when there is only one alignment file to be indexed.)
+   (PR#1674.  Reported by Abigail Ramsøe and Nicola Romanò.
+    Thanks to John Marshall)
+
+ * Allow samtools fastq -T "*".
+   This allows all tags from SAM records to be written to fastq headers. This is
+   a counterpart to samtools import -T "*".
+   (PR#1679.  Thanks to cjw85)
+
+Bug Fixes:
+
+ * Re-enable --reference option for samtools depth.  The reference is not used
+   but this makes the command line usage compatible with older releases.
+   (PR#1646, fixes #1643.  Reported by Randy Harr)
+
+ * Fix regex coordinate bug in samtools markdup.
+   (PR#1657, fixes #1642.  Reported by Randy Harr)
+
+ * Fix divide by zero in plot-bamstats -m, on unmapped data.
+   (PR#1678, fixes #1675.  Thanks to Shane McCarthy)
+
+ * Fix missing RG headers when using samtools merge -r.
+   (PR#1683, addresses htslib#1479.  Reported by Alex Leonard)
+
+ * Fix a possible unaligned access in samtools reference.
+   (PR#1696)
+
+Documentation:
+
+ * Add documentation on CRAM compression profiles and some of the newer options
+   that appear in CRAM 3.1 and above.
+   (PR#1659, fixes #1656.  Reported by Matthias De Smet)
+
+ * Add "sclen" filter expression keyword documentation.
+   (PR#1661, see also htslib#1441)
+
+ * Extend FILTER EXPRESSION man page section to match the changes made in
+   HTSlib.
+   (PR#1687, samtools/htslib#1478)
+
+Non user-visible changes and build improvements:
+
+ * Ensure generated test files are ignored (by git) and cleaned (by make
+   testclean)
+   (PR#1692, Thanks to John Marshall)
+
+Release 1.15.1 (7th April 2022)
+-------------------------------
+
+Bug fixes:
+
+ * A bug which prevented the samtools view --region-file (and the
+   equivalent -M -L <file>) options from working in version 1.15 has
+   been fixed. (#1617)
+
+ * Fixed a crash triggered by using the samtools view -c/--count and --unmap
+   options together.  The --unmap option is now ignored in counting mode.
+   (#1619)
+
+Documentation:
+
+ * The consensus command was missing from the main samtools.1 manual page.
+   It has now been added. (#1603)
+
+ * Corrected instructions for reproducing the samtools stats "raw total
+   sequences" count using samtools view -c. (#1620; reported by @krukanna)
+
+ * Improved manual page formatting.  (#1625; thanks to John Marshall)
+
+Non user-visible changes and build improvements:
+
+ * Unnecessary #include lines have been removed from bam_plcmd.c. (#1607;
+   thanks to John Marshall)
+
+Release 1.15 (21st February 2022)
+---------------------------------
+
+Notice:
+
+ * Samtools mpileup VCF and BCF output (deprecated in release 1.9) has been
+   removed.  Please use bcftools mpileup instead.
+
+New work and changes:
+
+ * Added "--min-BQ" and "--min-MQ" options to "depth". These match the
+   equivalent long options found in "samtools mpileup" and gives a consistent
+   way of specifying the base and mapping quality filters.
+   (#1584; fixes #1580. Reported by Chang Y)
+
+ * Improved automatic file type detection with "view -u" or "view -1".  Setting
+   either of these options would default to BAM format regardless of the usual
+   automatic file type selection based on the file name.  The defaults are now
+   only used when the file name does not indicate otherwise.
+   (#1582)
+
+ * For "markdup" optical duplicate marking add regex options for custom
+   coordinates.  For the case of non standard read names (QNAME), add options
+   to read the coordinates and, optionally, another part of the string to test
+   for optical duplication.
+   (#1558)
+
+ * New "samtools consensus" subcommand for generating consensus from SAM, BAM or
+   CRAM files based on the contents of the alignment records.  The consensus is
+   written as FASTA, FASTQ or as a pileup oriented format.  The default
+   FASTA/FASTQ output includes one base per non-gap consensus, with insertions
+   with respect to the aligned reference being included and deletions removed.
+   This could be used to compute a new reference from sequence assemblies to
+   realign against.
+   (#1557)
+
+ * New "samtools view --fetch-pairs" option.  This options retrieves pairs even
+   when the mate is outside of the requested region.  Using this option enables
+   the multi-region iterator and a region to search must be specified.  The
+   input file must be an indexed regular file.
+   (#1542)
+
+ * Building on #1530 below, add a tview reflist for Goto.
+   (#1539, thanks to Adam Blanchet)
+
+ * Completion of references added to tview Goto.
+   (#1530; thanks to Adam Blanchet)
+
+ * New "samtools head" subcommand for conveniently displaying the headers
+   of a SAM, BAM, or CRAM file. Without options, this is equivalent to
+   `samtools view --header-only --no-PG` but more succinct and memorable.
+   (#1517; thanks to John Marshall)
+
+Bug Fixes:
+ * Free memory when stats fails to read the header of a file.
+   (#1592; thanks to Mathias Schmitt)
+
+ * Fixed empty field on unsupported aux tags in "mpileup --output-extra".
+   Replaces the empty fields on unsupported aux tags with a '*'.
+   (#1553; fixes #1544. Thanks to Adam Blanchet)
+
+ * In mpileup, the --output-BP-5 and --output-BP are no longer mutually
+   exclusive.  This fixes the problem of output columns being switched.
+   (#1540; fixes 1534.  Reported by Konstantin Riege)
+
+ * Fix for hardclip bug in ampliconclip.  Odd length sequences resulted in
+   random characters appearing in sequence.
+   (#1538; fixes #1527. Reported by Ivana Mihalek)
+
+Documentation:
+
+ * Improved mpileup documentation.
+   (#1566; fixes #1564.  Reported by Chang Y)
+
+ * Fixed "samtools depth -J" documentation, which was reversed.
+   (#1552; fixes #1549.  Reported by Stephan Hutter)
+
+ * Numerous minor man page fixes.
+   (#1528, #1536, #1579, #1590.  Thanks to John Marshall for some of these)
+
+Non user-visible changes and build improvements:
+
+ * Replace CentOS test build with Rocky Linux.  The CentOS Docker images that
+   our test build depended on has stopped working.  Switched to Rocky Linux as
+   the nearest available equivalent.
+   (#1589)
+
+ * Fix missing autotools on Appveyor.  Newer versions of msys2 removed autotools
+   from their base-devel package.  This is putting them back.
+   (#1575)
+
+ * Fixed bug detected by clang-13 with -Wformat-security.
+   (#1553)
+
+ * Switch to using splaysort in bam_lpileup.  Improves speed and efficiency in
+   "tview".
+   (#1548; thanks to Adam Blanchet)
+
+
+Release 1.14 (22nd October 2021)
+--------------------------------
+
+Notice:
+
+ * Samtools mpileup VCF and BCF output (deprecated in release 1.9)
+   will be removed in the next release.  Please use bcftools mpileup
+   instead.
+
+New work and changes:
+
+ * The legacy samtools API (libbam.a, bam_endian.h, sam.h and most of
+   bam.h) has been removed.  We recommend coding against the HTSlib
+   API directly. The legacy API had not been actively maintained since
+   2015. (#1483)
+
+ * New "samtools samples" command to list the samples used in a
+   SAM/BAM/CRAM file. (#1432; thanks to Pierre Lindenbaum)
+
+ * "mpileup" now supports base modifications via the SAM Mm/MM
+   auxiliary tag.  Please see the "--output-mods" option. (#1311)
+
+ * Added "mpileup --output-BP-5" option to output the BP field in 5'
+   to 3' order instead of left to right. (#1484; fixes #1481)
+
+ * Added "samtools view --rf" option as an additional FLAG filtering
+   method.  This keeps records only if (FLAG & N) != 0. (#1508; fixes
+   #1470)
+
+ * New "samtools import -N" option to use the second word on a FASTQ
+   header line, matching the SRA/ENA FASTQ variant. (#1485)
+
+ * Improve "view -x" option to simplify specifying multiple tags, and
+   added the reverse "--keep-tag" option to include rather than
+   exclude. (#516)
+
+ * Switched the processing order of "view" -x (tag filtering) and -e
+   (expression) handling.  Expressions now happen first so we can
+   filter on tags which are about to be deleted.  This is now
+   consistent with the "view -d" behaviour too. (#1480; fixes
+   #1476. Reported by William Rowell)
+
+ * Added filter expression "endpos" keyword. (#1464.  Thanks to
+   John Marshall)
+
+ * "samtools view" errors now appear after any SAM output, improving
+   their visibility. (#1490.  Thanks to John Marshall)
+
+ * Improved "samtools sort" use of temporary files, both tidying up
+   if it fails and recovery when facing pre-existing temporary files.
+   (#1510; fixes #1035, #1503.  Reported by Vivek Rai and
+   Maarten Kooyman)
+
+ * Filtering in "samtools markdup" now sets the UNMAP BAM flag when
+   given the "-p" option. (#1512; fixes #1469)
+
+ * Make CRAM references shared during "samtools merge" so merging many
+   files has a lower memory usage. (#471)
+
+Bug fixes:
+
+ * Prevent "samtools depth" from closing stdout when outputting to
+   terminal, avoiding a bad interaction with PySam. (#1465.  Thanks
+   to John Marshall)
+
+ * In-place "samtools reheader" now works on CRAMs produced using a
+   higher than default compression level. (#1479)
+
+ * Fix setting of the dt tag in "markdup".  Optical duplicates were
+   being marked too early, negating the tagging and counting elsewhere.
+   (#1487; fixes #1486.  Reported by Kevin Lewis)
+
+ * Reinstate the "samtools stats -I" option to filter by sample.
+   (#1496; fixes #1489.  Reported by Matthias Bernt)
+
+ * Fix "samtools fastq" handling of dual index tags on single-ended
+   input. (#1474)
+
+ * Improve "samtools coverage" documentation. (#1521; fixes #1504.
+   Reported by Peter Menzel)
+
+Non user-visible changes and build improvements:
+
+ * Replace Curses mvprintw() with va_list-based
+   equivalent. (#1509. Thanks to John Marshall and Andreas Tille)
+
+ * Fixed some clang-13 warning messages. (#1506)
+
+ * Improve quoting of options in "samtools import" tests. (#1466.
+   Thanks to John Marshall)
+
+ * Fixed a faulty test which caused test harness failures on NetBSD. (#1520)
+
+Release 1.13 (7th July 2021)
+----------------------------
+
+ * Fixed samtools view FILE REGION, mpileup -r REGION, coverage -r REGION and
+   other region queries: fixed bug introduced in 1.12, which led to region
+   queries producing very few reads for some queries (especially for larger
+   target regions) when unmapped reads were present.
+   Thanks to @vinimfava (#1451), @JingGuo1997 (#1457) and Ramprasad Neethiraj
+   (#1460) for reporting the respective issues.
+
+ * Added options to set and clear flags to samtools view.  Along with the
+   existing remove aux tags this gives the ability to remove mark duplicate
+   changes (part of #1358)
+   (#1441)
+
+ * samtools view now has long option equivalents for most of its single-letter
+   options. Thanks to John Marshall.
+   (#1442)
+
+ * A new tool, samtools import, has been added.  It reads one or more FASTQ
+   files and converts them into unmapped SAM, BAM or CRAM.
+   (#1323)
+
+ * Fixed samtools coverage error message when the target region name is not
+   present in the file header. Thanks to @Lyn16 for reporting it.
+   (#1462; fixes #1461)
+
+ * Made samtools coverage ASCII mode produce true ASCII output.  Previously it
+   would produce UTF-8 characters.
+   (#1423; fixes #1419)
+
+ * samtools coverage now allows setting the maximum depth, using the -d/--depth
+   option. Also, the default maximum depth has been set to 1000000.
+   (#1415; fixes #1395)
+
+ * Complete rewrite of samtools depth.  This means it is now considerably faster
+   and does not need a depth limit to avoid high memory usage.  Results should
+   mostly be the same as the old command with the potential exception of overlap
+   removal.
+   (#1428; fixes #889, helps ameliorate #1411)
+
  * samtools flags now accepts any number of command line arguments,
-   allowing multiple SAM flag combinations to be converted at once. (PR #1401)
+   allowing multiple SAM flag combinations to be converted at once.  Thanks to
+   John Marshall.
+   (#1401, fixes #749)
+
+ * samtools ampliconclip, ampliconstats and plot-ampliconstats now support
+   inputs that list more than one reference.
+   (#1410 and #1417; fixes #1396 and #1418)
+
+ * samtools ampliconclip now accepts the --tolerance option, which allows the
+   user to set the number of bases within which a region is matched.  The
+   default is 5.
+   (#1456)
+
+ * Updated the documentation on samtools ampliconclip to be clearer about what
+   it does.  From a suggestion by Nathan S Watson-Haigh.
+   (#1448)
+
+ * Fixed negative depth values in ampliconstats output.
+   (#1400)
+
+ * samtools addreplacerg now allows for updating (replacing) an existing
+   `@RG` line in the output header, if a new `@RG` line is provided in the
+   command line, via the -r argument. The update still requires the user's
+   approval, which can be given with the new -w option.  Thanks to Chuang Yu.
+   (#1404)
+
+ * Stopped samtools cat from outputting multiple CRAM EOF markers.
+   (#1422)
+
+ * Three new counts have been added to samtools flagstat: primary, mapped
+   primary and duplicate primary.
+   (#1431; fixes #1382)
+
+ * samtools merge now accepts a `-o FILE` option specifying the output file,
+   similarly to most other subcommands. The existing way of specifying it
+   (as the first non-option argument, alongside the input file arguments)
+   remains supported. Thanks to David McGaughey and John Marshall.
+   (#1434)
+
+ * The way samtools merge checks for existing files has been changed
+   so that it does not hang when used on a named pipe.
+   (#1438; fixes #1437)
+
+ * Updated documentation on mpileup to highlight the fact that the filtering
+   options on FLAGs work with ANY rules.
+   (#1447; fixes #1435)
+
+ * samtools can now be configured to use a copy of HTSlib that has been set
+   up with separate build and source trees.  When this is the case, the
+   `--with-htslib` configure option should be given the location of the HTSlib
+   build tree.  (Note that samtools itself does not yet support out-of-tree
+   builds).  Thanks to John Marshall.
+   (#1427; companion change to samtools/htslib#1277)
 
 
 Release 1.12 (17th March 2021)
@@ -26,7 +566,7 @@ Release 1.12 (17th March 2021)
  * samtools stats now displays the number of supplementary reads in the
    SN section. Also, supplementary reads are no longer considered when
    splitting read pairs by orientation (inward, outward, other). (#1363)
-   
+
  * samtools stats now counts only the filtered alignments that overlap
    target regions, if any are specified. (#1363)
 
@@ -44,7 +584,7 @@ Release 1.12 (17th March 2021)
  * samtools view now works with the filtering expressions introduced by HTSlib.
    The filtering expression is passed to the program using the specific option
    -e or the global long option --input-fmt-option. E.g.
-   `samtools view -e 'qname =~ "#49$" && mrefid != refid && refid != -1 && 
+   `samtools view -e 'qname =~ "#49$" && mrefid != refid && refid != -1 &&
     mrefid != -1' align.bam` looks for records with query-name ending in `#49`
    that have their mate aligned in a different chromosome. More details can be
    found in the FILTER EXPRESSIONS section of the main man page. (#1346)
@@ -310,7 +850,7 @@ Changes affecting the whole of samtools, or multiple sub-commands:
    version 4 signatures are in use.  See HTSlib's NEWS file and
    htslib-s3-plugin manual page for more information.
 
- * HTSlib (and therefore SAMtools) no longer considers a zero-length
+ * HTSlib (and therefore SAMtools) no longer considers a zero-length empty
    file to be a valid SAM file.  This has been changed so that pipelines such
    as `somecmd | samtools ...` with `somecmd` aborting before outputting
    anything will now propagate the error to the second command.
@@ -635,13 +1175,13 @@ Release 1.8 (3rd April 2018)
  * In samtools depth `-d 0` will effectively remove the depth limit. (#764)
 
  * Improvements made to samtools collate's interface and documentation.  It is
-   now possible to specify an output file name using `-o`, instead of deriving  
+   now possible to specify an output file name using `-o`, instead of deriving
    it from the prefix used for temporary files.  The prefix itself is now
    optional if `-o` or `-O` (to stdout) is used. (#780)
 
  * Bug-fixes:
 
-   - Make samtools addreplacerg choose output format by file extension. (#767; 
+   - Make samtools addreplacerg choose output format by file extension. (#767;
      reported by Argy Megalios)
 
    - Merge tests now work on ungzipped data, allowing tests to be run against
@@ -679,7 +1219,7 @@ Release 1.7 (26th January 2018)
 
   - The BED filter (`-L` option) will use the index to skip through the file
   - Reads from overlapping regions will only be output once
-  
+
 * samtools bedcov will now ignore BED comment and header lines (#571; thanks
   to Daniel Baker).
 

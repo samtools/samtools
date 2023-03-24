@@ -16,8 +16,8 @@
 #
 #   Different checks occur depending on the --with-htslib argument given:
 #
-#   With --with-htslib=DIR, checks whether DIR is a source tree or contains
-#     a working installation.
+#   With --with-htslib=DIR, checks whether DIR is a source tree (including
+#     a separate build tree) or contains a working installation.
 #   By default, searches for a source tree (with a name matching htslib*)
 #     within or alongside $srcdir.  Produces AC_MSG_ERROR if there are
 #     several equally-likely candidates.  If there are none, checks for
@@ -43,14 +43,14 @@
 #
 # LICENSE
 #
-#   Copyright (C) 2015,2017 Genome Research Ltd
+#   Copyright (C) 2015, 2017, 2021 Genome Research Ltd
 #
 #   Copying and distribution of this file, with or without modification, are
 #   permitted in any medium without royalty provided the copyright notice
 #   and this notice are preserved.  This file is offered as-is, without any
 #   warranty.
 
-#serial 1
+#serial 3
 
 AC_DEFUN([AX_WITH_HTSLIB],
 [AC_ARG_WITH([htslib],
@@ -105,6 +105,8 @@ system) ax_cv_htslib_which=system ;;
   HTSDIR=$with_htslib
   if test -f "$HTSDIR/hts.c" && test -f "$HTSDIR/htslib/hts.h"; then
     ax_cv_htslib_which=source
+  elif test -f "$HTSDIR/htslib_vars.mk"; then
+    ax_cv_htslib_which=build
   else
     ax_cv_htslib_which=install
   fi
@@ -120,6 +122,15 @@ source)
     # We can't use a literal, because $HTSDIR is user-provided and variable
     AC_CONFIG_SUBDIRS($HTSDIR)
   fi
+  ;;
+build)
+  ax_cv_htslib=yes
+  ax_cv_htslib_which=source
+  # Ensure this is fully expanded, as the caller might not be using @HTSDIR@
+  HTSSRCDIR=$(sed -n 's:\$(HTSDIR):'$HTSDIR':
+                      s/^HTSSRCDIR *= *//p' "$HTSDIR/htslib_vars.mk")
+  HTSLIB_CPPFLAGS="-I$HTSSRCDIR"
+  HTSLIB_LDFLAGS="-L$HTSDIR"
   ;;
 system)
   AC_CHECK_HEADER([htslib/sam.h],

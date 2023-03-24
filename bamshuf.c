@@ -1,7 +1,7 @@
 /*  bamshuf.c -- collate subcommand.
 
     Copyright (C) 2012 Broad Institute.
-    Copyright (C) 2013, 2015-2019 Genome Research Ltd.
+    Copyright (C) 2013, 2015-2019,2023 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -201,7 +201,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
 
     // Read input, distribute reads pseudo-randomly into n_files temporary
     // files.
-    fp = sam_open_format(fn, "r", &ga->in);
+    fp = sam_open_format(fn ? fn : "-", "r", &ga->in);
     if (fp == NULL) {
         print_error_errno("collate", "Cannot open input file \"%s\"", fn);
         return 1;
@@ -527,15 +527,17 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
 
 static int usage(FILE *fp, int n_files, int reads_store) {
     fprintf(fp,
-            "Usage: samtools collate [-Ou] [-o <name>] [-n nFiles] [-l cLevel] <in.bam> [<prefix>]\n\n"
+            "Usage: samtools collate [options...] <in.bam> [<prefix>]\n\n"
             "Options:\n"
-            "      -O       output to stdout\n"
-            "      -o       output file name (use prefix if not set)\n"
-            "      -u       uncompressed BAM output\n"
-            "      -f       fast (only primary alignments)\n"
-            "      -r       working reads stored (with -f) [%d]\n" // reads_store
-            "      -l INT   compression level [%d]\n" // DEF_CLEVEL
-            "      -n INT   number of temporary files [%d]\n" // n_files
+            "      -O       Output to stdout\n"
+            "      -o       Output file name (use prefix if not set)\n"
+            "      -u       Uncompressed BAM output\n"
+            "      -f       Fast (only primary alignments)\n"
+            "      -r       Working reads stored (with -f) [%d]\n" // reads_store
+            "      -l INT   Compression level [%d]\n" // DEF_CLEVEL
+            "      -n INT   Number of temporary files [%d]\n" // n_files
+            "      -T PREFIX\n"
+            "               Write tempory files to PREFIX.nnnn.bam\n"
             "      --no-PG  do not add a PG line\n",
             reads_store, DEF_CLEVEL, n_files);
 
@@ -546,9 +548,21 @@ static int usage(FILE *fp, int n_files, int reads_store) {
     return 1;
 }
 
-char * generate_prefix() {
+char *generate_prefix(const char *out_fn) {
     char *prefix;
     unsigned int pid = getpid();
+
+    if (out_fn && !(*out_fn == '-' && out_fn[1] == '\0')) {
+        // <out_fn>.<collate><pid>.<nnnn>.<bam>
+        size_t plen = strlen(out_fn) + 50;
+        if (!(prefix = malloc(plen))) {
+            perror("collate");
+            return NULL;
+        }
+        snprintf(prefix, plen, "%s.collate%x", out_fn, pid);
+        return prefix;
+    }
+
 #ifdef _WIN32
 #  define PREFIX_LEN (MAX_PATH + 16)
     DWORD ret;
@@ -567,13 +581,18 @@ char * generate_prefix() {
     snprintf(prefix + ret, PREFIX_LEN - ret, "\\%x", pid);
     return prefix;
 #else
-#  define PREFIX_LEN 64
-    prefix = malloc(PREFIX_LEN);
+    char *tmp_env = getenv("TMPDIR");
+    if (!tmp_env)
+        tmp_env = "/tmp";
+
+    size_t prefix_len = strlen(tmp_env)+20;
+    prefix = malloc(prefix_len);
     if (!prefix) {
         perror("collate");
         return NULL;
     }
-    snprintf(prefix, PREFIX_LEN, "/tmp/collate%x", pid);
+    snprintf(prefix, prefix_len, "%s/collate%x", tmp_env, pid);
+
     return prefix;
 #endif
 }
@@ -590,7 +609,7 @@ int main_bamshuf(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "n:l:uOo:@:fr:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "n:l:uOo:@:fr:T:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'n': n_files = atoi(optarg); break;
         case 'l': clevel = atoi(optarg); break;
@@ -599,6 +618,7 @@ int main_bamshuf(int argc, char *argv[])
         case 'o': output_file = optarg; break;
         case 'f': fast_coll = 1; break;
         case 'r': reads_store = atoi(optarg); break;
+        case 'T': prefix = optarg; break;
         case 1: no_pg = 1; break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
@@ -607,6 +627,12 @@ int main_bamshuf(int argc, char *argv[])
     }
     if (is_un) clevel = 0;
     if (argc >= optind + 2) prefix = argv[optind+1];
+    if (argc == optind) {
+        if (argc > 1 || !isatty(STDIN_FILENO))
+            fprintf(stderr, "collate: no input filename specified.\n");
+        return usage(argc > 1 || !isatty(STDIN_FILENO) ? stderr : stdout,
+                     n_files, reads_store);
+    }
     if (!(prefix || is_stdout || output_file))
         return usage(stderr, n_files, reads_store);
     if (is_stdout && output_file) {
@@ -614,7 +640,7 @@ int main_bamshuf(int argc, char *argv[])
         return usage(stderr, n_files, reads_store);
     }
     if (!prefix) {
-        prefix = generate_prefix();
+        prefix = generate_prefix(output_file);
         pre_mem = 1;
     }
 

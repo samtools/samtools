@@ -242,8 +242,10 @@ int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void
                         if (tv->show_name) {
                             char *name = bam_get_qname(p->b);
                             c = (p->qpos + 1 >= p->b->core.l_qname)? ' ' : name[p->qpos];
-                        } else {
-                            c = seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos)];
+                       } else {
+                            c = p->qpos < p->b->core.l_qseq
+                                ? seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos)]
+                                : 'N';
                             if (tv->is_dot && toupper(c) == toupper(rb)) c = bam_is_rev(p->b)? ',' : '.';
                         }
                     }
@@ -285,7 +287,9 @@ int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void
                     if (x > 4) x = 4;
                     attr |= tv->my_colorpair(tv,x);
                 } else if (tv->color_for == TV_COLOR_NUCL) {
-                    x = seq_nt16_int[bam_seqi(bam_get_seq(p->b), p->qpos)] + 5;
+                    x = p->qpos < p->b->core.l_qseq
+                        ? seq_nt16_int[bam_seqi(bam_get_seq(p->b), p->qpos)] + 5
+                        : 4;
                     attr |= tv->my_colorpair(tv,x);
                 } else if(tv->color_for == TV_COLOR_COL) {
                     x = 0;

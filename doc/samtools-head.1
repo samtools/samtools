@@ -1,0 +1,66 @@
+'\" t
+.TH samtools-head 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.SH NAME
+samtools head \- view SAM/BAM/CRAM file headers
+.\"
+.\" Copyright (C) 2021 University of Glasgow.
+.\"
+.\" Author: John Marshall <jmarshall@hey.com>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+
+.SH SYNOPSIS
+.B samtools head
+.RB [ -h
+.IR INT ]
+.RB [ -n
+.IR INT ]
+.RI [ FILE ]
+
+.SH DESCRIPTION
+By default, prints all headers from the specified input file to standard output
+in SAM format.
+The input alignment file may be in SAM, BAM, or CRAM format; if no \fIFILE\fR
+is specified, standard input will be read.
+With appropriate options, only some of the headers and/or additionally some
+of the alignment records will be printed.
+.P
+The \fBsamtools head\fR command outputs SAM headers exactly as they appear
+in the input file; in particular, it never adds an @PG header itself.
+(Other \fBsamtools\fR commands add such @PG headers to facilitate provenance
+tracking in analysis pipelines, but because \fBsamtools head\fR never outputs
+more than a handful of alignment records it is unsuitable for use in such
+contexts anyway.)
+
+.SH OPTIONS
+.TP 4n
+.BI "-h, --headers " INT
+Display only the first \fIINT\fR header lines.
+By default, all header lines are displayed.
+.TP
+.BI "-n, --records " INT
+Also display the first \fIINT\fR alignment records.
+By default, no alignment records are displayed.
+
+.SH AUTHOR
+Written by John Marshall from the University of Glasgow.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-view (1)

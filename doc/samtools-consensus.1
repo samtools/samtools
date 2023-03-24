@@ -1,0 +1,396 @@
+'\" t
+.TH samtools-consensus 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.SH NAME
+samtools consensus \- produces produce a consensus FASTA/FASTQ/PILEUP
+.\"
+.\" Copyright (C) 2021-2022 Genome Research Ltd.
+.\"
+.\" Author: James Bonfield <jkb@sanger.ac.uk>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools consensus
+.RB [ -saAMq ]
+.RB [ -r
+.IR region ]
+.RB [ -f
+.IR format ]
+.RB [ -l
+.IR line-len ]
+.RB [ -d
+.IR min-depth ]
+.RB [ -C
+.IR cutoff ]
+.RB [ -c
+.IR call-fract ]
+.RB [ -H
+.IR het-fract ]
+.I in.bam
+
+.SH DESCRIPTION
+.PP
+Generate consensus from a SAM, BAM or CRAM file based on the contents
+of the alignment records.  The consensus is written either as FASTA, 
+FASTQ, or a pileup oriented format.  This is selected using the
+.BI "-f " FORMAT
+option.
+
+The default output for FASTA and FASTQ formats include one base per
+non-gap consensus.  Hence insertions with respect to the aligned
+reference will be included and deletions removed.  This behaviour can
+be controlled with the 
+.B --show-ins
+and
+.B --show-del
+options.  This could be used to compute a new reference from sequences
+assemblies to realign against.
+
+The pileup-style format strictly adheres to one row per consensus
+location, differing from the one row per reference based used in the
+related "samtools mpileup" command.  This means the base quality
+values for inserted columns are reported.  The base quality value of
+gaps (either within an insertion or otherwise) are determined as the
+average of the surrounding non-gap bases.  The columns shown are the
+reference name, position, nth base at that position (zero if not an
+insertion), consensus call, consensus confidence, sequences and
+quality values.
+
+Two consensus calling algorithms are offered.  The default computes a
+heterozygous consensus in a Bayesian manner, derived from the "Gap5"
+consensus algorithm.  Quality values are also tweaked to take into
+account other nearby low quality values.  This can also be disabled,
+using the \fB--no-adj-qual\fR option.
+
+This method also utilises the mapping qualities, unless the
+\fB--no-use-MQ\fR option is used.  Mapping qualities are also
+auto-scaled to take into account the local reference variation by
+processing the MD:Z tag, unless \fB--no-adj-MQ\fR is used.  Mapping
+qualities can be capped between a minimum (\fB--low-MQ\fR) and maximum
+(\fB--high-MQ\fR), although the defaults are liberal and trust the
+data to be true.  Finally an overall scale on the resulting mapping
+quality can be supplied (\fB--scale-MQ\fR, defaulting to 1.0).  This
+has the effect of favouring more calls with a higher false positive
+rate (values greater than 1.0) or being more cautious with higher
+false negative rates and lower false positive (values less than 1.0).
+
+The second method is a simple frequency counting algorithm, summing
+either +1 for each base type or
+.RI + qual
+if the
+.B --use-qual
+option is specified.  This is enabled with the \fB--mode simple\fR option.
+
+The summed share of a specific base type
+is then compared against the total possible and if this is above the
+.BI "--call-fract " fraction
+parameter then the most likely base type is called, or "N" otherwise (or
+absent if it is a gap).  The
+.B --ambig
+option permits generation of ambiguity codes instead of "N", provided
+the minimum fraction of the second most common base type to the most
+common is above the
+.BI "--het-fract " fraction .
+
+.SH OPTIONS
+
+General options that apply to both algorithms:
+
+.TP 10
+.BI "-r " REG ", --region " REG
+Limit the query to region
+.IR REG .
+This requires an index.
+.TP
+.BI "-f " FMT ", --format " FMT
+Produce format
+.IR FMT ,
+with "fastq", "fasta" and "pileup" as permitted options.
+.TP
+.BI "-l " N ", --line-len " N
+Sets the maximum line length of line-wrapped fasta and fastq formats to
+.IR N .
+.TP
+.BI "-o " FILE ", --output " FILE
+Output consensus to FILE instead of stdout.
+.TP
+.BI "-m " STR ", --mode " STR
+Select the consensus algorithm.  Valid modes are "simple" frequency
+counting and the "bayesian" (Gap5) methods, with Bayesian being the
+default.  (Note case does not matter, so "Bayesian" is accepted too.)
+There are a variety of bayesian methods.  Straight "bayesian" is the
+best set suitable for the other parameters selected.  The choice of
+internal parameters may change depending on the "--P-indel" score.
+This method distinguishes between substitution and indel error rates.
+The old Samtools consensus in version 1.16 did not distinguish types
+of errors, but for compatibility the "bayesian_116" mode may be
+selected to replicate this.
+.TP
+.B -a
+Outputs all bases, from start to end of reference, even when the
+aligned data does not extend to the ends.  This is most useful for
+construction of a full length reference sequence.
+
+.TP
+\fB--rf\fR, \fB--incl-flags\fR \fISTR\fR|\fIINT\fR
+Only include reads with at least one FLAG bit set.  Defaults to zero,
+which filters no reads.
+
+.TP
+\fB--ff\fR, \fB--excl-flags\fR \fISTR\fR|\fIINT\fR
+Exclude reads with any FLAG bit set.  Defaults to
+"UNMAP,SECONDARY,QCFAIL,DUP".
+
+.TP
+.BI "--min-MQ " INT
+Filters out reads with a mapping quality below \fIINT\fR.  This
+defaults to zero.
+
+.TP
+.BI "--min-BQ " INT
+Filters out bases with a base quality below \fIINT\fR.  This defaults
+to zero.
+
+.TP
+.BI --show-del " yes" / "no"
+Whether to show deletions as "*" (no) or to omit from the output
+(yes).  Defaults to no.
+
+.TP
+.BI --show-ins " yes" / "no"
+Whether to show insertions in the consensus.  Defaults to yes.
+
+.TP
+.BR --mark-ins
+Insertions, when shown, are normally recorded in the consensus with
+plain 7-bit ASCII (ACGT, or acgt if heterozygous).  However this makes
+it impossible to identify the mapping between consensus coordinates
+and the original reference coordinates.  If fasta output is selected
+then the option adds an underscore before every inserted base, plus a
+corresponding character in the quality for fastq format.  When used in
+conjunction with \fB-a --show-del yes\fR, this permits an easy
+derivation of the consensus to reference coordinate mapping.
+
+.TP
+.BR -A ", " --ambig
+Enables IUPAC ambiguity codes in the consensus output.  Without this
+the output will be limited to A, C, G, T, N and *.
+
+.TP 0
+The following options apply only to the simple consensus mode:
+
+.TP 10
+.BR "-q" ", " --use-qual
+For the simple consensus algorithm, this enables use of base quality
+values.  Instead of summing 1 per base called, it sums the base
+quality instead.  These sums are also used in the
+.B --call-fract
+and
+.B --het-fract
+parameters too.  Quality values are always used for the "Gap5"
+consensus method and this option has no affect.
+Note currently  quality values only affect SNPs and not inserted
+sequences, which still get scores with a fixed +1 per base type occurrence.
+
+.TP
+.BI "-d " D ", --min-depth " D
+The minimum depth required to make a call.  Defaults to 1.  Failing
+this depth check will produce consensus "N", or absent if it is an
+insertion.  Note this check is performed after filtering by flags
+and mapping/base quality.
+
+.TP
+.BI "-H " H ", --het-fract " H
+For consensus columns containing multiple base types, if the second
+most frequent type is at least
+.I H
+fraction of the most common type then a heterozygous base type will be
+reported in the consensus.  Otherwise the most common base is used,
+provided it meets the
+.I --call-fract
+parameter (otherwise "N").  The fractions computed may be modified by
+the use of quality values if the
+.B -q
+option is enabled.
+Note although IUPAC has ambiguity codes for A,C,G,T vs any other
+A,C,G,T it does not have codes for A,C,G,T vs gap (such as in a
+heterozygous deletion).  Given the lack of any official code, we
+use lower-case letter to symbolise a half-present base type.
+
+.TP
+.BI "-c " C ", --call-fract " C
+Only used for the simple consensus algorithm.  Require at least
+.I C
+fraction of bases agreeing with the most likely consensus call to emit
+that base type.  This defaults to 0.75.  Failing this check will
+output "N".
+
+
+.TP 0
+The following options apply only to Bayesian consensus mode enabled
+with the \fB-5\fR option.
+
+.TP 10
+.B -5
+Enable Bayesian consensus algorithm.
+
+.TP
+.BI "-C " C ", --cutoff " C
+Only used for the Gap5 consensus mode, which produces a Phred style
+score for the final consensus quality.  If this is below
+.I C
+then the consensus is called as "N".
+
+.TP
+.BR "--use-MQ" ", " "--no-use-MQ"
+Enable or disable the use of mapping qualities.  Defaults to on.
+
+.TP
+.BR "--adj-MQ" ", " "--no-adj-MQ"
+If mapping qualities are used, this controls whether they are scaled
+by the local number of mismatches to the reference.  The reference is
+unknown by this tool, so this data is obtained from the MD:Z auxiliary
+tag (or ignored if not present).  Defaults to on.
+
+.TP
+.BI "--NM-halo " INT
+Specifies the distance either side of the base call being considered
+for computing the number of local mismatches.
+
+.TP
+\fB--low-MQ \fIMIN\fR, \fB--high-MQ \fIMAX\fR
+Specifies a minimum and maximum value of the mapping quality.  These
+are not filters and instead simply put upper and lower caps on the
+values.  The defaults are 0 and 60.
+
+.TP
+.BI "--scale-MQ " FLOAT
+This is a general multiplicative  mapping quality scaling factor.  The
+effect is to globally raise or lower the quality values used in the
+consensus algorithm.  Defaults to 1.0, which leaves the values unchanged.
+
+.TP
+.BI "--P-het " FLOAT
+Controls the likelihood of any position being a heterozygous site.
+This is used in the priors for the Bayesian calculations, and has
+little difference on deep data.  Defaults to 1e-3.  Smaller numbers
+makes the algorithm more likely to call a pure base type.  Note the
+algorithm will always compute the probability of the base being
+homozygous vs heterozygous, irrespective of whether the output is
+reported as ambiguous (it will be "N" if deemed to be heterozygous
+without \fB--ambig\fR mode enabled).
+
+.TP
+.BI "--P-indel " FLOAT
+Controls the likelihood of small indels.  This is used in the priors
+for the Bayesian calculations, and has little difference on deep data.
+Defaults to 2e-4.
+
+.TP
+.BI "--het-scale " FLOAT
+This is a multiplicative correction applied per base quality before
+adding to the heterozygous hypotheses.  Reducing it means fewer
+heterozygous calls are made.  This oftens leads a significant
+reduction in false positive het calls, for some increase in false
+negatives (mislabelling real heterozygous sites as homozygous).  It is
+usually beneficial to reduce this on instruments where a significant
+proportion of bases may be aligned in the wrong column due to
+insertions and deletions leading to alignment errors and reference
+bias.  It can be considered as a het sensitivity tuning parameter.
+Defaults to 1.0 (nop).
+
+.TP
+.BR -p ", " --homopoly-fix
+Some technologies that call runs of the same base type together always
+put the lowest quality calls at one end.  This can cause problems when
+reverse complementing and comparing alignments with indels.  This
+option averages the qualities at both ends to avoid orientation
+biases.  Recommended for old 454 or PacBio HiFi data sets.
+
+.TP
+.BI "--homopoly-score " FLOAT
+The \fB-p\fR option also reduces confidence values within homopolymers
+due to an additional likelihood of sequence specific errors.  The
+quality values are multiplied by \fIFLOAT\fR.  This defaults to 0.5,
+but is not used if \fB-p\fR was not specified.  Adjusting this score
+also automatically enables \fB-p\fR.
+
+.TP
+\fB-X\fR, \fB--config \fISTR\fR
+Specifies predefined sets of configuration parameters.  Acceptable
+values for \fISTR\fR are defined below, along with the list of
+parameters they are equivalent to.
+.RS
+.TP 10
+.B hiseq
+--qual-calibration :hiseq
+.TP
+.B hifi
+--qual-calibration :hifi
+--homopoly-fix 0.3 --low-MQ 5 --scale-MQ 1.5 --het-scale 0.37
+.TP
+.B r10.4_sup
+--qual-calibration :r10.4_sup
+--homopoly-fix 0.3 --low-MQ 5 --scale-MQ 1.5 --het-scale 0.37
+.TP
+.B r10.4_dup
+--qual-calibration :r10.4_dup
+--homopoly-fix 0.3 --low-MQ 5 --scale-MQ 1.5 --het-scale 0.37
+.TP
+.B ultima
+--qual-calibration :ultima
+--homopoly-fix 0.3 --low-MQ 10 --scale-MQ 2 --het-scale 0.37
+.RE
+.SH EXAMPLES
+.IP -
+Create a modified FASTA reference that has a 1:1 coordinate correspondence with the original reference used in alignment.
+.EX 2
+samtools consensus -a --show-ins no in.bam -o ref.fa
+.EE
+
+.IP -
+Create a FASTQ file for the contigs with aligned data, including insertions.
+.EX 2
+samtools consensus -f fastq in.bam -o cons.fq
+.EE
+
+.SH AUTHOR
+.PP
+Written by James Bonfield from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-mpileup (1),
+.PP
+Samtools website: <http://www.htslib.org/>

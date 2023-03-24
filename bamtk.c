@@ -1,6 +1,6 @@
 /*  bamtk.c -- main samtools command front-end.
 
-    Copyright (C) 2008-2021 Genome Research Ltd.
+    Copyright (C) 2008-2023 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -47,6 +47,7 @@ int bam_fillmd(int argc, char *argv[]);
 int bam_idxstats(int argc, char *argv[]);
 int bam_markdup(int argc, char *argv[]);
 int main_samview(int argc, char *argv[]);
+int main_head(int argc, char *argv[]);
 int main_reheader(int argc, char *argv[]);
 int main_cut_target(int argc, char *argv[]);
 int main_phase(int argc, char *argv[]);
@@ -67,6 +68,12 @@ int dict_main(int argc, char *argv[]);
 int fqidx_main(int argc, char *argv[]);
 int amplicon_clip_main(int argc, char *argv[]);
 int main_ampliconstats(int argc, char *argv[]);
+int main_import(int argc, char *argv[]);
+int main_samples(int argc, char *argv[]);
+int main_consensus(int argc, char *argv[]);
+int main_reference(int argc, char *argv[]);
+int main_reset(int argc, char *argv[]);
+int main_cram_size(int argc, char *argv[]);
 
 const char *samtools_version()
 {
@@ -96,7 +103,7 @@ const char *samtools_feature_string(void) {
 static void long_version(void) {
     printf("samtools %s\n"
            "Using htslib %s\n"
-           "Copyright (C) 2021 Genome Research Ltd.\n",
+           "Copyright (C) 2023 Genome Research Ltd.\n",
            samtools_version(), hts_version());
 
     printf("\nSamtools compilation details:\n");
@@ -166,6 +173,7 @@ static void usage(FILE *fp)
 "  -- File operations\n"
 "     collate        shuffle and group alignments by name\n"
 "     cat            concatenate BAMs\n"
+"     consensus      produce a consensus Pileup/FASTA/FASTQ\n"
 "     merge          merge sorted alignments\n"
 "     mpileup        multi-way pileup\n"
 "     sort           sort alignment file\n"
@@ -173,6 +181,9 @@ static void usage(FILE *fp)
 "     quickcheck     quickly check if SAM/BAM/CRAM file appears intact\n"
 "     fastq          converts a BAM to a FASTQ\n"
 "     fasta          converts a BAM to a FASTA\n"
+"     import         Converts FASTA or FASTQ files to SAM/BAM/CRAM\n"
+"     reference      Generates a reference from aligned data\n"
+"     reset          Reverts aligner changes in reads\n"
 "\n"
 "  -- Statistics\n"
 "     bedcov         read depth per BED region\n"
@@ -180,15 +191,18 @@ static void usage(FILE *fp)
 "     depth          compute the depth\n"
 "     flagstat       simple stats\n"
 "     idxstats       BAM index stats\n"
+"     cram-size      list CRAM Content-ID and Data-Series sizes\n"
 "     phase          phase heterozygotes\n"
 "     stats          generate stats (former bamcheck)\n"
 "     ampliconstats  generate amplicon specific stats\n"
 "\n"
 "  -- Viewing\n"
 "     flags          explain BAM flags\n"
+"     head           header viewer\n"
 "     tview          text alignment viewer\n"
 "     view           SAM<->BAM<->CRAM conversion\n"
 "     depad          convert padded BAM to unpadded BAM\n"
+"     samples        list the samples in a set of SAM/BAM/CRAM files\n"
 "\n"
 "  -- Misc\n"
 "     help [cmd]     display this help message or help for [cmd]\n"
@@ -207,11 +221,6 @@ static void usage(FILE *fp)
 #ifdef _WIN32
 int _CRT_glob = 0;
 #endif
-
-static void bam_import_err(void) {
-    fprintf(stderr, "[main] \"samtools import\" has been removed. "
-            "Please use \"samtools view\" instead.\n");
-}
 
 int main(int argc, char *argv[])
 {
@@ -233,7 +242,7 @@ int main(int argc, char *argv[])
 
     int ret = 0;
     if (strcmp(argv[1], "view") == 0)           ret = main_samview(argc-1, argv+1);
-    else if (strcmp(argv[1], "import") == 0)    { bam_import_err(); return 1; }
+    else if (strcmp(argv[1], "import") == 0)    ret = main_import(argc-1, argv+1);
     else if (strcmp(argv[1], "mpileup") == 0)   ret = bam_mpileup(argc-1, argv+1);
     else if (strcmp(argv[1], "merge") == 0)     ret = bam_merge(argc-1, argv+1);
     else if (strcmp(argv[1], "sort") == 0)      ret = bam_sort(argc-1, argv+1);
@@ -243,6 +252,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "faidx") == 0)     ret = faidx_main(argc-1, argv+1);
     else if (strcmp(argv[1], "fqidx") == 0)     ret = fqidx_main(argc-1, argv+1);
     else if (strcmp(argv[1], "dict") == 0)      ret = dict_main(argc-1, argv+1);
+    else if (strcmp(argv[1], "head") == 0)      ret = main_head(argc-1, argv+1);
     else if (strcmp(argv[1], "fixmate") == 0)   ret = bam_mating(argc-1, argv+1);
     else if (strcmp(argv[1], "rmdup") == 0)     ret = bam_rmdup(argc-1, argv+1);
     else if (strcmp(argv[1], "markdup") == 0)   ret = bam_markdup(argc-1, argv+1);
@@ -278,13 +288,17 @@ int main(int argc, char *argv[])
     }
     else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
     else if (strcmp(argv[1], "ampliconstats") == 0)     ret = main_ampliconstats(argc-1, argv+1);
+    else if (strcmp(argv[1], "samples") == 0)     ret = main_samples(argc-1, argv+1);
+    else if (strcmp(argv[1], "consensus") == 0) ret = main_consensus(argc-1, argv+1);
+    else if (strcmp(argv[1], "reference") == 0) ret = main_reference(argc-1, argv+1);
+    else if (strcmp(argv[1], "cram-size") == 0) ret = main_cram_size(argc-1, argv+1);
     else if (strcmp(argv[1], "version") == 0 || \
-             strcmp(argv[1], "--version") == 0) {
+             strcmp(argv[1], "--version") == 0)
         long_version();
-    }
     else if (strcmp(argv[1], "--version-only") == 0) {
         printf("%s+htslib-%s\n", samtools_version(), hts_version());
     }
+    else if (strcmp(argv[1], "reset") == 0) ret = main_reset(argc-1, argv+1);
     else {
         fprintf(stderr, "[main] unrecognized command '%s'\n", argv[1]);
         return 1;

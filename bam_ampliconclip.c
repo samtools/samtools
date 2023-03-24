@@ -1,7 +1,7 @@
-/*  bam_ampliconclip.c -- loads amplicons from a BED file and cuts reads
+/*  bam_ampliconclip.c -- loads amplicon primers from a BED file and cuts reads
                           from the 5' end.
 
-    Copyright (C) 2020-2021 Genome Research Ltd.
+    Copyright (C) 2020-2022 Genome Research Ltd.
 
     Authors: Andrew Whitwham <aw7@sanger.ac.uk>
              Rob Davies <rmd+git@sanger.ac.uk>
@@ -58,147 +58,176 @@ typedef struct {
     int unmapped;
     int oa_tag;
     int del_tag;
+    int tol;
     char *arg_list;
     char *stats_file;
     char *rejects_file;
 } cl_param_t;
 
 
-static int bed_pair_sort(const void *av, const void *bv) {
-    bed_pair_t *a = (bed_pair_t *) av;
-    bed_pair_t *b = (bed_pair_t *) bv;
+static int bed_entry_sort(const void *av, const void *bv) {
+    bed_entry_t *a = (bed_entry_t *) av;
+    bed_entry_t *b = (bed_entry_t *) bv;
     return a->right < b->right ? -1 : (a->right == b->right ? 0 : 1);
 }
 
 
-int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
-                        bed_pair_list_t *pairs, int64_t *longest) {
+int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash_t(bed_list_hash) *bed_lists) {
     hFILE *fp;
     int line_count = 0, ret;
     int64_t left, right;
     kstring_t line = KS_INITIALIZE;
-    *longest = 0;
+    bed_entry_list_t *list;
+    khiter_t bed_itr;
 
     if ((fp = hopen(infile, "r")) == NULL) {
-        print_error_errno("ampliconclip", "unable to open file %s.", infile);
+        print_error_errno("amplicon", "unable to open file %s.", infile);
         return 1;
     }
 
-    pairs->size = 256;
+    char ref[1024];
 
-    if ((pairs->bp = malloc(pairs->size * sizeof(bed_pair_t))) == NULL) {
-        fprintf(stderr, "[ampliconclip] error: unable to allocate memory for bed data.\n");
-        ret = 1;
-        goto error;
-    }
-
-    *pairs->ref = 0;
-    char ref[256];
     while (line.l = 0, kgetline(&line, (kgets_func *)hgets, fp) >= 0) {
         line_count++;
+        int hret;
+        char strand;
 
         if (line.l == 0 || *line.s == '#') continue;
         if (strncmp(line.s, "track ", 6) == 0) continue;
         if (strncmp(line.s, "browser ", 8) == 0) continue;
 
         if (get_strand) {
-            char strand;
-
-            if (sscanf(line.s, "%255s %"SCNd64" %"SCNd64" %*s %*s %c",
+            if (sscanf(line.s, "%1023s %"SCNd64" %"SCNd64" %*s %*s %c",
                        ref, &left, &right, &strand) != 4) {
-                fprintf(stderr, "[ampliconclip] error: bad bed file format in line %d of %s.\n",
+                fprintf(stderr, "[amplicon] error: bad bed file format in line %d of %s.\n"
+                                "(N.B. ref/chrom name limited to 1023 characters.)\n",
                                     line_count, infile);
-                ret = 1;
-                goto error;
-            }
-            if (*pairs->ref) {
-                if (strncmp(ref, pairs->ref, 256)) {
-                    fprintf(stderr, "[ampliconclip] error: "
-                            "bed file contains more than one reference.\n");
-                    ret = 1;
-                    goto error;
-                }
-            } else {
-                memcpy(pairs->ref, ref, 256);
-            }
-
-            if (strand == '+') {
-                pairs->bp[pairs->length].rev = 0;
-            } else if (strand == '-') {
-                pairs->bp[pairs->length].rev = 1;
-            } else {
-                fprintf(stderr, "[ampliconclip] error: bad strand value in line %d, expecting '+' or '-', found '%c'.\n",
-                            line_count, strand);
                 ret = 1;
                 goto error;
             }
         } else {
-            if (sscanf(line.s, "%255s %"SCNd64" %"SCNd64,
+            if (sscanf(line.s, "%1023s %"SCNd64" %"SCNd64,
                        ref, &left, &right) != 3) {
-                fprintf(stderr, "[ampliconclip] error: bad bed file format in line %d of %s",
+                fprintf(stderr, "[amplicon] error: bad bed file format in line %d of %s\n"
+                                "(N.B. ref/chrom name limited to 1023 characters.)\n",
                                     line_count, infile);
                 ret = 1;
                 goto error;
             }
-            if (*pairs->ref) {
-                if (strncmp(ref, pairs->ref, 256)) {
-                    fprintf(stderr, "[ampliconclip] error: "
-                            "bed file contains more than one reference.\n");
-                    ret = 1;
-                    goto error;
-                }
-            } else {
-                memcpy(pairs->ref, ref, 256);
-            }
         }
 
-        if (pairs->length == pairs->size) {
-            bed_pair_t *tmp;
+        bed_itr = kh_get(bed_list_hash, bed_lists, ref);
 
-            pairs->size *= 2;
+        if (bed_itr == kh_end(bed_lists)) { // new ref entry
+            char *ref_name = strdup(ref); // need a copy for the hash key
 
-            if ((tmp = realloc(pairs->bp, pairs->size * sizeof(bed_pair_t))) == NULL) {
-                fprintf(stderr, "[ampliconclip] error: unable to allocate more memory for bed data.\n");
+            if (!ref_name) {
+                fprintf(stderr, "[amplicon] error: unable to allocate memory for ref name.\n");
                 ret = 1;
                 goto error;
             }
 
-            pairs->bp = tmp;
+            bed_itr = kh_put(bed_list_hash, bed_lists, ref_name, &hret);
+
+            if (hret > 0) {
+                list = &kh_val(bed_lists, bed_itr);
+
+                // initialise the new hash entry
+                list->longest = 0;
+                list->size = 0;
+                list->length = 0;
+                list->bp = NULL;
+            } else {
+                fprintf(stderr, "[amplicon] error: ref hashing failure.\n");
+                ret = 1;
+                goto error;
+            }
+        } else { // existing ref
+            list = &kh_val(bed_lists, bed_itr);
         }
 
-        pairs->bp[pairs->length].left  = left;
-        pairs->bp[pairs->length].right = right;
-        if (right - left > *longest)
-            *longest = right - left;
+        if (list->length == list->size) {
+           bed_entry_t *tmp;
 
-        pairs->length++;
+           list->size += list->size / 2 + 256;
+
+           if ((tmp = realloc(list->bp, list->size * sizeof(bed_entry_t))) == NULL) {
+               fprintf(stderr, "[amplicon] error: unable to allocate more memory for bed data.\n");
+               ret = 1;
+               goto error;
+           }
+
+           list->bp = tmp;
+        }
+
+        list->bp[list->length].left  = left;
+        list->bp[list->length].right = right;
+
+        if (get_strand) {
+            if (strand == '+') {
+                list->bp[list->length].rev = 0;
+            } else if (strand == '-') {
+                list->bp[list->length].rev = 1;
+            } else {
+                fprintf(stderr, "[amplicon] error: bad strand value in line %d, expecting '+' or '-', found '%c'.\n",
+                            line_count, strand);
+                ret = 1;
+                goto error;
+            }
+        }
+
+        if (right - left > list->longest)
+            list->longest = right - left;
+
+        list->length++;
     }
 
-    if (sort_by_pos)
-        qsort(pairs->bp, pairs->length, sizeof(pairs->bp[0]), bed_pair_sort);
+    if (sort_by_pos) {
+        for (bed_itr = kh_begin(bed_lists); bed_itr != kh_end(bed_lists); ++bed_itr) {
+            if (kh_exist(bed_lists, bed_itr)) {
+                list = &kh_val(bed_lists, bed_itr);
+                qsort(list->bp, list->length, sizeof(list->bp[0]), bed_entry_sort);
+            }
+        }
+    }
 
-    if (pairs->length)
+    if (kh_size(bed_lists) > 0) {// any entries
         ret = 0;
-    else
+    } else {
         ret = 1;
+    }
 
 error:
     ks_free(&line);
+
     if (hclose(fp) != 0) {
-        fprintf(stderr, "[ampliconclip] warning: failed to close %s", infile);
-    }
-    if (ret) {
-        free(pairs->bp);
-        pairs->bp = NULL;
+        fprintf(stderr, "[amplicon] warning: failed to close %s", infile);
     }
 
     return ret;
 }
 
 
-static int matching_clip_site(bed_pair_list_t *sites, hts_pos_t pos,
-                              int is_rev, int use_strand, int64_t longest) {
-    int i, tol = 5, size;  // may need this to be variable
+void destroy_bed_hash(khash_t(bed_list_hash) *hash) {
+    khiter_t itr;
+
+    for (itr = kh_begin(hash); itr != kh_end(hash); ++itr) {
+       if (kh_exist(hash, itr)) {
+           free(kh_val(hash, itr).bp);
+           free((char *)kh_key(hash, itr));
+           kh_key(hash, itr) = NULL;
+        }
+    }
+
+    kh_destroy(bed_list_hash, hash);
+}
+
+
+static int matching_clip_site(bed_entry_list_t *sites, hts_pos_t pos,
+                              int is_rev, int use_strand, int64_t longest,
+                              cl_param_t *param) {
+    int i, size;  // may need this to be variable
+    int tol = param->tol;
     int l = 0, mid = sites->length / 2, r = sites->length;
     int pos_tol = is_rev ? (pos > tol ? pos - tol : 0) : pos;
 
@@ -260,7 +289,7 @@ static int bam_trim_left(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     uint32_t *new_cigar;
     uint8_t *new_qual;
     size_t orig_l_aux = bam_get_l_aux(rec);
-    uint32_t i, j, odd_base = 0;
+    uint32_t i, j;
     uint32_t ref_remove = bases, qry_removed = 0, hardclip = 0;
     hts_pos_t new_pos = rec->core.pos;
     uint32_t cig_type, cig_op;
@@ -278,18 +307,6 @@ static int bam_trim_left(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     // Copy core data & name
     memcpy(&rec_out->core, &rec->core, sizeof(rec->core));
     memcpy(rec_out->data, rec->data, rec->core.l_qname);
-
-    if (clipping == hard_clip && bases >= rec->core.l_qseq) {
-        rec_out->core.l_qseq = 0;
-        rec_out->core.n_cigar = 0;
-
-        if (orig_l_aux)
-            memcpy(bam_get_aux(rec_out), orig_aux, orig_l_aux);
-
-        rec_out->l_data = bam_get_aux(rec_out) - rec_out->data + orig_l_aux;
-
-        return 0;
-    }
 
     // Modify CIGAR
     new_cigar = bam_get_cigar(rec_out);
@@ -326,6 +343,19 @@ static int bam_trim_left(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
             qry_removed += ref_remove;
         }
     } else {
+        if (clipping == hard_clip) {
+
+            rec_out->core.l_qseq = 0;
+            rec_out->core.n_cigar = 0;
+
+            if (orig_l_aux)
+                memcpy(bam_get_aux(rec_out), orig_aux, orig_l_aux);
+
+            rec_out->l_data = bam_get_aux(rec_out) - rec_out->data + orig_l_aux;
+
+            return 0;
+        }
+
         qry_removed = rec->core.l_qseq;
     }
 
@@ -358,14 +388,13 @@ static int bam_trim_left(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
 
     if (clipping == soft_clip) {
         qry_removed = 0; // Copy all the sequence and confidence values
-        odd_base = 1; // account for an odd number of bases
     }
 
     new_qual = bam_get_seq(rec_out) + (rec->core.l_qseq - qry_removed + 1) / 2;
     // Copy remaining SEQ
     if ((qry_removed & 1) == 0) {
         memcpy(bam_get_seq(rec_out), orig_seq + (qry_removed / 2),
-                (rec->core.l_qseq - qry_removed + odd_base) / 2);
+                (rec->core.l_qseq - qry_removed + 1) / 2); // +1 to account for odd numbers
     } else {
         uint8_t *in = orig_seq + qry_removed / 2;
         uint8_t *out = bam_get_seq(rec_out);
@@ -429,17 +458,6 @@ static int bam_trim_right(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     memcpy(&rec_out->core, &rec->core, sizeof(rec->core));
     memcpy(rec_out->data, rec->data, rec->core.l_qname);
 
-    if (clipping == hard_clip && bases >= rec->core.l_qseq) {
-        rec_out->core.l_qseq = 0;
-        rec_out->core.n_cigar = 0;
-
-        if (orig_l_aux)
-            memcpy(bam_get_aux(rec_out), orig_aux, orig_l_aux);
-
-        rec_out->l_data = bam_get_aux(rec_out) - rec_out->data + orig_l_aux;
-        return 0;
-    }
-
     // Modify CIGAR here
     new_cigar = bam_get_cigar(rec_out);
 
@@ -472,6 +490,19 @@ static int bam_trim_right(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
         if (qry_removed > 0) j++;
         if (hardclip > 0 && (clipping == soft_clip || qry_removed == 0)) j++;
     } else {
+        if (clipping == hard_clip) {
+
+            rec_out->core.l_qseq = 0;
+            rec_out->core.n_cigar = 0;
+
+            if (orig_l_aux)
+                memcpy(bam_get_aux(rec_out), orig_aux, orig_l_aux);
+
+            rec_out->l_data = bam_get_aux(rec_out) - rec_out->data + orig_l_aux;
+
+            return 0;
+        }
+
         qry_removed = rec->core.l_qseq;
         j = 0;
         if (hardclip > 0 && clipping == soft_clip) j++;
@@ -599,18 +630,19 @@ static inline int tag_original_data(bam1_t *orig, kstring_t *oa_tag) {
 
 static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                     clipping_type clipping, cl_param_t *param) {
-    int ret = 1, r, exclude = 0, file_open = 0;
+    int ret = 1, r, file_open = 0;
+
     bam_hdr_t *header = NULL;
     bam1_t *b = NULL, *b_tmp = NULL;
     long f_count = 0, r_count = 0, n_count = 0, l_count = 0, l_exclude = 0, b_count = 0;
     long filtered = 0, written = 0, failed = 0;
-    int64_t longest = 0;
     kstring_t str = KS_INITIALIZE;
     kstring_t oat = KS_INITIALIZE;
-    bed_pair_list_t sites = {NULL, 0, 0, {0}};
+    bed_entry_list_t *sites;
     FILE *stats_fp = stderr;
+    khash_t(bed_list_hash) *bed_hash = kh_init(bed_list_hash);
 
-    if (load_bed_file_pairs(bedfile, param->use_strand, 1, &sites, &longest)) {
+    if (load_bed_file_multi_ref(bedfile, param->use_strand, 1, bed_hash)) {
         fprintf(stderr, "[ampliconclip] error: unable to load bed file.\n");
         goto fail;
     }
@@ -657,17 +689,36 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
         goto fail;
     }
 
+    int32_t last_tid = -1;
+    int ref_found = 0;
+
     while ((r = sam_read1(in, header, b)) >= 0) {
         hts_pos_t pos;
         int is_rev;
         int p_size;
         int been_clipped  = 0, filter = 0;
+        int exclude = (BAM_FUNMAP | BAM_FQCFAIL);
+        khiter_t itr;
 
         l_count++;
 
-        exclude |= (BAM_FUNMAP | BAM_FQCFAIL);
+        if (b->core.tid != last_tid) {
+            const char *ref_name;
 
-        if (!(b->core.flag & exclude)) {
+            ref_found = 0;
+            last_tid = b->core.tid;
+
+            if ((ref_name = sam_hdr_tid2name(header, b->core.tid)) != NULL) {
+                itr = kh_get(bed_list_hash, bed_hash, ref_name);
+
+                if (itr != kh_end(bed_hash)) {
+                    sites = &kh_val(bed_hash, itr);
+                    ref_found = 1;
+                }
+            }
+        }
+
+        if (!(b->core.flag & exclude) && ref_found) {
             if (param->oa_tag)
                 if (tag_original_data(b, &oat))
                     goto fail;
@@ -681,7 +732,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                     is_rev = 0;
                 }
 
-                if ((p_size = matching_clip_site(&sites, pos, is_rev, param->use_strand, longest))) {
+                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest, param))) {
                     if (is_rev) {
                         if (bam_trim_right(b, b_tmp, p_size, clipping) != 0)
                             goto fail;
@@ -726,7 +777,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                 pos = b->core.pos;
                 is_rev = 0;
 
-                if ((p_size = matching_clip_site(&sites, pos, is_rev, param->use_strand, longest))) {
+                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest, param))) {
                     if (bam_trim_left(b, b_tmp, p_size, clipping) != 0)
                         goto fail;
 
@@ -740,7 +791,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                 pos = bam_endpos(b);
                 is_rev = 1;
 
-                if ((p_size = matching_clip_site(&sites, pos, is_rev, param->use_strand, longest))) {
+                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest, param))) {
                     if (bam_trim_right(b, b_tmp, p_size, clipping) != 0)
                         goto fail;
 
@@ -860,7 +911,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
     ret = 0;
 
 fail:
-    free(sites.bp);
+    destroy_bed_hash(bed_hash);
     ks_free(&oat);
     sam_hdr_destroy(header);
     bam_destroy1(b);
@@ -870,16 +921,16 @@ fail:
 
 
 static void usage(void) {
-    fprintf(stderr, "Usage samtools ampliconclip -b bedfile <input.bam> -o <output.bam>\n\n");
+    fprintf(stderr, "Usage: samtools ampliconclip -b BED file <input.bam> -o <output.bam>\n\n");
     fprintf(stderr, "Option: \n");
-    fprintf(stderr, " -b  FILE            bedfile of amplicons to be removed.\n");
+    fprintf(stderr, " -b  FILE            BED file of regions (eg amplicon primers) to be removed.\n");
     fprintf(stderr, " -o  FILE            output file name (default stdout).\n");
     fprintf(stderr, " -f  FILE            write stats to file name (default stderr)\n");
     fprintf(stderr, " -u                  Output uncompressed data\n");
-    fprintf(stderr, " --soft-clip         soft clip amplicons from reads (default)\n");
-    fprintf(stderr, " --hard-clip         hard clip amplicons from reads.\n");
-    fprintf(stderr, " --both-ends         clip on both ends.\n");
-    fprintf(stderr, " --strand            use strand data from bed file.\n");
+    fprintf(stderr, " --soft-clip         soft clip amplicon primers from reads (default)\n");
+    fprintf(stderr, " --hard-clip         hard clip amplicon primers from reads.\n");
+    fprintf(stderr, " --both-ends         clip on both 5' and 3' ends.\n");
+    fprintf(stderr, " --strand            use strand data from BED file to match read direction.\n");
     fprintf(stderr, " --clipped           only output clipped reads.\n");
     fprintf(stderr, " --fail              mark unclipped, mapped reads as QCFAIL.\n");
     fprintf(stderr, " --filter-len INT    do not output reads INT size or shorter.\n");
@@ -888,8 +939,11 @@ static void usage(void) {
     fprintf(stderr, " --rejects-file FILE file to write filtered reads.\n");
     fprintf(stderr, " --original          for clipped entries add an OA tag with original data.\n");
     fprintf(stderr, " --keep-tag          for clipped entries keep the old NM and MD tags.\n");
+    fprintf(stderr, " --tolerance         match region within this number of bases, default 5.\n");
     fprintf(stderr, " --no-PG             do not add an @PG line.\n");
     sam_global_opt_help(stderr, "-.O..@-.");
+    fprintf(stderr, "\nAbout: Soft clips read alignments where they match BED file defined regions.\n"
+                    "Default clipping is only on the 5' end.\n\n");
 }
 
 
@@ -901,7 +955,7 @@ int amplicon_clip_main(int argc, char **argv) {
     htsThreadPool p = {NULL, 0};
     samFile *in = NULL, *out = NULL, *reject = NULL;
     clipping_type clipping = soft_clip;
-    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, 0, 1, NULL, NULL, NULL};
+    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, 0, 1, 5, NULL, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -918,6 +972,7 @@ int amplicon_clip_main(int argc, char **argv) {
         {"rejects-file", required_argument, NULL, 1012},
         {"original", no_argument, NULL, 1013},
         {"keep-tag", no_argument, NULL, 1014},
+        {"tolerance", required_argument, NULL, 1015},
         {NULL, 0, NULL, 0}
     };
 
@@ -940,6 +995,7 @@ int amplicon_clip_main(int argc, char **argv) {
             case 1012: param.rejects_file = optarg; break;
             case 1013: param.oa_tag = 1; break;
             case 1014: param.del_tag = 0; break;
+            case 1015: param.tol = atoi(optarg); break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage(); exit(1);
@@ -954,6 +1010,12 @@ int amplicon_clip_main(int argc, char **argv) {
     if (optind + 1 > argc) {
         usage();
         return 1;
+    }
+
+    if (param.tol < 0) {
+        fprintf(stderr, "[ampliconclip] warning: invalid tolerance of %d,"
+                        " reseting tolerance to default of 5.\n", param.tol);
+        param.tol = 5;
     }
 
     if ((in = sam_open_format(argv[optind], "rb", &ga.in)) == NULL) {

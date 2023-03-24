@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-mpileup 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-mpileup 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools mpileup \- produces "pileup" textual format from an alignment
 .\"
-.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2022 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -66,15 +66,6 @@ samtools mpileup
 Generate text pileup output for one or multiple BAM files.
 Each input file produces a separate group of pileup columns in the output.
 
-Samtools mpileup can still produce VCF and BCF output (with
-.BR -g \ or \ -u ),
-but this feature is
-deprecated and will be removed in a future release.  Please use
-.B bcftools mpileup
-for this instead.  (Documentation on the deprecated options has been removed
-from this manual page, but older versions are available online
-at <http://www.htslib.org/doc/>.)
-
 Note that there are two orthogonal ways to specify locations in the
 input file; via \fB-r\fR \fIregion\fR and \fB-l\fR \fIfile\fR.  The
 former uses (and requires) an index to do random access while the
@@ -84,6 +75,11 @@ example a BED file containing locations of genes in chromosome 20
 could be specified using \fB-r 20 -l chr20.bed\fR, meaning that the
 index is used to find chromosome 20 and then it is filtered for the
 regions listed in the bed file.
+
+By default secondary alignments, QC failures and duplicate reads will
+be omitted, along with low quality bases and some reads in high depth
+regions.  See the \fB--ff\fR, \fB-Q\fR and \fB-d\fR options for
+changing this.
 
 .SS Pileup Format
 Pileup format consists of TAB-separated lines, with each line representing
@@ -155,7 +151,8 @@ Base qualities, encoded as ASCII characters.
 Alignment mapping qualities, encoded as ASCII characters.
 (Column only present when \fB-s\fR/\fB--output-MQ\fR is used.)
 .IP \(ci 2
-Comma-separated 1-based positions within the alignments, e.g., 5 indicates
+Comma-separated 1-based positions within the alignments, in the
+orientation shown in the input file.  E.g., 5 indicates
 that it is the fifth base of the corresponding read that is mapped to this
 genomic position.
 (Column only present when \fB-O\fR/\fB--output-BP\fR is used.)
@@ -172,10 +169,20 @@ The fields selected appear in the same order as in SAM:
 .BR RNEXT ,
 .BR PNEXT .
 .IP \(ci 2
+Comma-separated 1-based positions within the alignments, in 5' to 3'
+orientation.  E.g., 5 indicates that it is the fifth base of the
+corresponding read as produced by the sequencing instrument, that is
+mapped to this genomic position. (Column only present when \fB--output-BP-5\fR is used.)
+
+.IP \(ci 2
 Additional read tag field columns, as selected via \fB--output-extra\fR.
 These columns are formatted as determined by \fB--output-sep\fR and
 \fB--output-empty\fR (comma-separated by default), and appear in the
 same order as the tags are given in \fB--output-extra\fR.
+
+Any output column that would be empty, such as a tag which is not
+present or the filtered sequence depth is zero, is reported as "*".
+This ensures a consistent number of columns across all reported positions.
 
 .SH OPTIONS
 .TP 10
@@ -234,7 +241,7 @@ for all reads aligned to a reference in the file.  See
 below.
 .TP
 .BI -G,\ --exclude-RG \ FILE
-Exclude reads from readgroups listed in FILE (one @RG-ID per line)
+Exclude reads from read groups listed in FILE (one @RG-ID per line)
 .TP
 .BI -l,\ --positions \ FILE
 BED or position list file containing a list of regions or sites where
@@ -251,7 +258,12 @@ coordinate systems. [null]
 Minimum mapping quality for an alignment to be used [0]
 .TP
 .BI -Q,\ --min-BQ \ INT
-Minimum base quality for a base to be considered [13]
+Minimum base quality for a base to be considered. [13]
+
+Note base-quality 0 is used as a filtering mechanism for overlap
+removal which marks bases as having quality zero and lets the base
+quality filter remove them.  Hence using \fB--min-BQ 0\fR will make
+the overlapping bases reappear, albeit with quality zero.
 .TP
 .BI -r,\ --region \ STR
 Only generate pileup in region. Requires the BAM files to be indexed.
@@ -264,14 +276,31 @@ two requests.
 Ignore RG tags. Treat all reads in one BAM as one sample.
 .TP
 .BI --rf,\ --incl-flags \ STR|INT
-Required flags: skip reads with mask bits unset [null]
+Required flags: only include reads with any of the mask bits set [null].
+Note this is implemented as a filter-out rule, rejecting reads that have
+none of the mask bits set.  Hence this does not override the
+\fB--excl-flags\fR option.
 .TP
 .BI --ff,\ --excl-flags \ STR|INT
-Filter flags: skip reads with mask bits set
-[UNMAP,SECONDARY,QCFAIL,DUP]
+Filter flags: skip reads with any of the mask bits set.  This defaults
+to UNMAP,SECONDARY,QCFAIL,DUP.  The option is not accumulative, so
+specifying e.g. \fB--ff UNMAP,QCFAIL\fR will reenable output of
+secondary and duplicate alignments.  Note this does not override the
+\fB--incl-flags\fR option.
 .TP
-.B -x,\ --ignore-overlaps
-Disable read-pair overlap detection.
+.B -x,\ --ignore-overlaps-removal, --disable-overlap-removal
+Overlap detection and removal is enabled by default.  This option
+turns it off.
+
+When enabled, where the ends of a read-pair overlap the overlapping
+region will have one base selected and the duplicate base nullified by
+setting its phred score to zero.  It will then be discarded by the
+\fB--min-BQ\fR option unless this is zero.
+
+The quality values of the retained base within an overlap will be the
+summation of the two bases if they agree, or 0.8 times the higher of
+the two bases if they disagree, with the base nucleotide also being
+the higher confident call.
 .TP
 .B -X
 Include customized index file as a part of arguments. See
@@ -286,23 +315,13 @@ Write pileup output to
 .IR FILE ,
 rather than the default of standard output.
 
-(The same short option is used for both the deprecated
-.BR --open-prob
-option and
-.BR --output .
-If
-.BR -o 's
-argument contains any non-digit characters other than a leading + or - sign,
-it is interpreted as
-.BR --output .
-Usually the filename extension will take care of this, but to write to an
-entirely numeric filename use
-.B -o ./123
-or
-.BR "--output 123" .)
 .TP
 .B -O, --output-BP
-Output base positions on reads.
+Output base positions on reads in orientation listed in the SAM file
+(left to right).
+.TP
+.B --output-BP-5
+Output base positions on reads in their original 5' to 3' orientation.
 .TP
 .B -s, --output-MQ
 Output mapping qualities encoded as ASCII characters.
@@ -326,7 +345,8 @@ Anything that is not on this list is treated as a potential tag, although only
 two character tags are accepted. In the mpileup output, tag columns are
 displayed in the order they were provided by the user in the command line.
 Field and tag names have to be provided in a comma-separated string to the
-mpileup command.
+mpileup command.  Tags with type \fBB\fR (byte array) type are not
+supported.  An absent or unsupported tag will be listed as "*".
 E.g.
 .IP
 .B samtools mpileup --output-extra FLAG,QNAME,RG,NM in.bam
@@ -337,7 +357,7 @@ values and a list of NM tag values. Field values are always displayed before
 tag values.
 .TP
 .BI "--output-sep" \ CHAR
-Specify a different separtor character for tag value lists, when those values
+Specify a different separator character for tag value lists, when those values
 might contain one or more commas (\fB,\fR), which is the default list separator.
 This option only affects columns for two-letter tags like NM; standard
 fields like FLAG or QNAME will always be separated by commas.
@@ -350,6 +370,81 @@ default is \fB*\fR.
 This option only applies to rows that have at least one read in the pileup,
 and only to columns for two-letter tags.
 Columns for empty rows will always be printed as \fB*\fR.
+
+.TP
+.B -M, --output-mods
+Adds base modification markup into the sequence column.  This uses the
+\fBMm\fR and \fBMl\fR auxiliary tags (or their uppercase
+equivalents).  Any base in the sequence output may be followed by a
+series of \fIstrand\fR \fIcode\fR \fIquality\fR strings enclosed
+within square brackets where strand is "+" or "-", code is a single
+character (such as "m" or "h") or a ChEBI numeric in parentheses, and
+quality is an optional numeric quality value.  For example a "C" base
+with possible 5mC and 5hmC base modification may be reported as
+"C[+m179+h40]".
+
+Quality values are from 0 to 255 inclusive, representing a linear
+scale of probability 0.0 to 1.0 in 1/256ths increments.  If quality
+values are absent (no \fBMl\fR tag) these are omitted, giving an
+example string of "C[+m+h]".
+
+Note the base modifications may be identified on the reverse strand,
+either due to the native ability for this detection by the sequencing
+instrument or by the sequence subsequently being reverse
+complemented.  This can lead to modification codes, such as "m"
+meaning 5mC, being shown for their complementary bases, such as
+"G[-m50]".
+
+When \fB--output-mods\fR is selected base modifications can appear on
+any base in the sequence output, including during insertions.  This
+may make parsing the string more complex, so also see the
+\fB--no-output-ins-mods\fR and \fB--no-output-ins\fR options to
+simplify this process.
+
+.TP
+.B --no-output-ins
+Do not output the inserted bases in the sequence column.  Usually this
+is reported as "+\fIlength\fR \fIsequence\fR", but with this option
+it becomes simply "+\fIlength\fR".  For example an insertion of AGT
+in a pileup column changes from "CCC+3AGTGCC" to "CCC+3GCC".
+
+Specifying this option twice also removes the "+\fIlength\fR"
+portion, changing the example above to "CCCGCC".
+
+The purpose of this change is to simplify parsing using basic regular
+expressions, which traditionally cannot perform counting operations.
+It is particularly beneficial when used in conjunction with
+\fB--output-mods\fR as the syntax of the inserted sequence is adjusted
+to also report possible base modifications, but see also
+\fB--no-output-ins-mods\fR as an alternative.
+
+.TP
+.B --no-output-ins-mods
+Outputs the inserted bases in the sequence, but excluding any base
+modifications.  This only affects output when \fB--output-mods\fR is
+also used.
+
+.TP
+.B --no-output-del
+Do not output deleted reference bases in the sequence column.
+Normally this is reported as "+\fIlength\fR \fIsequence\fR", but with this option
+it becomes simply "+\fIlength\fR".  For example an deletion of 3
+unknown bases (due to no reference being specified) would normally be
+seen in a column as e.g. "CCC-3NNNGCC", but will be reported as
+"CCC-3GCC" with this option.
+
+Specifying this option twice also removes the "-\fIlength\fR"
+portion, changing the example above to "CCCGCC".
+
+The purpose of this change is to simplify parsing using basic regular
+expressions, which traditionally cannot perform counting operations.
+See also \fB--no-output-ins\fR.
+
+.TP
+.B --no-output-ends
+Removes the \(lq^\(rq (with mapping quality) and \(lq$\(rq markup from
+the sequence column.
+
 .TP
 .B --reverse-del
 Mark the deletions on the reverse strand with the character
@@ -381,67 +476,12 @@ option.  To disable it, use the
 .B -B
 option.
 
-It is possible to store pre-calculated BAQ values in a SAM BQ:Z tag.
+It is possible to store precalculated BAQ values in a SAM BQ:Z tag.
 Samtools mpileup will use the precalculated values if it finds them.
 The
 .B -E
 option can be used to make it ignore the contents of the BQ:Z tag and
 force it to recalculate the BAQ scores by making a new alignment.
-
-.SH EXAMPLES
-.IP o 2
-Call SNPs and short INDELs:
-.EX 2
-samtools mpileup -uf ref.fa aln.bam | bcftools call -mv > var.raw.vcf
-bcftools filter -s LowQual -e '%QUAL<20 || DP>100' var.raw.vcf  > var.flt.vcf
-.EE
-The
-.B bcftools filter
-command marks low quality sites and sites with the read depth exceeding
-a limit, which should be adjusted to about twice the average read depth
-(bigger read depths usually indicate problematic regions which are
-often enriched for artefacts).  One may consider to add
-.B -C50
-to
-.B mpileup
-if mapping quality is overestimated for reads containing excessive
-mismatches. Applying this option usually helps
-.B BWA-short
-but may not other mappers.
-
-Individuals are identified from the
-.B SM
-tags in the
-.B @RG
-header lines. Individuals can be pooled in one alignment file; one
-individual can also be separated into multiple files. The
-.B -P
-option specifies that indel candidates should be collected only from
-read groups with the
-.B @RG-PL
-tag set to
-.IR ILLUMINA .
-Collecting indel candidates from reads sequenced by an indel-prone
-technology may affect the performance of indel calling.
-
-.IP o 2
-Generate the consensus sequence for one diploid individual:
-.EX 2
-samtools mpileup -uf ref.fa aln.bam | bcftools call -c | vcfutils.pl vcf2fq > cns.fq
-.EE
-.IP o 2
-Include customized index file as a part of arguments.
-.EX 2
-samtools mpileup [options] -X /data_folder/in1.bam [/data_folder/in2.bam [...]] /index_folder/index1.bai [/index_folder/index2.bai [...]]
-.EE
-.IP o 2
-Phase one individual:
-.EX 2
-samtools calmd -AEur aln.bam ref.fa | samtools phase -b prefix - > phase.out
-.EE
-The
-.B calmd
-command is used to reduce false heterozygotes around INDELs.
 
 .SH AUTHOR
 .PP

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-markdup 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-markdup 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools markdup \- mark duplicate alignments in a coordinate sorted file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2022 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -47,11 +47,12 @@ samtools markdup
 .RB [ -l
 .IR length ]
 .RB [ -r ]
-.RB [ -s ]
 .RB [ -T ]
 .RB [ -S ]
+.RB [ -s ]
 .RB [ -f
 .IR file ]
+.RB [ --json ]
 .RB [ -d
 .IR distance ]
 .RB [ -c ]
@@ -62,6 +63,12 @@ samtools markdup
 .RB [ --no-PG ]
 .RB [ -u ]
 .RB [ --no-multi-dup ]
+.RB [ --read-coords ]
+.RB [ --coords-order ]
+.RB [ --barcode-tag ]
+.RB [ --barcode-name ]
+.RB [ --barcode-rgx ]
+.RB [ --use-read-groups ]
 .I in.algsort.bam out.bam
 
 .SH DESCRIPTION
@@ -79,9 +86,6 @@ relies on the MC and ms tags that fixmate provides.
 .B -r
 Remove duplicate reads.
 .TP
-.B -s
-Print some basic stats. See STATISTICS.
-.TP
 .BI "-T " PREFIX
 Write temporary files to
 .IB PREFIX . samtools . nnnn . mmmm . tmp
@@ -89,8 +93,14 @@ Write temporary files to
 .B -S
 Mark supplementary reads of duplicates as duplicates.
 .TP
+.B -s
+Print some basic stats. See STATISTICS.
+.TP
 .BI "-f " file
 Write stats to named file.
+.TP
+.B --json
+Output stats in JSON format.
 .TP
 .BI "-d " distance
 The optical duplicate distance.  Suggested settings of 100 for HiSeq style
@@ -99,7 +109,7 @@ optical duplicates.  When set, duplicate reads are tagged with \fBdt:Z:SQ\fR for
 optical duplicates and \fBdt:Z:LB\fR otherwise.  Calculation of distance depends
 on coordinate data embedded in the read names produced by the Illumina
 sequencing machines.  Optical duplicate detection will not work on non standard
-names.
+names without the use of \fB--read-coords\fR.
 .TP
 .B -c
 Clear previous duplicate settings and tags.
@@ -128,6 +138,30 @@ are not carried out.  Also operates on \fB-t\fR tagging where reads may tagged
 with a better quality read but not necessarily the best one.  Using this option
 can speed up duplicate marking when there are a great many duplicates for each
 original read. 
+.TP
+.BI "--read-coords " REGEX
+This takes a POSIX regular expression for at least x and y to be used in
+optical duplicate marking It can also include another part of the read name
+to test for equality, eg lane:tile elements. Elements wanted are captured with
+parentheses.  Examples below.
+.TP
+.BI "--coords-order " ORDER
+The order of the elements captured in the regular expression. Default is txy
+where t is a part of the read name selected for string comparison and x/y the
+coordinates used for optical duplicate detection.  Valid orders are: txy, tyx,
+xyt, yxt, xty, ytx, xy and yx.
+.TP
+.BI "--barcode-tag " TAG
+Duplicates must now also match the barcode tag.
+.TP
+.B --barcode-name
+Use the UMI/barcode embedded in the read name (eigth colon delimited part).
+.TP
+.BI "--barcode-rgx " REGEX
+Regex for barcode in the readname (alternative to --barcode-name).
+.TP
+.B --use-read-groups
+The @RG tags must now also match to be a duplicate.
 .TP
 .B --no-PG
 Do not add a PG line to the output file.
@@ -189,28 +223,52 @@ They can optionally be marked as duplicates if they have a primary that is also
 a duplicate.    
 .SH EXAMPLES
 This first collate command can be omitted if the file is already name ordered or collated:
-.EX
+.EX 4
 samtools collate -o namecollate.bam example.bam
 .EE
 
 Add ms and MC tags for markdup to use later:
-.EX
+.EX 4
 samtools fixmate -m namecollate.bam fixmate.bam
 .EE
 
 Markdup needs position order:
-.EX
+.EX 4
 samtools sort -o positionsort.bam fixmate.bam
 .EE
 
 Finally mark duplicates:
-.EX
+.EX 4
 samtools markdup positionsort.bam markdup.bam
 .EE
 
 Typically the fixmate step would be applied immediately after sequence
 alignment and the markdup step after sorting by chromosome and
 position.  Thus no \fIadditional\fR sort steps are normally needed.
+
+To use the regex to obtain coordinates from reads, two or three values have to
+be captured.  To mimic the normal behaviour and match a read name of the format
+\fImachine:run:flowcell:lane:tile:x:y\fR use:
+.EX 4
+--read-coords '([!-9;-?A-~]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+):([0-9]+):([0-9]+)'
+--coords-order txy
+.EE
+
+To match only the coordinates of \fIx:y:randomstuff\fR use:
+.EX 4
+--read-coords '^([[:digit:]]+):([[:digit:]]+)'
+--coords-order xy
+.EE
+
+To use a barcode from the read name matching the Illumina example of
+\fINDX550136:7:H2MTNBDXX:1:13302:3141:10799:AAGGATG+TCGGAGA\fR use:
+
+.EX 4
+--barcode-rgx '[0-9A-Za-z]+:[0-9]+:[0-9A-Za-z]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:([!-?A-~]+)'
+.EE
+
+It is possible that complex regular expressions may slow the running of the
+program.  It would be best to keep them simple. 
 
 .SH AUTHOR
 .PP

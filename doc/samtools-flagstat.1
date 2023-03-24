@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-flagstat 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-flagstat 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools flagstat \- counts the number of alignments for each FLAG type
 .\"
@@ -71,7 +71,10 @@ quality controls"
 
 Following this, additional categories are given for reads which are:
 
-.RS 18
+.RS 4
+.TP
+primary
+neither 0x100 nor 0x800 bit set
 .TP
 secondary
 0x100 bit set
@@ -82,8 +85,14 @@ supplementary
 duplicates
 0x400 bit set
 .TP
+primary duplicates
+0x400 bit set and neither 0x100 nor 0x800 bit set 
+.TP
 mapped
 0x4 bit not set
+.TP
+primary mapped
+0x4, 0x100 and 0x800 bits not set
 .TP
 paired in sequencing
 0x1 bit set
@@ -104,12 +113,11 @@ singletons
 both 0x1 and 0x8 bits set and bit 0x4 not set
 .RE
 
-.RS 10
+.PP
 And finally, two rows are given that additionally filter on the reference
 name (RNAME), mate reference name (MRNM), and mapping quality (MAPQ) fields:
-.RE
 
-.RS 18
+.RS 4
 .TP
 with mate mapped to a different chr
 0x1 bit set and neither 0x4 nor 0x8 bits set and MRNM not equal to RNAME
@@ -142,19 +150,27 @@ The top-level object contains two named objects
 These contain the various categories listed above as names and
 the corresponding count as value.
 
-For the default format, the
-.BR mapped ", " "properly paired" ", and " singletons
-show the count as a percentage of the total number of QC-passed or QC-failed
+For the default format, 
+.B mapped
+shows the count as a percentage of the total number of QC-passed or QC-failed
 reads after the category name.
 For example:
-.EX
+.EX 4
 32 + 0 mapped (94.12% : N/A)
 .EE
+
+The
+.BR "properly paired" " and " singletons
+counts work in a similar way but the percentage is against the total number of
+QC-passed and QC-failed pairs.  The
+.BR "primary mapped"
+count is a percentage of the total number of QC-passed and QC-failed primary
+reads. 
 
 In the
 .BR tsv " and " json
 formats, these percentages are listed in separate categories
-.BR "mapped %" ", " "properly paired %" ", and " "singletons %" .
+.BR "mapped %" ", " "primary mapped %" ", " "properly paired %" ", and " "singletons %" .
 If the percentage cannot be calculated (because the total is zero)
 then in the
 .BR default " and " tsv

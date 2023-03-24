@@ -380,7 +380,7 @@ int cram_reheader_inplace3(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
     cram_block_append(b, (void *)sam_hdr_str(cram_h), header_len);
     cram_block_update_size(b);
 
-    cram_compress_block(fd, b, NULL, -1, -1);
+    cram_compress_block(fd, b, NULL, -1, 9);
 
     if (hseek(cram_fd_get_fp(fd), 26, SEEK_SET) != 26)
         goto err;

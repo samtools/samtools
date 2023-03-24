@@ -123,6 +123,9 @@ specify further optional external requirements:
     installation directory (i.e., it has 'include' and 'lib' subdirectories
     containing HTSlib headers and libraries).
 
+    (If the desired HTSlib source tree has been configured to build in a
+    separate build directory, DIR should refer to the build directory.)
+
     By default, configure looks for an HTSlib source tree within or alongside
     the samtools source directory; if there are several likely candidates,
     you will have to choose one via this option.
@@ -221,13 +224,37 @@ RedHat / CentOS
 
 sudo yum install autoconf automake make gcc perl-Data-Dumper zlib-devel bzip2 bzip2-devel xz-devel curl-devel openssl-devel ncurses-devel
 
+Note: On some versions, Perl FindBin will need to be installed to make the tests work.
+
+sudo yum install perl-FindBin
+
 Alpine Linux
 ------------
 
-sudo apk update  # Ensure the package list is up to date
-sudo apk add autoconf automake make gcc musl-dev perl bash zlib-dev bzip2-dev xz-dev curl-dev libressl-dev ncurses-dev
+doas apk update  # Ensure the package list is up to date
+doas apk add autoconf automake make gcc musl-dev perl bash zlib-dev bzip2-dev xz-dev curl-dev libressl-dev ncurses-dev
 
 OpenSUSE
 --------
 
 sudo zypper install autoconf automake make gcc perl zlib-devel libbz2-devel xz-devel libcurl-devel libopenssl-devel ncurses-devel
+
+Windows MSYS2/MINGW64
+---------------------
+
+The configure script must be used as without it the compilation will
+likely fail.
+
+Follow MSYS2 installation instructions at
+https://www.msys2.org/wiki/MSYS2-installation/
+
+Then relaunch to MSYS2 shell using the "MSYS2 MinGW x64" executable.
+Once in that environment (check $MSYSTEM equals "MINGW64") install the
+compilers using pacman -S and the following package list:
+
+base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-libdeflate
+mingw-w64-x86_64-zlib mingw-w64-x86_64-bzip2 mingw-w64-x86_64-xz
+mingw-w64-x86_64-curl mingw-w64-x86_64-autotools
+mingw-w64-x86_64-ncurses mingw-w64-x86_64-tools-git
+
+(The last is only needed for building libraries compatible with MSVC.)

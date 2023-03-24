@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-sort 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-sort 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools sort \- sorts SAM/BAM/CRAM files
 .\"
-.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2020, 2022 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -55,6 +55,7 @@ samtools sort
 .RB [ -M ]
 .RB [ -K
 .IR kmerLen ]
+.RB [ -R ]
 .RB [ -n ]
 .RB [ -t
 .IR tag ]
@@ -141,6 +142,9 @@ collated prior to conversion back to fastq.
 .IP
 Mapped sequences are sorted by chromosome and position.
 .TP
+.B "-R "
+Do not use reverse strand with minimiser sort (only compatible with -M).
+.TP
 .B -n
 Sort by read names (i.e., the
 .B QNAME
@@ -190,6 +194,14 @@ By default, operation is single-threaded.
 .TP
 .BI --no-PG
 Do not add a @PG line to the header of the output file.
+.TP
+.B --template-coordinate
+Sorts by template-coordinate, whereby the sort order (@HD SO) is
+.BR unsorted ,
+the group order (GO) is
+.BR query ,
+and the sub-sort (SS) is
+.BR template-coordinate .
 .PP
 .B Ordering Rules
 
@@ -229,9 +241,31 @@ Records with the same name will be ordered according to the values of
 the READ1 and READ2 flags (see
 .BR flags ).
 
-When the \fB-n\fP option is
-.B not
-present, reads are sorted by reference (according to the order of the @SQ
+When the 
+.B --template-coordinate
+option is in use, the reads are sorted by:
+
+.IP 1. 3
+The earlier unclipped 5' coordinate of the template.
+
+.IP 2. 3
+The higher unclipped 5' coordinate of the template.
+
+.IP 3. 3
+The library (from the read group).
+
+.IP 4. 3
+The molecular identifier (MI tag if present).
+
+.IP 5. 3
+The read name.
+
+.IP 6. 3
+If unpaired, or if R1 has the lower coordinates of the pair.
+.PP
+
+When none of the above options are in use,
+reads are sorted by reference (according to the order of the @SQ
 header records), then by position in the reference, and then by the REVERSE
 flag.
 

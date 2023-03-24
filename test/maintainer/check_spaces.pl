@@ -3,7 +3,7 @@
 #
 #     Author : Rob Davies <rmd@sanger.ac.uk>
 #
-#     Copyright (C) 2018-2019 Genome Research Ltd.
+#     Copyright (C) 2018-2019, 2022 Genome Research Ltd.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +29,10 @@ use File::Find;
 use Getopt::Long;
 
 my $verbose = 0;
-GetOptions('v' => \$verbose);
+my $shownr = 0;
+my $force = 0;
+
+GetOptions('v' => \$verbose, 'n' => \$shownr, 'f' => \$force);
 
 my ($root) = @ARGV;
 if (!$root) {
@@ -46,9 +49,10 @@ sub check {
         return;
     }
 
-    # Only check C, perl and shell files
-    return unless (/(?:\.[ch]|\.pl|\.sh)$/);
-
+    if (!$force) {
+        # Only check C, perl and shell files
+        return unless (/(?:\.[ch]|\.pl|\.sh)$/);
+    }
     my %allow_tabs = map { ("$root/$_", 1) } (
     );
 
@@ -62,10 +66,18 @@ sub check {
     }
     my $tab = 0;
     my $trailing = 0;
+    my $nr = 0;
     while (my $line = <$in>) {
+        $nr++;
         chomp($line);
-        if ($check_tabs && $line =~ /\t/)  { $tab = 1; }
-        if ($line =~ /\s$/) { $trailing = 1; }
+        if ($check_tabs && $line =~ /\t/)  {
+            $tab = 1;
+            if ($shownr) { print "tab: $nr\n"; }
+        }
+        if ($line =~ /\s$/) {
+            $trailing = 1;
+            if ($shownr) { print "space: $nr\n"; }
+        }
     }
     if (!close($in)) {
         print STDERR "Error on closing $_ : $!\n";

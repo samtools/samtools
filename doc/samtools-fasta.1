@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-fasta 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-fasta 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools fasta / fastq \- converts a SAM/BAM/CRAM file to FASTA or FASTQ
 .\"
@@ -57,6 +57,13 @@ Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
 command invoked. The files will be automatically compressed if the
 file names have a .gz or .bgzf extension.
 
+Note this command is attempting to reverse the alignment process, so
+if the aligner took a single input FASTQ and produced multiple SAM
+records via supplementary and/or secondary alignments, then converting
+back to FASTQ again should produce the original single FASTA / FASTQ
+record.  By default it will not attempt to records for supplementary
+and secondary alignments, but see the \fB-F\fR option for more details.
+
 If the input contains read-pairs which are to be interleaved or
 written to separate files in the same order, then the input should
 be first collated by name.
@@ -94,7 +101,7 @@ Sequences will be written to standard output unless one of the
 .BR -1 ", " -2 ", " -o ", or " -0
 options is used, in which case sequences for that category will be written to
 the specified file.
-The same filename may be specified with multiple options, in which ase the
+The same filename may be specified with multiple options, in which case the
 sequences will be multiplexed in order of occurrence.
 
 If a singleton file is specified using the
@@ -114,6 +121,12 @@ The
 option only affects category 1 and 2 records.
 The output for category 0 will be the same irrespective of the use of this
 option.
+
+The sequence generated will be for the entire sequence recorded in the
+SAM record (and quality if appropriate).  This means if it has
+soft-clipped CIGAR records then the soft-clipped data will be in the
+output FASTA/FASTQ.  Hard-clipped data is, by definition, absent from
+the SAM record and hence will be absent in any FASTA/FASTQ produced.
 
 .SH OPTIONS
 .TP 8
@@ -141,6 +154,9 @@ Copy RG, BC and QT tags to the FASTQ header line, if they exist.
 .B -T TAGLIST
 Specify a comma-separated list of tags to copy to the FASTQ header line, if
 they exist.
+\fBTAGLIST\fR can be blank or \fB*\fR to indicate all tags should be copied to
+the output.
+If using \fB*\fR, be careful to quote it to avoid unwanted shell expansion.
 .TP 8
 .B -1 FILE
 Write reads with the READ1 FLAG set (and READ2 not set) to FILE instead of
@@ -228,6 +244,7 @@ mean 'read until the separator or end of tag', for example:
 .TP 8
 .B n*i*
 ignore the left part of the tag until the separator, then use the second part
+.RE
 
 .SH EXAMPLES
 Starting from a coordinate sorted file, output paired reads to
@@ -278,5 +295,6 @@ all from the Sanger Institute.
 .IR samtools (1),
 .IR samtools-faidx (1),
 .IR samtools-fqidx (1)
+.IR samtools-import (1)
 .PP
 Samtools website: <http://www.htslib.org/>

@@ -1,0 +1,9 @@
+@HD	VN:1
+@SQ	SN:PP	LN:25
+@SQ	SN:PPMR	LN:25
+@SQ	SN:PPRMR	LN:25
+@CO	P - pair + proper pair; PP - proper pair; PPMR - proper pair + mate reverse; PPRMR - proper pair + reverse + mate reverse
+P	3	PP	1	10	5M	=	10	20	ACTGC	@ABC$
+PP	2	PP	1	10	5M	=	10	20	ACTGC	@ABC$
+PPMR	34	PPMR	1	10	5M	=	10	20	ACTGC	@ABC$
+PPRMR	50	PPRMR	1	10	5M	=	10	20	ACTGC	@ABC$

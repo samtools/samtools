@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-index 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-index 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools index \- indexes SAM/BAM/CRAM files
 .\"
@@ -43,7 +43,14 @@ samtools index \- indexes SAM/BAM/CRAM files
 .
 .SH SYNOPSIS
 .PP
-samtools index
+.B samtools index -M
+.RB [ -bc ]
+.RB [ -m
+.IR INT ]
+.I FILE FILE
+.RI [ FILE ...]
+.PP
+.B samtools index
 .RB [ -bc ]
 .RB [ -m
 .IR INT ]
@@ -52,9 +59,12 @@ samtools index
 
 .SH DESCRIPTION
 .PP
-Index a coordinate-sorted BGZIP-compressed SAM, BAM or CRAM file for fast
+Index coordinate-sorted BGZIP-compressed SAM, BAM or CRAM files for fast
 random access.
 Note for SAM this only works if the file has been BGZF compressed first.
+(The first synopsis with multiple input
+.IR FILE s
+is only available with Samtools 1.16 or later.)
 
 This index is needed when
 .I region
@@ -62,9 +72,12 @@ arguments are used to limit
 .B samtools view
 and similar commands to particular regions of interest.
 
-If an output filename is given, the index file will be written to
-.IR out.index .
-Otherwise, for a CRAM file
+When only one alignment file is being indexed, the output index filename
+can be specified via
+.B -o
+or as shown in the second synopsis.
+
+When no output filename is specified, for a CRAM file
 .IR aln.cram ,
 index file
 .IB aln.cram .crai
@@ -100,6 +113,17 @@ as the fixed value used by the BAI format.
 .TP
 .BI "-m " INT
 Create a CSI index, with a minimum interval size of 2^INT.
+.TP
+.B -M
+Interpret all filename arguments as alignment files to be indexed individually.
+(Without
+.BR -M ,
+filename arguments are interpreted solely as per the second synopsis.)
+.TP
+.BI "-o " FILE
+Write the output index to
+.IR FILE .
+(Currently may only be used when exactly one alignment file is being indexed.)
 .TP
 .BI "-@, --threads " INT
 Number of input/output compression threads to use in addition to main thread [0].

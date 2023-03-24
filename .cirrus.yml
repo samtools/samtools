@@ -21,7 +21,8 @@ timeout_in: 10m
 # clone with our own commands too.
 clone_template: &HTSLIB_CLONE
   htslib_clone_script: |
-    .ci_helpers/clone "git://github.com/${CIRRUS_REPO_OWNER}/htslib" "${HTSDIR}" "${CIRRUS_BRANCH}"
+    printenv CIRRUS_CHANGE_TITLE
+    .ci_helpers/clone "https://github.com/${CIRRUS_REPO_OWNER}/htslib" "${HTSDIR}" "${CIRRUS_BRANCH}" `printenv CIRRUS_CHANGE_TITLE | sed -n 's/.*htslib#\([0-9]*\).*/\1/p'`
 
 htslib_compile_template: &HTSLIB_COMPILE
   << : *HTSLIB_CLONE
@@ -78,8 +79,8 @@ gcc_task:
 ubuntu_task:
   name: ubuntu-clang
   container:
-    #image: ubuntu:latest   # use << : *LIBDEFLATE
-    image: ubuntu:devel
+    image: ubuntu:latest
+    #image: ubuntu:devel
     cpu: 2
     memory: 1G
 
@@ -109,11 +110,11 @@ ubuntu_task:
   << : *TEST
 
 
-# CentOS
-centos_task:
-  name: centos-gcc
+# Rocky Linux
+rocky_task:
+  name: rockylinux-gcc
   container:
-    image: centos:latest
+    image: rockylinux:9
     cpu: 2
     memory: 1G
 
@@ -125,9 +126,9 @@ centos_task:
   # NB: we could consider building a docker image with these
   # preinstalled and specifying that instead, to speed up testing.
   install_script: |
-    yum install -y autoconf automake make gcc perl-Data-Dumper zlib-devel \
-        bzip2 bzip2-devel xz-devel curl-devel openssl-devel ncurses-devel \
-        git diffutils
+    yum install -y autoconf automake make gcc perl-Data-Dumper perl-FindBin \
+        zlib-devel bzip2 bzip2-devel xz-devel curl-devel openssl-devel \
+        ncurses-devel git diffutils
 
   << : *COMPILE
   << : *TEST
@@ -138,8 +139,8 @@ centos_task:
 
 macosx_task:
   name: macosx + clang
-  osx_instance:
-    image: catalina-base
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-ventura-base:latest
 
   environment:
     CC: clang

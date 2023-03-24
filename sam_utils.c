@@ -1,6 +1,6 @@
 /*  sam_utils.c -- various utilities internal to samtools.
 
-    Copyright (C) 2014-2016, 2018, 2019 Genome Research Ltd.
+    Copyright (C) 2014-2016, 2018, 2019, 2023 Genome Research Ltd.
 
     Author: John Marshall <jm18@sanger.ac.uk>
 
@@ -30,11 +30,23 @@ DEALINGS IN THE SOFTWARE.  */
 #include <string.h>
 #include <errno.h>
 
-#include "samtools.h"
+#include "sam_utils.h"
+
+static htsFile *samtools_stdout = NULL;
+
+void autoflush_if_stdout(htsFile *fp, const char *fname) {
+    if (fname == NULL || strcmp(fname, "-") == 0) samtools_stdout = fp;
+}
+
+void release_autoflush(htsFile *fp) {
+    if (samtools_stdout == fp) samtools_stdout = NULL;
+}
 
 static void vprint_error_core(const char *subcommand, const char *format, va_list args, const char *extra)
 {
     fflush(stdout);
+    if (samtools_stdout) hts_flush(samtools_stdout);
+
     if (subcommand && *subcommand) fprintf(stderr, "samtools %s: ", subcommand);
     else fprintf(stderr, "samtools: ");
     vfprintf(stderr, format, args);
@@ -62,6 +74,7 @@ void print_error_errno(const char *subcommand, const char *format, ...)
 
 void check_sam_close(const char *subcmd, samFile *fp, const char *fname, const char *null_fname, int *retp)
 {
+    release_autoflush(fp);
     int r = sam_close(fp);
     if (r >= 0) return;
 
@@ -135,4 +148,45 @@ char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header) {
     }
 
     return fn_idx;
+}
+
+
+/// parse_aux_list - parses given string for aux tags which are ',' separated
+/** @param h - pointer to a SET holding aux tags
+ * @param optarg - string having the ',' separated aux tags
+ * @param msgheader - string to be used during error output as a header
+returns -1 on failure and 0 on success
+moved from sam_view.c to here for common usage at different source files
+*/
+int parse_aux_list(auxhash_t *h, char *optarg, const char *msgheader)
+{
+    if (!*h)
+        *h = kh_init(aux_exists);
+
+    while (strlen(optarg) >= 2) {
+        int x = optarg[0]<<8 | optarg[1];
+        int ret = 0;
+        kh_put(aux_exists, *h, x, &ret);
+        if (ret < 0) {
+            kh_destroy(aux_exists, *h);
+            *h = NULL;
+            return -1;
+        }
+
+        optarg += 2;
+        if (*optarg == ',') // allow white-space too for easy `cat file`?
+            optarg++;
+        else if (*optarg != 0)
+            break;
+    }
+
+    if (strlen(optarg) != 0) {
+        fprintf(stderr, "%s: Error parsing option, "
+                "auxiliary tags should be exactly two characters long.\n", msgheader ? msgheader : "");
+        kh_destroy(aux_exists, *h);
+        *h = NULL;
+        return -1;
+    }
+
+    return 0;
 }

@@ -1,0 +1,26 @@
+@HD	VN:1.6	SO:unsorted	GO:query
+@CO	Reverse with: samtools fastq -N -o paired.fastq 
+ref1_grp1_p001	77	*	0	0	*	*	0	0	CGAGCTCGGT	!!!!!!!!!!	BC:Z:AAA+CCC
+ref1_grp1_p001	141	*	0	0	*	*	0	0	GTCGACTCTA	----------	BC:Z:AAA+CCC
+ref1_grp1_p002	77	*	0	0	*	*	0	0	CTCGGTACCC	##########	BC:Z:AAA+CCC
+ref1_grp1_p002	141	*	0	0	*	*	0	0	GCAGGTCGAC	//////////	BC:Z:AAA+CCC
+ref1_grp1_p003	77	*	0	0	*	*	0	0	GTACCCGGGG	%%%%%%%%%%	BC:Z:AAA+CCC
+ref1_grp1_p003	141	*	0	0	*	*	0	0	GCCTGCAGGT	1111111111	BC:Z:AAA+CCC
+ref1_grp1_p004	77	*	0	0	*	*	0	0	CCGGGGATCC	''''''''''	BC:Z:AAA+CCC
+ref1_grp1_p004	141	*	0	0	*	*	0	0	GCATGCCTGC	3333333333	BC:Z:AAA+CCC
+ref1_grp1_p005	77	*	0	0	*	*	0	0	GGATCCTCTA	))))))))))	BC:Z:AAA+CCC
+ref1_grp1_p005	141	*	0	0	*	*	0	0	GCTTGCATGC	5555555555	BC:Z:AAA+CCC
+ref1_grp1_p006	77	*	0	0	*	*	0	0	CCTCTAGAGT	++++++++++	BC:Z:AAA+CCC
+ref1_grp1_p006	141	*	0	0	*	*	0	0	TCAAGCTTGC	7777777777	BC:Z:AAA+CCC
+ref1_grp2_p001	77	*	0	0	*	*	0	0	AGCTCGGTAC	""""""""""	BC:Z:AAA+CCC
+ref1_grp2_p001	141	*	0	0	*	*	0	0	AGGTCGACTC	..........	BC:Z:AAA+CCC
+ref1_grp2_p002	77	*	0	0	*	*	0	0	CGGTACCCGG	$$$$$$$$$$	BC:Z:AAA+CCC
+ref1_grp2_p002	141	*	0	0	*	*	0	0	CTGCAGGTCG	0000000000	BC:Z:AAA+CCC
+ref1_grp2_p003	77	*	0	0	*	*	0	0	ACCCGGGGAT	&&&&&&&&&&	BC:Z:AAA+CCC
+ref1_grp2_p003	141	*	0	0	*	*	0	0	ATGCCTGCAG	2222222222	BC:Z:AAA+CCC
+ref1_grp2_p004	77	*	0	0	*	*	0	0	GGGGATCCTC	((((((((((	BC:Z:AAA+CCC
+ref1_grp2_p004	141	*	0	0	*	*	0	0	TTGCATGCCT	4444444444	BC:Z:AAA+CCC
+ref1_grp2_p005	77	*	0	0	*	*	0	0	ATCCTCTAGA	**********	BC:Z:AAA+CCC
+ref1_grp2_p005	141	*	0	0	*	*	0	0	AAGCTTGCAT	6666666666	BC:Z:AAA+CCC
+ref1_grp2_p006	77	*	0	0	*	*	0	0	TCTAGAGTCG	,,,,,,,,,,	BC:Z:AAA+CCC
+ref1_grp2_p006	141	*	0	0	*	*	0	0	ACTCAAGCTT	8888888888	BC:Z:AAA+CCC

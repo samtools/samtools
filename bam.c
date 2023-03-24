@@ -1,6 +1,6 @@
-/*  bam.c -- BAM format.
+/*  bam.c -- miscellaneous BAM functions.
 
-    Copyright (C) 2008-2013, 2015, 2019-2020 Genome Research Ltd.
+    Copyright (C) 2008-2013, 2015, 2019-2020, 2022 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -31,50 +31,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bam.h"
 #include "htslib/kstring.h"
 
-char *bam_format1(const bam_header_t *header, const bam1_t *b)
-{
-    kstring_t str;
-    str.l = str.m = 0; str.s = NULL;
-    if (sam_format1(header, b, &str) < 0) {
-        free(str.s);
-        str.s = NULL;
-        return NULL;
-    }
-    return str.s;
-}
-
-int bam_view1(const bam_header_t *header, const bam1_t *b)
-{
-    char *s = bam_format1(header, b);
-    int ret = -1;
-    if (!s) return -1;
-    if (puts(s) != EOF) ret = 0;
-    free(s);
-    return ret;
-}
-
-int bam_validate1(const bam_header_t *header, const bam1_t *b)
-{
-    char *s;
-
-    if (b->core.tid < -1 || b->core.mtid < -1) return 0;
-    if (header && (b->core.tid >= sam_hdr_nref(header) || b->core.mtid >= sam_hdr_nref(header))) return 0;
-
-    if (b->data_len < b->core.l_qname) return 0;
-    s = memchr(bam1_qname(b), '\0', b->core.l_qname);
-    if (s != &bam1_qname(b)[b->core.l_qname-1]) return 0;
-
-    // FIXME: Other fields could also be checked, especially the auxiliary data
-
-    return 1;
-}
-
-#ifndef MIN
-#define MIN(a,b) ((a)<(b)?(a):(b))
-#endif
-
 // FIXME: we should also check the LB tag associated with each alignment
-const char *bam_get_library(bam_header_t *h, const bam1_t *b)
+const char *bam_get_library(sam_hdr_t *h, const bam1_t *b)
 {
     const char *rg;
     kstring_t lib = { 0, 0, NULL };
@@ -97,19 +55,6 @@ const char *bam_get_library(bam_header_t *h, const bam1_t *b)
     free(lib.s);
 
     return LB_text;
-}
-
-int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func)
-{
-    int ret;
-    bam_iter_t iter;
-    bam1_t *b;
-    b = bam_init1();
-    iter = bam_iter_query(idx, tid, beg, end);
-    while ((ret = bam_iter_read(fp, iter, b)) >= 0) func(b, data);
-    bam_iter_destroy(iter);
-    bam_destroy1(b);
-    return (ret == -1)? 0 : ret;
 }
 
 /************
@@ -210,4 +155,113 @@ int bam_remove_B(bam1_t *b)
 rmB_err:
     b->core.flag |= BAM_FUNMAP;
     return -1;
+}
+
+/* Calculate the current read's start based on the stored cigar string. */
+hts_pos_t unclipped_start(bam1_t *b) {
+    uint32_t *cigar = bam_get_cigar(b);
+    int64_t clipped = 0;
+    uint32_t i;
+
+    for (i = 0; i < b->core.n_cigar; i++) {
+        char c = bam_cigar_opchr(cigar[i]);
+
+        if (c == 'S' || c == 'H') { // clips
+            clipped += bam_cigar_oplen(cigar[i]);
+        } else {
+            break;
+        }
+    }
+
+    return b->core.pos - clipped + 1;
+}
+
+/* Calculate the mate's unclipped start based on position and cigar string from MC tag. */
+hts_pos_t unclipped_other_start(hts_pos_t op, char *cigar) {
+    char *c = cigar;
+    int64_t clipped = 0;
+
+    while (*c && *c != '*') {
+        long num = 0;
+
+        if (isdigit((int)*c)) {
+            num = strtol(c, &c, 10);
+        } else {
+            num = 1;
+        }
+
+        if (*c == 'S' || *c == 'H') { // clips
+            clipped += num;
+        } else {
+            break;
+        }
+
+        c++;
+    }
+
+    return op - clipped + 1;
+}
+
+/* Calculate the current read's end based on the stored cigar string. */
+hts_pos_t unclipped_end(bam1_t *b) {
+    uint32_t *cigar = bam_get_cigar(b);
+    hts_pos_t end_pos, clipped = 0;
+    int32_t i;
+
+    end_pos = bam_endpos(b);
+
+    // now get the clipped end bases (if any)
+    // if we get to the beginning of the cigar string
+    // without hitting a non-clip then the results are meaningless
+    for (i = b->core.n_cigar - 1; i >= 0; i--) {
+        char c = bam_cigar_opchr(cigar[i]);
+
+        if (c == 'S' || c == 'H') { // clips
+            clipped += bam_cigar_oplen(cigar[i]);
+        } else {
+            break;
+        }
+    }
+
+    return end_pos + clipped;
+}
+
+
+/* Calculate the mate's unclipped end based on start position and cigar string from MC tag.*/
+hts_pos_t unclipped_other_end(int64_t op, char *cigar) {
+    char *c = cigar;
+    int64_t refpos = 0;
+    int skip = 1;
+
+    while (*c && *c != '*') {
+        long num = 0;
+
+        if (isdigit((int)*c)) {
+            num = strtol(c, &c, 10);
+        } else {
+            num = 1;
+        }
+
+        switch (*c) {
+            case 'M':
+            case 'D':
+            case 'N':
+            case '=':
+            case 'X':
+                refpos += num;
+                skip = 0; // ignore initial clips
+            break;
+
+            case 'S':
+            case 'H':
+                if (!skip) {
+                refpos += num;
+            }
+            break;
+        }
+
+        c++;
+   }
+
+    return  op + refpos;
 }

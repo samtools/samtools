@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-calmd 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-calmd 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools calmd \- calculates MD and NM tags
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018, 2022 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -67,6 +67,17 @@ These records will be skipped, as it is not possible to recalculate
 the MD and NM tags without access to the query sequence.
 .B samtools calmd
 will emit a warning if any records have been skipped for this reason.
+
+Calmd works best on position-sorted input files, as with these it can
+stream through the reference sequence and so doesn't have to store
+much reference data at any one time.
+For other orderings, it may have to switch to a caching mode which
+keeps the reference sequences in memory.
+This will result in calmd using more memory (up to the full size
+of the reference) than it would in the position-sorted case.
+Note also that versions of samtools calmd up to 1.16.1 should only
+be used on position sorted inputs as they could be very slow when run
+on other orderings.
 
 .SH OPTIONS
 .TP 8

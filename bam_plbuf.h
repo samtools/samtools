@@ -1,6 +1,6 @@
 /*  bam_plbuf.h -- plbuf routines (declarations copied from bam.h).
 
-    Copyright (C) 2008, 2013 Genome Research Ltd.
+    Copyright (C) 2008, 2013, 2021 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -41,13 +41,20 @@ typedef struct {
 #ifdef __cplusplus
 extern "C" {
 #endif
-    void bam_plbuf_reset(bam_plbuf_t *buf);
+/* Exported from bam_plbuf.c */
+void bam_plbuf_reset(bam_plbuf_t *buf);
 
-    bam_plbuf_t *bam_plbuf_init(bam_pileup_f func, void *data);
+bam_plbuf_t *bam_plbuf_init(bam_pileup_f func, void *data);
 
-    void bam_plbuf_destroy(bam_plbuf_t *buf);
+void bam_plbuf_destroy(bam_plbuf_t *buf);
 
-    int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf);
+int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf);
+
+/* Exported from bam_plcmd.c */
+int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
+               hts_pos_t ref_len, const char *ref, kstring_t *ks,
+               int rev_del, int no_ins, int no_ins_mods,
+               int no_del, int no_ends);
 #ifdef __cplusplus
 }
 #endif

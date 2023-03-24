@@ -1,7 +1,7 @@
 /* coverage.c -- samtools coverage subcommand
 
     Copyright (C) 2018,2019 Florian Breitwieser
-    Portions copyright (C) 2019-2020 Genome Research Ltd.
+    Portions copyright (C) 2019-2021 Genome Research Ltd.
 
     Author: Florian P Breitwieser <florian.bw@gmail.com>
 
@@ -24,7 +24,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 /* This program calculates coverage from multiple BAMs
- * simutaneously, to achieve random access and to use the BED interface.
+ * simultaneously, to achieve random access and to use the BED interface.
  * To compile this program separately, you may:
  *
  *   gcc -g -O2 -Wall -o bamcov -D_MAIN_BAMCOV coverage.c -lhts -lz
@@ -54,8 +54,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/hts.h"
 #include "samtools.h"
 #include "sam_opts.h"
-
-const char *VERSION = "0.1";
 
 typedef struct {  // auxiliary data structure to hold stats on coverage
     unsigned long long n_covered_bases;
@@ -89,7 +87,7 @@ typedef struct {  // auxiliary data structure to hold a BAM file
 // LOWER ONE EIGHTH BLOCK … FULL BLOCK
 static const char *const BLOCK_CHARS8[8] = {"\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588"};
 // In some terminals / with some fonts not all UTF8 block characters are supported (e.g. Putty). Use only half and full block for those
-static const char *const BLOCK_CHARS2[2] = {"\u2584", "\u2588"};
+static const char *const BLOCK_CHARS2[2] = {".", ":"};
 
 #else
 
@@ -100,7 +98,7 @@ static const char *const BLOCK_CHARS8[8] = {
     "\xE2\x96\x81", "\xE2\x96\x82", "\xE2\x96\x83", "\xE2\x96\x84",
     "\xE2\x96\x85", "\xE2\x96\x86", "\xE2\x96\x87", "\xE2\x96\x88" };
 
-static const char *const BLOCK_CHARS2[2] = {"\xE2\x96\x84", "\xE2\x96\x88"};
+static const char *const BLOCK_CHARS2[2] = {".", ":"};
 
 #endif
 
@@ -117,6 +115,9 @@ static int usage() {
             "  --rf <int|str>          required flags: skip reads with mask bits unset []\n"
             "  --ff <int|str>          filter flags: skip reads with mask bits set \n"
             "                                      [UNMAP,SECONDARY,QCFAIL,DUP]\n"
+            "  -d, --depth INT         maximum allowed coverage depth [1000000].\n"
+            "                          If 0, depth is set to the maximum integer value,\n"
+            "                          effectively removing any depth limit.\n"
             "Output options:\n"
             "  -m, --histogram         show histogram instead of tabular output\n"
             "  -A, --ascii             show only ASCII characters in histogram\n"
@@ -136,7 +137,7 @@ static int usage() {
             "  endpos      End position (or sequence length)\n"
             "  numreads    Number reads aligned to the region (after filtering)\n"
             "  covbases    Number of covered bases with depth >= 1\n"
-            "  coverage    Proportion of covered bases [0..1]\n"
+            "  coverage    Percentage of covered bases [0..100]\n"
             "  meandepth   Mean depth of coverage\n"
             "  meanbaseq   Mean baseQ in covered region\n"
             "  meanmapq    Mean mapQ of selected reads\n"
@@ -235,7 +236,7 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
         } else {
             fprintf(file_out, ">%7.2f%% ", current_bin);
         }
-        fprintf(file_out, VERTICAL_LINE);
+        fprintf(file_out, full_utf ? VERTICAL_LINE : "|");
         for (col = 0; col < hist_size; ++col) {
             // get the difference in eights, or halfs when full UTF8 is not supported
             int cur_val_diff = round(blockchar_len * (hist_data[col] - current_bin) / row_bin_size) - 1;
@@ -248,10 +249,10 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
                 fprintf(file_out, "%s", BLOCK_CHARS[cur_val_diff]);
             }
         }
-        fprintf(file_out, VERTICAL_LINE);
+        fprintf(file_out, full_utf ? VERTICAL_LINE : "|");
         fputc(' ', file_out);
         switch (i) {
-            case 9: fprintf(file_out, "Number of reads: %i", stats[tid].n_selected_reads); break;
+            case 9: fprintf(file_out, "Number of reads: %u", stats[tid].n_selected_reads); break;
             case 8: if (stats[tid].n_reads - stats[tid].n_selected_reads > 0) fprintf(file_out, "    (%i filtered)", stats[tid].n_reads - stats[tid].n_selected_reads); break;
             case 7: fprintf(file_out, "Covered bases:   %sbp", readable_bps(stats[tid].n_covered_bases, buf)); break;
             case 6: fprintf(file_out, "Percent covered: %.4g%%",
@@ -287,7 +288,7 @@ int main_coverage(int argc, char *argv[]) {
 
     int ret, tid = -1, old_tid = -1, pos, i, j;
 
-    int max_depth = 0;
+    int max_depth = 1000000;
     int opt_min_baseQ = 0;
     int opt_min_mapQ = 0;
     int opt_min_len = 0;
@@ -324,7 +325,7 @@ int main_coverage(int argc, char *argv[]) {
         {"incl-flags", required_argument, NULL, 1}, // require flag
         {"excl-flags", required_argument, NULL, 2}, // filter flag
         {"bam-list", required_argument, NULL, 'b'},
-        {"min-read-len", required_argument, NULL, 'L'},
+        {"min-read-len", required_argument, NULL, 'l'},
         {"min-MQ", required_argument, NULL, 'q'},
         {"min-mq", required_argument, NULL, 'q'},
         {"min-BQ", required_argument, NULL, 'Q'},
@@ -336,13 +337,14 @@ int main_coverage(int argc, char *argv[]) {
         {"n-bins", required_argument, NULL, 'w'},
         {"region", required_argument, NULL, 'r'},
         {"help", no_argument, NULL, 'h'},
+        {"depth", required_argument, NULL, 'd'},
         { NULL, 0, NULL, 0 }
     };
 
     // parse the command line
     int c;
     opterr = 0;
-    while ((c = getopt_long(argc, argv, "Ao:L:q:Q:hHw:r:b:m", lopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "Ao:l:q:Q:hHw:r:b:md:", lopts, NULL)) != -1) {
         switch (c) {
             case 1:
                 if ((required_flags = bam_str2flag(optarg)) < 0) {
@@ -353,9 +355,10 @@ int main_coverage(int argc, char *argv[]) {
                     fprintf(stderr,"Could not parse --ff %s\n", optarg); return EXIT_FAILURE;
                 }; break;
             case 'o': opt_output_file = optarg; opt_full_width = false; break;
-            case 'L': opt_min_len = atoi(optarg); break;
+            case 'l': opt_min_len = atoi(optarg); break;
             case 'q': opt_min_mapQ = atoi(optarg); break;
             case 'Q': opt_min_baseQ = atoi(optarg); break;
+            case 'd': max_depth = atoi(optarg); break; // maximum coverage depth
             case 'w': opt_n_bins = atoi(optarg); opt_full_width = false;
                       opt_print_histogram = true; opt_print_tabular = false;
                       break;
@@ -441,7 +444,7 @@ int main_coverage(int argc, char *argv[]) {
 
     data = (bam_aux_t **)calloc(n_bam_files, sizeof(bam_aux_t*)); // data[i] for the i-th BAM file
     if (!data) {
-        print_error("coverage", "Failed to allocate memory");
+        print_error_errno("coverage", "Failed to allocate memory");
         status = EXIT_FAILURE;
         goto coverage_end;
     }
@@ -450,7 +453,7 @@ int main_coverage(int argc, char *argv[]) {
         int rf;
         data[i] = (bam_aux_t *) calloc(1, sizeof(bam_aux_t));
         if (!data[i]) {
-            print_error("coverage", "Failed to allocate memory");
+            print_error_errno("coverage", "Failed to allocate memory");
             status = EXIT_FAILURE;
             goto coverage_end;
         }
@@ -466,12 +469,12 @@ int main_coverage(int argc, char *argv[]) {
 
         // Set CRAM options on file handle - returns 0 on success
         if (hts_set_opt(data[i]->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
-            print_error_errno("coverage", "Failed to set CRAM_OPT_REQUIRED_FIELDS value");
+            print_error("coverage", "Failed to set CRAM_OPT_REQUIRED_FIELDS value");
             status = EXIT_FAILURE;
             goto coverage_end;
         }
         if (hts_set_opt(data[i]->fp, CRAM_OPT_DECODE_MD, 0)) {
-            print_error_errno("coverage", "Failed to set CRAM_OPT_DECODE_MD value");
+            print_error("coverage", "Failed to set CRAM_OPT_DECODE_MD value");
             status = EXIT_FAILURE;
             goto coverage_end;
         }
@@ -497,7 +500,7 @@ int main_coverage(int argc, char *argv[]) {
             data[i]->iter = sam_itr_querys(idx, data[i]->hdr, opt_reg); // set the iterator
             hts_idx_destroy(idx); // the index is not needed any more; free the memory
             if (data[i]->iter == NULL) {
-                print_error_errno("coverage", "Failed to parse region \"%s\"", opt_reg);
+                print_error("coverage", "Failed to parse region \"%s\". Check the region format or region name presence in the file \"%s\"", opt_reg, argv[optind+i]);
                 status = EXIT_FAILURE;
                 goto coverage_end;
             }
@@ -511,7 +514,7 @@ int main_coverage(int argc, char *argv[]) {
     int n_targets = sam_hdr_nref(h);
     stats = calloc(n_targets, sizeof(stats_aux_t));
     if (!stats) {
-        print_error("coverage", "Failed to allocate memory");
+        print_error_errno("coverage", "Failed to allocate memory");
         status = EXIT_FAILURE;
         goto coverage_end;
     }
@@ -548,7 +551,7 @@ int main_coverage(int argc, char *argv[]) {
     n_plp = (int*) calloc(n_bam_files, sizeof(int*)); // n_plp[i] is the number of covering reads from the i-th BAM
     plp = (const bam_pileup1_t**) calloc(n_bam_files, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
     if (!hist || !n_plp || !plp) {
-        print_error("coverage", "Failed to allocate memory");
+        print_error_errno("coverage", "Failed to allocate memory");
         status = EXIT_FAILURE;
         goto coverage_end;
     }
@@ -633,10 +636,7 @@ int main_coverage(int argc, char *argv[]) {
         }
     }
 
-    if (ret < 0) {
-        print_error("coverage", "error reading from input file");
-        status = EXIT_FAILURE;
-    }
+    if (ret < 0) status = EXIT_FAILURE;
 
 coverage_end:
     if (n_plp) free(n_plp);

@@ -1,6 +1,6 @@
 /*  samtools.h -- utility routines.
 
-    Copyright (C) 2013-2015, 2019 Genome Research Ltd.
+    Copyright (C) 2013-2015, 2019, 2023 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
 
@@ -27,26 +27,28 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "htslib/hts_defs.h"
 #include "htslib/sam.h"
+#include "sam_utils.h"
 
 const char *samtools_version(void);
 
-#define CHECK_PRINTF(fmt,args) HTS_FORMAT(HTS_PRINTF_FMT, (fmt), (args))
+/* BAM sanitizer options */
+#define FIX_POS   2
+#define FIX_MQUAL 4
+#define FIX_UNMAP 8
+#define FIX_CIGAR 16
+#define FIX_AUX   32
 
-void print_error(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);
-void print_error_errno(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);
+// default for position sorted data
+#define FIX_ON (FIX_MQUAL|FIX_UNMAP|FIX_CIGAR|FIX_AUX)
+#define FIX_ALL 255
 
-void check_sam_close(const char *subcmd, samFile *fp, const char *fname, const char *null_fname, int *retp);
+// Parses a comma-separated list of "pos", "mqual", "unmap", "cigar", and "aux"
+// keywords for the bam sanitizer.
+int bam_sanitize_options(const char *str);
 
-/*
- * Utility function to add an index to a file we've opened for write.
- * NB: Call this after writing the header and before writing sequences.
- *
- * The returned index filename should be freed by the caller, but only
- * after sam_idx_save has been called.
- *
- * Returns index filename on success,
- *         NULL on failure.
- */
-char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header);
+// Sanitize a BAM record, using FIX_* bit flags as defined above.
+// Returns 0 on success,
+//        <0 on failure.
+int bam_sanitize(sam_hdr_t *h, bam1_t *b, int flags);
 
 #endif

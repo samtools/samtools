@@ -1,0 +1,6 @@
+@HD	VN:1.6	SO:unsorted	GO:query
+@CO	Reverse with: samtools fastq -N -o paired.fastq 
+ref1_grp1_p001	77	*	0	0	*	*	0	0	CGAGCTCGGT	!!!!!!!!!!
+ref1_grp1_p001	141	*	0	0	*	*	0	0	GTCGACTCTA	----------
+ref1_grp1_p002	77	*	0	0	*	*	0	0	CTCGGTACCC	##########	XZ:i:4294967295	XA:i:-2147483648
+ref1_grp1_p002	141	*	0	0	*	*	0	0	GCAGGTCGAC	//////////	AA:Z:

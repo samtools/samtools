@@ -1,0 +1,6 @@
+@HD	VN:1.6	SO:unsorted	GO:query
+@CO	Reverse with: samtools fastq --i1 I1.fastq --i2 I2.fastq -1 R1.fastq -2 R2.fastq  --index-format="i*i*"
+one	77	*	0	0	*	*	0	0	ACCCCCCCCCCG	EFFFFFFFFFFG	OX:Z:AG-TTTG	BZ:Z:12 ##12
+one	141	*	0	0	*	*	0	0	TCCCCCCCCCCA	1FFFFFFFFFF2
+two	77	*	0	0	*	*	0	0	ATTTTTTTTTTG	EDDDDDDDDDDG	OX:Z:AC-TTTC	BZ:Z:34 ##34
+two	141	*	0	0	*	*	0	0	CTTTTTTTTTTA	1DDDDDDDDDD2

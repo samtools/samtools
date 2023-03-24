@@ -1,0 +1,38 @@
+#   Content_ID  Uncomp.size    Comp.size   Ratio Method  Data_series
+BLOCK     CORE            0            0 100.00% .      
+BLOCK       10         4580         2228  48.65% _bg     embedded_ref
+BLOCK       11        10295         3112  30.23% g       RN
+BLOCK       12        57572        32111  55.78% 0       QS
+BLOCK       14          962          396  41.16% 0g.     SC
+BLOCK       15          872          438  50.23% 0       BF
+BLOCK       17          569          549  96.49% .g0     AP
+BLOCK       18          569          560  98.42% .g      RG
+BLOCK       19          568          166  29.23% 2       MQ
+BLOCK       20          300           29   9.67% 2       NS
+BLOCK       21          569          120  21.09% 2       MF
+BLOCK       22         1889         1421  75.22% _b      TS
+BLOCK       23         1164         1152  98.97% ._8     NP
+BLOCK       25          569          110  19.33% 2       RL
+BLOCK       26          568          248  43.66% 0       FN
+BLOCK       27          378          118  31.22% 2       FC
+BLOCK       28          378          378 100.00% .       FP
+BLOCK       30          111           52  46.85% 0.      BA
+BLOCK       31          320          125  39.06% 2       BS
+BLOCK       32          569          184  32.34% 0       TL
+BLOCK  4279651          568          182  32.04% 02      AMc
+BLOCK  4346202        58600         1562   2.67% b       BQZ
+BLOCK  5067107          546          156  28.57% 2       MQc
+BLOCK  5459299          568          195  34.33% g20     SMc
+BLOCK  5779555          549           30   5.46% 2       X0c
+BLOCK  5779811          549           40   7.29% 2       X1c
+BLOCK  5783898           50           43  86.00% 2       XAZ
+BLOCK  5784419           33           33 100.00% .       XCc
+BLOCK  5788737          568           93  16.37% 2       XTA
+BLOCK  6506051            1            1 100.00% .       cFC
+
+Number of containers                   2
+Number of slices                       6
+Number of sequences                  569
+Number of bases                    57572
+Total file size                    60965
+Format overhead size               15133

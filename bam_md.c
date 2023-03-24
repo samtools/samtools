@@ -1,6 +1,6 @@
 /*  bam_md.c -- calmd subcommand.
 
-    Copyright (C) 2009-2011, 2014-2015, 2019-2020 Genome Research Ltd.
+    Copyright (C) 2009-2011, 2014-2015, 2019-2020, 2022 Genome Research Ltd.
     Portions copyright (C) 2009-2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <ctype.h>
 #include <limits.h>
 #include <errno.h>
+#include <assert.h>
 #include "htslib/faidx.h"
 #include "htslib/sam.h"
 #include "htslib/kstring.h"
@@ -44,6 +45,19 @@ DEALINGS IN THE SOFTWARE.  */
 #define UPDATE_NM 8
 #define UPDATE_MD 16
 #define HASH_QNM  32
+
+typedef struct cached_ref_entry {
+    char *ref;
+    hts_pos_t len;
+} cached_ref_entry;
+
+typedef struct ref_cache {
+    cached_ref_entry *refs;
+    char *last_ref;
+    hts_pos_t last_len;
+    int nref;
+    int last_tid;
+} ref_cache;
 
 int bam_aux_drop_other(bam1_t *b, uint8_t *s);
 
@@ -214,6 +228,106 @@ int bam_fillmd1(bam1_t *b, char *ref, int flag, int quiet_mode)
     return bam_fillmd1_core(NULL, b, ref, INT_MAX, flag, 0, quiet_mode, NULL);
 }
 
+// Get a new reference sequence.
+// For position-sorted inputs, the previous reference should never be
+// needed again and can be discarded to save memory.  For other orderings,
+// references are stored in a cache in case they're required in the future.
+// The caching mode is turned on if the requested  tid is less than the last
+// one used, indicating the file ordering doesn't match the sequence dictionary.
+static int get_ref(faidx_t *fai, sam_hdr_t *header, ref_cache *cache,
+                   int tid, char **ref_out, const char **ref_name_out,
+                   hts_pos_t *len_out)
+{
+    char *ref = NULL;
+    const char *ref_name;
+    hts_pos_t len = 0;
+
+    // This should only be called when tid changes
+    assert(tid != cache->last_tid);
+
+    // Array lookup, should be fast
+    ref_name = sam_hdr_tid2name(header, tid);
+    *ref_name_out = ref_name;
+
+    // Return a cached entry, if available
+    if (cache->refs && tid >= 0 && tid < cache->nref
+        && cache->refs[tid].ref) {
+        assert(cache->last_ref == NULL);
+        *ref_out = cache->refs[tid].ref;
+        *len_out = cache->refs[tid].len;
+        cache->last_tid = tid;
+        return 0;
+    }
+
+    // Try to get the reference
+    if (ref_name)
+        ref = fai_fetch64(fai, ref_name, &len);
+
+    if (!ref) {
+        // Historically, calmd doesn't worry too much about missing refs
+        *ref_out = NULL;
+        *len_out = 0;
+        return 0;
+    }
+
+    if (!cache->refs && cache->last_tid > tid) {
+        // Going backwards throught the list of tids implies
+        // a non-position-ordered file, so turn on caching mode
+        cache->nref = sam_hdr_nref(header);
+        if (cache->nref < 0) {
+            print_error("calmd", "couldn't get number of refs from header");
+            return -1;
+        }
+        if (cache->nref > 0) {
+            cache->refs = calloc(cache->nref, sizeof(cache->refs[0]));
+            if (!cache->refs) {
+                print_error_errno("calmd",
+                                  "couldn't allocate reference cache");
+                return -1;
+            }
+            // Add the reference we already have as the first entry
+            if (cache->last_tid >= 0 && cache->last_tid < cache->nref) {
+                cache->refs[cache->last_tid].ref = cache->last_ref;
+                cache->refs[cache->last_tid].len = cache->last_len;
+            } else {
+                free(cache->last_ref);
+            }
+            cache->last_ref = NULL;
+        }
+    }
+
+    if (cache->refs) {
+        assert(cache->last_ref == NULL);  // Shouldn't be set when caching
+        // Add the new reference to the cache
+        if (tid >= 0 && tid < cache->nref) {
+            cache->refs[tid].ref = ref;
+            cache->refs[tid].len = len;
+        }
+    } else {
+        // Streaming mode - free the last ref and replace it with this one
+        free(cache->last_ref);
+        cache->last_ref = ref;
+        cache->last_len = len;
+    }
+
+    *ref_out = ref;
+    *len_out = len;
+    cache->last_tid = tid;
+    return 0;
+}
+
+static void refs_destroy(ref_cache *cache) {
+    if (cache->refs) {
+        int i;
+        assert(cache->last_ref == NULL);
+        for (i = 0; i < cache->nref; i++)
+            free(cache->refs[i].ref);
+        free(cache->refs);
+    } else {
+        free(cache->last_ref);
+    }
+}
+
 int calmd_usage() {
     fprintf(stderr,
 "Usage: samtools calmd [-eubrAESQ] <aln.bam> <ref.fasta>\n"
@@ -234,13 +348,14 @@ int calmd_usage() {
 
 int bam_fillmd(int argc, char *argv[])
 {
-    int c, flt_flag, tid = -2, ret, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag, quiet_mode, no_pg = 0;
-    hts_pos_t len;
+    int c, flt_flag, ret, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag, quiet_mode, no_pg = 0;
+    hts_pos_t len = 0;
     htsThreadPool p = {NULL, 0};
     samFile *fp = NULL, *fpout = NULL;
     sam_hdr_t *header = NULL;
     faidx_t *fai = NULL;
     char *ref = NULL, mode_w[8], *ref_file, *arg_list = NULL;
+    ref_cache refs = { NULL, NULL, 0, 0, -2 };
     const char *ref_name = NULL;
     bam1_t *b = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -342,15 +457,11 @@ int bam_fillmd(int argc, char *argv[])
     }
     while ((ret = sam_read1(fp, header, b)) >= 0) {
         if (b->core.tid >= 0) {
-            if (tid != b->core.tid) {
-                free(ref);
-                ref = NULL;
-                len = 0;
-                ref_name = sam_hdr_tid2name(header, b->core.tid);
-                if (ref_name) {
-                    ref = fai_fetch64(fai, ref_name, &len);
+            if (refs.last_tid != b->core.tid) {
+                if (get_ref(fai, header, &refs, b->core.tid,
+                            &ref, &ref_name, &len) < 0) {
+                    goto fail;
                 }
-                tid = b->core.tid;
                 if (ref == 0) { // FIXME: Should this always be fatal?
                     fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
                             ref_name ? ref_name : "(unknown)");
@@ -393,7 +504,7 @@ int bam_fillmd(int argc, char *argv[])
     sam_hdr_destroy(header);
 
     free(arg_list);
-    free(ref);
+    refs_destroy(&refs);
     fai_destroy(fai);
     sam_close(fp);
     if (sam_close(fpout) < 0) {
@@ -406,7 +517,7 @@ int bam_fillmd(int argc, char *argv[])
 
  fail:
     free(arg_list);
-    free(ref);
+    refs_destroy(&refs);
     if (b) bam_destroy1(b);
     if (header) sam_hdr_destroy(header);
     if (fai) fai_destroy(fai);

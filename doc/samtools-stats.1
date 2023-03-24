@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-stats 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-stats 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools stats \- produces comprehensive statistics from alignment file
 .\"
@@ -82,6 +82,7 @@ IS	Insert sizes
 RL	Read lengths
 FRL	Read lengths for first fragments only
 LRL	Read lengths for last fragments only
+MAPQ	Mapping qualities
 ID	Indel size distribution
 IC	Indels per cycle
 COV	Coverage (depth) distribution
@@ -126,7 +127,7 @@ but more comprehensive.
 .B raw total sequences
 - total number of reads in a file, excluding supplementary and secondary reads.
 Same number reported by
-.BR "samtools view -c".
+.BR "samtools view -c -F 0x900".
 
 .B filtered sequences
 - number of discarded reads when using -f or -F option.
@@ -334,6 +335,9 @@ RL reports the distribution for all read lengths, with one row per
 observed length (up to the maximum specified by the \fB-l\fR option).
 Columns are read length and frequency.  FRL and LRL contains the same
 information separated into first and last fragments.
+
+MAPQ reports the mapping qualities for the mapped reads, ignoring the
+duplicates, supplementary, secondary and failing quality reads.
 
 ID reports the distribution of indel sizes, with one row per observed
 size. The columns are size, frequency of insertions at that size and

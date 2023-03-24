@@ -1,0 +1,110 @@
+'\" t
+.TH samtools-reference 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.SH NAME
+samtools reference \- extracts an embedded reference from a CRAM file
+.\"
+.\" Copyright (C) 2022 Genome Research Ltd.
+.\"
+.\" Author: James Bonfield
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools reference
+.RB [ -q ]
+.RB [ -r
+.IR region ]
+.RB [ -o
+.IR out.fa "] " in.cram
+
+.SH DESCRIPTION
+.PP
+Creates the reference from aligned data using either the MD:Z
+auxiliary tags or an embedded reference in a CRAM file.  The output
+is a FASTA file.
+
+For the embedded reference mode (\fB-e\fR) this operation is fast, but
+only works on CRAMs produced using \fB--output-fmt-option embed_ref=1\fR.
+Note this may not be the complete reference used.  Each CRAM slice
+will hold the entire reference that spans the slice coordinates, but
+gaps in coverage can lead to gaps between slices.  However this
+reference should be suitable for passing into a CRAM decode
+(\fBsamtools view -T ref.fa\fR).
+
+For SAM/BAM files or CRAMs without reference, using the MD:Z tag may
+also produce an incomplete reference.  Unlike embedded reference, this
+reference may not be sufficient for decoding a CRAM file as the CRAM
+slice headers store the MD5sum of the portion of reference than spans
+that slice, but the slice may not have 100% coverage leading to Ns in
+the computed reference.  However it should still be possible to decode
+such CRAMs by ignoring the md5 mismatches using e.g. \fBsamtools view
+--input-fmt-option ignore_md5=1\fR.
+
+.SH OPTIONS
+.TP 8
+.B -e
+Enable CRAM embedded reference mode.
+
+.TP 8
+.B -q
+Enables quiet mode and will produce no output.  By default a line per
+reference is reporting describing the percentage with non-N bases.
+
+.TP 8
+.BI "-r " region
+Specifies a single region to produce the reference from.  If
+specified, an index file must be present.
+
+.TP 8
+.BI "-o " FILE
+Write the FASTA records to \fIFILE\fR.  By default this is sent to stdout.
+
+.TP 8
+.BI "-@ " INT
+The number of BAM/CRAM decompression threads to use in addition to the
+main thread [0].
+
+Note this does not multi-thread the main reference generation steps,
+so scaling may be capped by 2 or 3 threads, depending on the data.  It
+will also not affect the \fB-e\fR option for CRAM embedded reference,
+although this is already the fastest method.
+
+.SH AUTHOR
+.PP
+Written by James Bonfield from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1)
+.PP
+Samtools website: <http://www.htslib.org/>

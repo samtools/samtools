@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-bedcov 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-bedcov 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
 samtools bedcov \- reports coverage over regions in a supplied BED file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018, 2020 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018, 2020, 2022 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -57,8 +57,8 @@ Counts for each alignment file supplied are reported in separate columns.
 
 .SH OPTIONS
 .TP
-.BI "-Q " INT
-.RI "Only count reads with mapping quality greater than " INT
+.BI "-Q,\ --min-MQ " INT
+.RI "Only count reads with mapping quality greater than or equal to " INT
 .TP
 .BI "-g " FLAGS
 By default, reads that have any of the flags UNMAP, SECONDARY, QCFAIL,
@@ -86,6 +86,13 @@ Do not include deletions (D) and ref skips (N) in bedcov computation.
 Print an additional column, for each file, containing the number of bases having
 a depth above and including the given threshold. If the option is not used, the
 extra column is not displayed. The option value must be an integer >= 0.
+.TP
+.B -c
+Print an additional column with the read count for this region.  This
+will be +1 for every read covering the region, not just starting
+within in.  The whole read filtering options \fB-Q\fR, \fB-g\fR and
+\fB-G\fR options will also have an affect on this count, but \fB-d\fR
+will not.
 .TP
 .B "-X"
 If this option is set, it will allows user to specify customized index file location(s) if the data

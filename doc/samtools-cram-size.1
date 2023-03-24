@@ -1,0 +1,213 @@
+'\" t
+.TH samtools-cram-size 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.SH NAME
+samtools cram-size \- list a break down of data types in a CRAM file
+.\"
+.\" Copyright (C) 2023 Genome Research Ltd.
+.\"
+.\" Author: James Bonfield <jkb@sanger.ac.uk>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools cram-size
+.RB [ -ve ]
+.RB [ -o
+.IR file ]
+.I in.bam
+
+.SH DESCRIPTION
+.PP
+Produces a summary of CRAM block Content ID numbers and their
+associated Data Series stored within them.  Optionally a more detailed
+breakdown of how each data series is encoded per container may also be
+listed using the \fB-e\fR or \fB--encodings\fR option.
+
+CRAM permits mixing multiple Data Series into a single block.  In this
+case it is not possible to tell the relative proportion that the Data
+Series consume within that block.  CRAM also permits different
+encodings and block Content ID assignment per container, although this
+would be highly unusual.  Htslib will always assign the same Data
+Series to a block with a consistent Content ID, although the CRAM
+Encoding may change.
+
+Each CRAM block has a compression method.  These may not be consistent
+between successive blocks with the same Content ID.  Htslib learns
+which compression methods work, so a single Content ID may have
+multiple compression methods associated with it.  The methods utilised
+are listed per line with a single character code, although the size
+breakdown per method and a more verbose description can be shown using
+the \fB-v\fR option.  The compression codecs used in CRAM may have a
+variety of parameters, such as compression levels, inbuilt
+transformations, and choices of entropy encoding.  An attempt is made
+to distinguish between these different method parameterisations.
+
+The compression methods and their short and long (verbose) name are below:
+
+.TS
+centre;
+l l l
+l l l .
+Short	Long	Description
+_
+g	gzip	Gzip
+\&_	gzip-min	Gzip -1
+G	gzip-max	Gzip -9
+b	bzip2	Bzip2
+b	bzip2-1 to bzip2-8	Explicit bzip2 compression levels
+B	bzip2-9			Bzip2 -9
+l	lzma	LZMA
+r	r4x8-o0	rANS 4x8 Order-0
+R	r4x8-o1	rANS 4x8 Order-1
+0	r4x16-o0	rANS 4x16 Order-0
+0	r4x16-o0R	rANS 4x16 Order-0 with RLE
+0	r4x16-o0P	rANS 4x16 Order-0 with PACK
+0	r4x16-o0PR	rANS 4x16 Order-0 with PACK and RLE
+1	r4x16-o1	rANS 4x16 Order-1
+1	r4x16-o1R	rANS 4x16 Order-1 with RLE
+1	r4x16-o1P	rANS 4x16 Order-1 with PACK
+1	r4x16-o1PR	rANS 4x16 Order-1 with PACK and RLE
+4	r32x16-o0	rANS 32x16 Order-0
+4	r32x16-o0R	rANS 32x16 Order-0 with RLE
+4	r32x16-o0P	rANS 32x16 Order-0 with PACK
+4	r32x16-o0PR	rANS 32x16 Order-0 with PACK and RLE
+5	r32x16-o1	rANS 32x16 Order-1
+5	r32x16-o1R	rANS 32x16 Order-1 with RLE
+5	r32x16-o1P	rANS 32x16 Order-1 with PACK
+5	r32x16-o1PR	rANS 32x16 Order-1 with PACK and RLE
+8	rNx16-xo0	rANS Nx16 STRIPED mode
+2	rNx16-cat	rANS Nx16 CAT mode
+a	arith-o0	Arithmetic coding Order-0
+a	arith-o0R	Arithmetic coding Order-0 with RLE
+a	arith-o0P	Arithmetic coding Order-0 with PACK
+a	arith-o0PR	Arithmetic coding Order-0 with PACK and RLE
+A	arith-o1	Arithmetic coding Order-1
+A	arith-o1R	Arithmetic coding Order-1 with RLE
+A	arith-o1P	Arithmetic coding Order-1 with PACK
+A	arith-o1PR	Arithmetic coding Order-1 with PACK and RLE
+a	arith-xo0	Arithmetic coding STRIPED mode
+a	arith-cat	Arithmetic coding CAT mode
+f	fqzcomp	FQZComp quality codec
+n	tok3-rans	Name tokeniser with rANS encoding
+n	tok3-arith	Name tokeniser with Arithmetic encoding
+.TE
+
+
+.SH OPTIONS
+
+.TP 10
+.BI "-o " FILE
+Output size information to \fIFILE\fR.
+
+.TP
+.B -v
+Verbose mode.  This shows one line per combination of Content ID and
+compression method.
+
+.TP
+.B -e, --encodings
+CRAM uses an Encoding, which describes how the data is serialised into
+a data block.  This is distinct from the CRAM compression method,
+which is then applied to the block post-encoding.  The encoding
+methods are stored per CRAM Container.
+
+This option list CRAM record encoding map and tag encoding map.  This
+shows the data series, the associated CRAM encoding method, such as
+HUFFMAN, BETA or EXTERNAL, and any parameters associated with that
+encoding.  The output may be large as this is information per
+container rather than a single set of summary statistics at the end of
+processing.
+
+.SH EXAMPLES
+.IP -
+The basic summary of block Content ID sizes for a CRAM file:
+.EX 2
+$ samtools cram-size in.cram
+#   Content_ID  Uncomp.size    Comp.size   Ratio Method  Data_series
+BLOCK     CORE            0            0 100.00% .      
+BLOCK       11    394734019     51023626  12.93% g       RN
+BLOCK       12   1504781763     99158495   6.59% R       QS
+BLOCK       13       330065        84195  25.51% _r.g    IN
+BLOCK       14     26625602      6803930  25.55% Rrg     SC
+...
+.EE
+
+.IP -
+Show the same file above with verbose mode.  Here we see the distinct
+compression methods which have been used per block Content ID.
+.EX 2
+$ samtools cram-size -v in.cram
+#   Content_ID  Uncomp.size    Comp.size   Ratio Method      Data_series
+BLOCK     CORE            0            0 100.00% raw        
+BLOCK       11    394734019     51023626  12.93% gzip        RN
+BLOCK       12   1504781763     99158495   6.59% r4x8-o1     QS
+BLOCK       13       275033        64343  23.39% gzip-min    IN
+BLOCK       13        43327        15412  35.57% r4x8-o0     IN
+BLOCK       13         2452         2452 100.00% raw         IN
+BLOCK       13         9253         1988  21.49% gzip        IN
+BLOCK       14     23106404      5903351  25.55% r4x8-o1     SC
+BLOCK       14      1951616       513722  26.32% r4x8-o0     SC
+BLOCK       14      1567582       386857  24.68% gzip        SC
+...
+.EE
+
+.IP -
+List encoding methods per CRAM Data Series.  The two letter series are
+the standard CRAM Data Series and the three letter ones are the
+optional auxiliary tags with the tag name and type combined.
+
+.EX 2
+$ samtools cram-size -e in.cram
+Container encodings
+    RN      BYTE_ARRAY_STOP(stop=0,id=11)
+    QS      EXTERNAL(id=12)
+    IN      BYTE_ARRAY_STOP(stop=0,id=13)
+    SC      BYTE_ARRAY_STOP(stop=0,id=14)
+    BB      BYTE_ARRAY_LEN(len_codec={EXTERNAL(id=42)}, \\
+                           val_codec={EXTERNAL(id=37)}
+    ...
+    XAZ     BYTE_ARRAY_STOP(stop=9,id=5783898)
+    MDZ     BYTE_ARRAY_STOP(stop=9,id=5063770)
+    ASC     BYTE_ARRAY_LEN(len_codec={HUFFMAN(codes={1},lengths={0})}, \\
+                           val_codec={EXTERNAL(id=4281155)}
+    ...
+.EE
+
+.SH AUTHOR
+.PP
+Written by James Bonfield from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.PP
+Samtools website: <http://www.htslib.org/>

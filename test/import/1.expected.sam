@@ -1,0 +1,39 @@
+@HD	VN:1.6	SO:unsorted	GO:query
+@CO	Reverse with: samtools fastq -1 R1.fastq -2 R2.fastq 
+@RG	ID:rgid
+ref1_grp1_p001	77	*	0	0	*	*	0	0	CGAGCTCGGT	!!!!!!!!!!	RG:Z:rgid
+ref1_grp1_p001	141	*	0	0	*	*	0	0	GTCGACTCTA	----------	RG:Z:rgid
+ref1_grp1_p002	77	*	0	0	*	*	0	0	CTCGGTACCC	##########	RG:Z:rgid
+ref1_grp1_p002	141	*	0	0	*	*	0	0	GCAGGTCGAC	//////////	RG:Z:rgid
+ref1_grp1_p003	77	*	0	0	*	*	0	0	GTACCCGGGG	%%%%%%%%%%	RG:Z:rgid
+ref1_grp1_p003	141	*	0	0	*	*	0	0	GCCTGCAGGT	1111111111	RG:Z:rgid
+ref1_grp1_p004	77	*	0	0	*	*	0	0	CCGGGGATCC	''''''''''	RG:Z:rgid
+ref1_grp1_p004	141	*	0	0	*	*	0	0	GCATGCCTGC	3333333333	RG:Z:rgid
+ref1_grp1_p005	77	*	0	0	*	*	0	0	GGATCCTCTA	))))))))))	RG:Z:rgid
+ref1_grp1_p005	141	*	0	0	*	*	0	0	GCTTGCATGC	5555555555	RG:Z:rgid
+ref1_grp1_p006	77	*	0	0	*	*	0	0	CCTCTAGAGT	++++++++++	RG:Z:rgid
+ref1_grp1_p006	141	*	0	0	*	*	0	0	TCAAGCTTGC	7777777777	RG:Z:rgid
+ref1_grp2_p001	77	*	0	0	*	*	0	0	AGCTCGGTAC	""""""""""	RG:Z:rgid
+ref1_grp2_p001	141	*	0	0	*	*	0	0	AGGTCGACTC	..........	RG:Z:rgid
+ref1_grp2_p002	77	*	0	0	*	*	0	0	CGGTACCCGG	$$$$$$$$$$	RG:Z:rgid
+ref1_grp2_p002	141	*	0	0	*	*	0	0	CTGCAGGTCG	0000000000	RG:Z:rgid
+ref1_grp2_p003	77	*	0	0	*	*	0	0	ACCCGGGGAT	&&&&&&&&&&	RG:Z:rgid
+ref1_grp2_p003	141	*	0	0	*	*	0	0	ATGCCTGCAG	2222222222	RG:Z:rgid
+ref1_grp2_p004	77	*	0	0	*	*	0	0	GGGGATCCTC	((((((((((	RG:Z:rgid
+ref1_grp2_p004	141	*	0	0	*	*	0	0	TTGCATGCCT	4444444444	RG:Z:rgid
+ref1_grp2_p005	77	*	0	0	*	*	0	0	ATCCTCTAGA	**********	RG:Z:rgid
+ref1_grp2_p005	141	*	0	0	*	*	0	0	AAGCTTGCAT	6666666666	RG:Z:rgid
+ref1_grp2_p006	77	*	0	0	*	*	0	0	TCTAGAGTCG	,,,,,,,,,,	RG:Z:rgid
+ref1_grp2_p006	141	*	0	0	*	*	0	0	ACTCAAGCTT	8888888888	RG:Z:rgid
+ref2_grp3_p001	77	*	0	0	*	*	0	0	GTGACACTATAGAAT	~~~~~~~~~~~~~~~	RG:Z:rgid
+ref2_grp3_p001	141	*	0	0	*	*	0	0	CTGTTTCCTGTGTGA	|||||||||||||||	RG:Z:rgid
+ref2_grp3_p002	77	*	0	0	*	*	0	0	CTGTTTCCTGTGTGA	{{{{{{{{{{{{{{{	RG:Z:rgid
+ref2_grp3_p002	141	*	0	0	*	*	0	0	CGCCAAGCTATTTAG	}}}}}}}}}}}}}}}	RG:Z:rgid
+ref2_grp3_p003	77	*	0	0	*	*	0	0	ACGTMRWSYKVHDBN	0123456789abcd!	RG:Z:rgid
+ref2_grp3_p003	141	*	0	0	*	*	0	0	ACGTMRWSYKVHDBN	0123456789abcd!	RG:Z:rgid
+ref12_grp1_p001	77	*	0	0	*	*	0	0	TGCAGGCATG	AAAAAAAAAA	RG:Z:rgid
+ref12_grp1_p001	141	*	0	0	*	*	0	0	CACTATAGAA	BBBBBBBBBB	RG:Z:rgid
+ref12_grp2_p001	77	*	0	0	*	*	0	0	CAAGCTTGAG	AAAAAAAAAA	RG:Z:rgid
+ref12_grp2_p001	141	*	0	0	*	*	0	0	ATTTAGGTGA	BBBBBBBBBB	RG:Z:rgid
+unaligned_grp3_p001	77	*	0	0	*	*	0	0	CACTCGTTCATGACG	0123456789abcde	RG:Z:rgid
+unaligned_grp3_p001	141	*	0	0	*	*	0	0	GAAAGTGAGGAGGTG	edcba9876543210	RG:Z:rgid
