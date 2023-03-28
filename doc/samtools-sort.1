@@ -153,6 +153,11 @@ specified in \fB-I\fR.  This defaults to 100.  It may be better to set
 this closer to 50 for short-read data sets (at a higher CPU and
 memory cost), or for more speed up to 1000 for long-read data sets.
 .TP
+.B -H
+Squashes base homopolymers down to a single base pair before
+constructing the minimiser.  This is useful for instruments where the
+primary source of error is in the length of homopolymer.
+.TP
 .BI "-o " FILE
 Write the final sorted output to
 .IR FILE ,

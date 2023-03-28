@@ -1,6 +1,6 @@
 /*  bam_sort.c -- sorting and merging.
 
-    Copyright (C) 2008-2022 Genome Research Ltd.
+    Copyright (C) 2008-2023 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -2253,6 +2253,7 @@ typedef struct {
     int large_pos;
     int minimiser_kmer;
     bool try_rev;
+    bool no_squash;
 } worker_t;
 
 // Returns 0 for success
@@ -2410,7 +2411,8 @@ static khash_t(kmer) *kmer_h = NULL;
  * key in the sequence if pos != NULL.
  */
 static uint64_t minhash(bam1_t *b, int kmer, int window, int *curr_pos,
-                        int *end, int *is_rev, int try_fwd, int try_rev) {
+                        int *end, int *is_rev, int try_fwd, int try_rev,
+                        int no_squash) {
     uint64_t hashf = 0, minhashf = UINT64_MAX;
     int minhashpf = *curr_pos, i, j;
     uint64_t mask = (1L<<(2*kmer))-1;
@@ -2434,21 +2436,40 @@ static uint64_t minhash(bam1_t *b, int kmer, int window, int *curr_pos,
 
     int i_start = *curr_pos;
     int i_end = MIN(i_start + window, len);
+    int last_base = -1;
 
     if (try_fwd) {
         // Initialise hash keys
-        for (i = i_start, j = 0; j < kmer-1 && i < i_end; i++,j++) {
+        for (i = i_start, j = 0; j < kmer-1 && i < i_end; i++) {
             int base = bam_seqi(seq, i);
-            hashf = (hashf<<2) | L[base];
+            // collapse homopolymers
+            if (no_squash || last_base != base) {
+                last_base = base;
+                hashf = (hashf<<2) | L[base];
+                j++;
+            }
         }
 
         // Loop to find minimum
-        for (; i < i_end; i++) {
-            int base = bam_seqi(seq, i);
-            hashf = (hashf<<2) | L[base];
-            uint64_t hashfx = (hashf ^ XOR) & mask;
-            if (minhashf > hashfx)
-                minhashf = hashfx, minhashpf = i;
+        if (no_squash) {
+            for (; i < i_end; i++) {
+                int base = bam_seqi(seq, i);
+                hashf = (hashf<<2) | L[base];
+                uint64_t hashfx = (hashf ^ XOR) & mask;
+                if (minhashf > hashfx)
+                    minhashf = hashfx, minhashpf = i;
+            }
+        } else {
+            for (; i < i_end; i++) {
+                int base = bam_seqi(seq, i);
+                if (last_base != base) {
+                    last_base = base;
+                    hashf = (hashf<<2) | L[base];
+                    uint64_t hashfx = (hashf ^ XOR) & mask;
+                    if (minhashf > hashfx)
+                        minhashf = hashfx, minhashpf = i;
+                }
+            }
         }
     }
 
@@ -2460,18 +2481,34 @@ static uint64_t minhash(bam1_t *b, int kmer, int window, int *curr_pos,
     if (try_rev) {
         uint64_t hashr = 0, minhashr = UINT64_MAX;
         int minhashpr = *curr_pos;
+        int last_base = -1;
 
-        for (i = i_start, j = 0; j < kmer-1 && i < len; i++, j++) {
+        for (i = i_start, j = 0; j < kmer-1 && i < len; i++) {
             int base = bam_seqi(seq, i);
-            hashr = (hashr>>2) | R[base];
+            if (no_squash || last_base != base) {
+                last_base = base;
+                hashr = (hashr>>2) | R[base];
+                j++;
+            }
         }
-        for (; i < i_end; i++) {
-            int base = bam_seqi(seq, i);
-            hashr =  (hashr>>2) | R[base];
-            if (minhashr > (hashr^xor))
-                // Needs fixing. Want  minhashpr = len-i+kmer-2,
-                // but may also need change of loop direction too?
-                minhashr = (hashr^xor), minhashpr = len-i+kmer-2;
+
+        if (no_squash) {
+            for (; i < i_end; i++) {
+                int base = bam_seqi(seq, i);
+                hashr =  (hashr>>2) | R[base];
+                if (minhashr > (hashr^xor))
+                    minhashr = (hashr^xor), minhashpr = len-i+kmer-2;
+            }
+        } else {
+            for (; i < i_end; i++) {
+                int base = bam_seqi(seq, i);
+                if (last_base != base) {
+                    last_base = base;
+                    hashr =  (hashr>>2) | R[base];
+                    if (minhashr > (hashr^xor))
+                        minhashr = (hashr^xor), minhashpr = len-i+kmer-2;
+                }
+            }
         }
 
         if (minhashr < minhashf) {
@@ -2493,7 +2530,7 @@ static uint64_t minhash(bam1_t *b, int kmer, int window, int *curr_pos,
 #define UNIQ_BIT  60
 #define UNIQ_TEST(x) (((x) & (1ULL<<UNIQ_BIT))==0)
 #define UNIQ_MASK ((1ULL<<UNIQ_BIT)-1)
-static int build_minhash_index(char *fn, int kmer, int window) {
+static int build_minhash_index(char *fn, int kmer, int window, int no_squash) {
     int ret = 1;
     samFile *in;
     sam_hdr_t *h = NULL;
@@ -2530,7 +2567,8 @@ static int build_minhash_index(char *fn, int kmer, int window) {
         // fwd
         while (!end) {
             int last_pos = pos;
-            hashf = minhash(b, kmer, window, &pos, &end, NULL, 1, 0);
+            hashf = minhash(b, kmer, window, &pos, &end, NULL, 1, 0,
+                            no_squash);
             k = kh_put(kmer, kmer_h, hashf, &ret);
             kh_value(kmer_h, k) = tpos+pos + (((uint64_t)!ret)<<UNIQ_BIT);
             pos = MAX(last_pos+kmer, pos+1);
@@ -2547,7 +2585,8 @@ static int build_minhash_index(char *fn, int kmer, int window) {
 //        // rev
 //        pos = 0; end = 0;
 //        while (!end) {
-//            hashf = minhash(b, kmer, window, &pos, &end, NULL, 0, 1);
+//            hashf = minhash(b, kmer, window, &pos, &end, NULL, 0, 1,
+//                            no_squash);
 //            k = kh_put(kmer, kmer_h, hashf, &ret);
 //            kh_value(kmer_h, k) = tpos+pos + (((uint64_t)!ret)<<UNIQ_BIT);
 //            pos++;
@@ -2575,10 +2614,11 @@ static int build_minhash_index(char *fn, int kmer, int window) {
  * index, or if not unique, then non-uniquely placed, over ones that
  * are absent from the index.
  */
-static uint64_t minhash_with_idx(bam1_t *b, int kmer, int *pos, int *rev, bool try_rev) {
+static uint64_t minhash_with_idx(bam1_t *b, int kmer, int *pos, int *rev,
+                                 bool try_rev) {
     uint64_t hashf = 0, minhashf = UINT64_MAX, minhashfi = UINT64_MAX;
     uint64_t minhashfd = UINT64_MAX;
-    int minhashpf = 0, minhashpfi = 0, minhashpfd = 0, i;
+    int minhashpf = 0, minhashpfi = 0, minhashpfd = 0, i, j;
     uint64_t mask = (1L<<(2*kmer))-1;
     unsigned char *seq = bam_get_seq(b);
     int len = b->core.l_qseq;
@@ -2597,7 +2637,7 @@ static uint64_t minhash_with_idx(bam1_t *b, int kmer, int *pos, int *rev, bool t
         R[i] <<= 2*(kmer-1);
 
     // Initialise hash keys
-    for (i = 0; i < kmer-1 && i < len; i++) {
+    for (i = j = 0; j < kmer-1 && i < len; i++, j++) {
         int base = bam_seqi(seq, i);
         hashf = (hashf<<2) | L[base];
     }
@@ -2608,24 +2648,7 @@ static uint64_t minhash_with_idx(bam1_t *b, int kmer, int *pos, int *rev, bool t
         int base = bam_seqi(seq, i);
         hashf = ((hashf<<2) | L[base]) & mask;
         const uint64_t hashfx = hashf^xor;
-#if 0
-        // Simpler and maybe 20% faster, but not always as good at
-        // compression (was 7% bigger in one test).
-        // It's also more susceptible to performing badly when an
-        // inappropriate reference is given.
-        //
-        // Maybe consider a --fast mode?  Not sure it's a big enough
-        // difference to justify
-        if (minhashf > hashfx) {
-            khiter_t k;
-            if ((k=kh_get(kmer, kmer_h, hashfx)) == kh_end(kmer_h))
-                continue;
-            if (UNIQ_TEST(kh_value(kmer_h, k)))
-                found_f = 2;
-            minhashf = hashfx, minhashpf = i;
-            found_f = 1;
-        }
-#else
+
         // Priority for sorting
         // 1. Unique key in index
         // 2. Dup key in index
@@ -2645,7 +2668,6 @@ static uint64_t minhash_with_idx(bam1_t *b, int kmer, int *pos, int *rev, bool t
             if (minhashf > hashfx)
                 minhashf = hashfx, minhashpf = i;
         }
-#endif
     }
 
     if (minhashfi != UINT64_MAX)
@@ -2660,7 +2682,7 @@ static uint64_t minhash_with_idx(bam1_t *b, int kmer, int *pos, int *rev, bool t
         uint64_t minhashrd = UINT64_MAX;
         int minhashpr = 0, minhashpri = 0, minhashprd = 0;
 
-        for (i = 0; i < kmer-1 && i < len; i++) {
+        for (i = j = 0; j < kmer-1 && i < len; i++, j++) {
             int base = bam_seqi(seq, i);
             hashr = (hashr>>2) | R[base];
         }
@@ -2668,18 +2690,7 @@ static uint64_t minhash_with_idx(bam1_t *b, int kmer, int *pos, int *rev, bool t
             int base = bam_seqi(seq, i);
             hashr =  (hashr>>2) | R[base];
             const uint64_t hashrx = hashr^xor;
-#if 0
-            // see above for comments
-            if (minhashr > hashrx) {
-                khiter_t k;
-                if ((k=kh_get(kmer, kmer_h, hashrx)) == kh_end(kmer_h))
-                    continue;
-                if (UNIQ_TEST(kh_value(kmer_h, k)))
-                    found_r = 2;
-                minhashr = hashrx, minhashpr = len-i+kmer-2;
-                found_r = 1;
-            }
-#else
+
             int index = 0;
             if (minhashri > hashrx || (found_r < 2 && minhashrd > hashrx)) {
                 khiter_t k = kh_get(kmer, kmer_h, hashrx);
@@ -2695,7 +2706,158 @@ static uint64_t minhash_with_idx(bam1_t *b, int kmer, int *pos, int *rev, bool t
                 if (minhashr > hashrx)
                     minhashr = hashrx, minhashpr = i;
             }
+        }
+        if (minhashri != UINT64_MAX)
+            minhashr = minhashri, minhashpr = minhashpri;
+        else if (minhashrd != UINT64_MAX)
+            minhashr = minhashrd, minhashpr = minhashprd;
+
+        // Pick reverse if better mapping
+        if ((minhashf > minhashr) || (!found_f && found_r)) {
+            if (!found_f || found_r) {
+                minhashf  = minhashr;
+                minhashpf = b->core.l_qseq - minhashpr + kmer - 2;
+                dir = 1;
+            }
+        }
+    }
+
+#ifdef DEBUG_MINHASH
+    ntot++;
+    khiter_t k = kh_get(kmer, kmer_h, minhashf);
+    if (k != kh_end(kmer_h)) {
+        if (!UNIQ_TEST(kh_value(kmer_h, k)))
+            ndup++;
+        minhashf = kh_value(kmer_h, k) & UNIQ_MASK;
+    } else {
+        nmis++;
+    }
+#else
+    // For indexed kmers, our hash key is the position the kmer
+    // occurs in the concatenated reference rather than the hash itself.
+    khiter_t k = kh_get(kmer, kmer_h, minhashf);
+    if (k != kh_end(kmer_h))
+        minhashf = kh_value(kmer_h, k) & UNIQ_MASK;
 #endif
+
+    if (rev) *rev = dir;
+    if (pos) *pos = minhashpf;
+
+    return minhashf != UINT64_MAX ? minhashf : 0;
+}
+
+// As per minhash_with_idx but with homopolymer squashing enabled.
+// This function is duplicated to remove conditionals and speed up the
+// hashing code. (Minus the ifdef-ed out code, which is kept above mainly
+// for posterity.)
+static uint64_t minhash_with_idx_squash(bam1_t *b, int kmer, int *pos,
+                                        int *rev, bool try_rev) {
+    uint64_t hashf = 0, minhashf = UINT64_MAX, minhashfi = UINT64_MAX;
+    uint64_t minhashfd = UINT64_MAX;
+    int minhashpf = 0, minhashpfi = 0, minhashpfd = 0, i, j;
+    uint64_t mask = (1L<<(2*kmer))-1;
+    unsigned char *seq = bam_get_seq(b);
+    int len = b->core.l_qseq;
+    const uint64_t xor = XOR & mask;
+
+    // Lookup tables for bam_seqi to 0123 fwd/rev hashes
+    // =ACM GRSV TWYH KDBN
+#define X 0
+    unsigned char L[16] = {
+        X,0,1,X,  2,X,X,X,  3,X,X,X,  X,X,X,X,
+    };
+    uint64_t R[16] = {
+        X,3,2,X,  1,X,X,X,  0,X,X,X,  X,X,X,X,
+    };
+    for (i = 0; i < 16; i++)
+        R[i] <<= 2*(kmer-1);
+
+    // Initialise hash keys
+    int last_base = -1;
+    for (i = j = 0; j < kmer-1 && i < len; i++) {
+        int base = bam_seqi(seq, i);
+        if (base == last_base)
+            continue;
+        last_base = base;
+        j++;
+        hashf = (hashf<<2) | L[base];
+    }
+
+    // Loop to find minimum
+    int found_f = 0, found_r = 0;
+    for (; i < len; i++) {
+        int base = bam_seqi(seq, i);
+        if (base == last_base)
+            continue;
+        last_base = base;
+        hashf = ((hashf<<2) | L[base]) & mask;
+        const uint64_t hashfx = hashf^xor;
+
+        // Priority for sorting
+        // 1. Unique key in index
+        // 2. Dup key in index
+        // 3. Everything else
+        int index = 0;
+        if (minhashfi > hashfx || (found_f < 2 && minhashfd > hashfx)) {
+            khiter_t k = kh_get(kmer, kmer_h, hashfx);
+            if (k != kh_end(kmer_h))
+                index = UNIQ_TEST(kh_value(kmer_h, k)) ? 2 : 1;
+        }
+        found_f |= index;
+        switch (index) {
+        case 2: minhashfi = hashfx, minhashpfi = i; break;
+        case 1: minhashfd = hashfx, minhashpfd = i; break;
+
+        default:
+            if (minhashf > hashfx)
+                minhashf = hashfx, minhashpf = i;
+        }
+    }
+
+    if (minhashfi != UINT64_MAX)
+        minhashf = minhashfi, minhashpf = minhashpfi;
+    else if (minhashfd != UINT64_MAX)
+        minhashf = minhashfd, minhashpf = minhashpfd;
+
+    // Same as above for the reverse strand
+    int dir = 0;
+    if (try_rev) {
+        uint64_t hashr = 0, minhashr = UINT64_MAX, minhashri = UINT64_MAX;
+        uint64_t minhashrd = UINT64_MAX;
+        int minhashpr = 0, minhashpri = 0, minhashprd = 0;
+        int last_base = -1;
+
+        for (i = j = 0; j < kmer-1 && i < len; i++) {
+            int base = bam_seqi(seq, i);
+            if (base == last_base)
+                continue;
+            last_base = base;
+            j++;
+            hashr = (hashr>>2) | R[base];
+        }
+        for (; i < len; i++) {
+            int base = bam_seqi(seq, i);
+            if (base == last_base)
+                continue;
+            last_base = base;
+            hashr =  (hashr>>2) | R[base];
+            const uint64_t hashrx = hashr^xor;
+
+            int index = 0;
+            if (minhashri > hashrx || (found_r < 2 && minhashrd > hashrx)) {
+                khiter_t k = kh_get(kmer, kmer_h, hashrx);
+                if (k != kh_end(kmer_h))
+                    index = UNIQ_TEST(kh_value(kmer_h, k)) ? 2 : 1;
+            }
+            found_r |= index;
+            switch (index) {
+            case 2: minhashri = hashrx, minhashpri = i; break;
+            case 1: minhashrd = hashrx, minhashprd = i; break;
+
+            default:
+                if (minhashr > hashrx)
+                    minhashr = hashrx, minhashpr = i;
+            }
         }
         if (minhashri != UINT64_MAX)
             minhashr = minhashri, minhashpr = minhashpri;
@@ -2848,9 +3010,14 @@ static inline void worker_minhash(worker_t *w) {
 
         int pos = 0, rev = 0;
         uint64_t mh = kmer_h
-            ? minhash_with_idx(b, w->minimiser_kmer, &pos, &rev, w->try_rev)
+            ? (w->no_squash
+               ? minhash_with_idx(b, w->minimiser_kmer, &pos, &rev,
+                                  w->try_rev)
+               : minhash_with_idx_squash(b, w->minimiser_kmer, &pos, &rev,
+                                         w->try_rev)
+               )
             : minhash(b, w->minimiser_kmer, b->core.l_qseq,
-                      &pos, NULL, &rev, 1, w->try_rev);
+                      &pos, NULL, &rev, 1, w->try_rev, w->no_squash);
         if (rev)
             reverse_complement(b);
 
@@ -2898,7 +3065,8 @@ static void *worker(void *data)
 
 static int sort_blocks(size_t k, bam1_tag *buf, const sam_hdr_t *h,
                        int n_threads, buf_region *in_mem,
-                       int large_pos, int minimiser_kmer, bool try_rev)
+                       int large_pos, int minimiser_kmer, bool try_rev,
+                       bool no_squash)
 {
     int i;
     size_t pos, rest;
@@ -2923,6 +3091,7 @@ static int sort_blocks(size_t k, bam1_tag *buf, const sam_hdr_t *h,
         w[i].large_pos = large_pos;
         w[i].minimiser_kmer = minimiser_kmer;
         w[i].try_rev = try_rev;
+        w[i].no_squash = no_squash;
         in_mem[i].from = pos;
         in_mem[i].to = pos + w[i].buf_len;
         pos += w[i].buf_len; rest -= w[i].buf_len;
@@ -3022,9 +3191,9 @@ static khash_t(const_c2c) * lookup_libraries(sam_hdr_t *header)
   NOT thread safe.
  */
 int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
-                      bool try_rev, const char *fn, const char *prefix,
-                      const char *fnout, const char *modeout,
-                      size_t _max_mem, int n_threads,
+                      bool try_rev, bool no_squash, const char *fn,
+                      const char *prefix, const char *fnout,
+                      const char *modeout, size_t _max_mem, int n_threads,
                       const htsFormat *in_fmt, const htsFormat *out_fmt,
                       char *arg_list, int no_pg, int write_index)
 {
@@ -3263,7 +3432,8 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
                 goto err;
 
             int sort_res = sort_blocks(k, buf, header, n_threads,
-                                       in_mem, large_pos, minimiser_kmer, try_rev);
+                                       in_mem, large_pos, minimiser_kmer,
+                                       try_rev, no_squash);
             if (sort_res < 0)
                 goto err;
 
@@ -3336,7 +3506,8 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     // Sort last records
     if (k > 0) {
         num_in_mem = sort_blocks(k, buf, header, n_threads,
-                                 in_mem, large_pos, minimiser_kmer, try_rev);
+                                 in_mem, large_pos, minimiser_kmer, try_rev,
+                                 no_squash);
         if (num_in_mem < 0) goto err;
     } else {
         num_in_mem = 0;
@@ -3414,7 +3585,8 @@ int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t ma
     sprintf(fnout, "%s.bam", prefix);
     SamOrder sam_order = is_by_qname ? QueryName : Coordinate;
     g_sam_order = sam_order;
-    ret = bam_sort_core_ext(sam_order, NULL, 0, false, fn, prefix, fnout, "wb", max_mem, 0, NULL, NULL, NULL, 1, 0);
+    ret = bam_sort_core_ext(sam_order, NULL, 0, false, true, fn, prefix,
+                            fnout, "wb", max_mem, 0, NULL, NULL, NULL, 1, 0);
     free(fnout);
     return ret;
 }
@@ -3432,6 +3604,7 @@ static void sort_usage(FILE *fp)
 "  -K INT     Kmer size to use for minimiser [20]\n"
 "  -I FILE    Order minimisers by their position in FILE FASTA\n"
 "  -w INT     Window size for minimiser indexing via -I ref.fa [100]\n"
+"  -H         Squash homopolymers when computing minimiser\n"
 "  -n         Sort by read name (not compatible with samtools index command)\n"
 "  -t TAG     Sort by value of TAG. Uses position as secondary index (or read name if -n is set)\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"
@@ -3475,6 +3648,7 @@ int bam_sort(int argc, char *argv[])
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     int window = 100;
     char *minimiser_ref = NULL;
+    int no_squash = 1;
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -3484,7 +3658,7 @@ int bam_sort(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "l:m:no:O:T:@:t:MI:K:uRw:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "l:m:no:O:T:@:t:MI:K:uRw:H", lopts, NULL)) >= 0) {
         switch (c) {
         case 'o': fnout = optarg; o_seen = 1; break;
         case 'n': sam_order = QueryName; break;
@@ -3507,6 +3681,7 @@ int bam_sort(int argc, char *argv[])
             sam_order = MinHash; // implicit option
             minimiser_ref = optarg;
             break;
+        case 'H': no_squash = 0; break;
 
         case 'w': window = atoi(optarg); break;
 
@@ -3528,7 +3703,8 @@ int bam_sort(int argc, char *argv[])
     if (minimiser_ref) {
         fprintf(stderr, "Building index ... ");
         fflush(stderr);
-        if (build_minhash_index(minimiser_ref, minimiser_kmer, window)) {
+        if (build_minhash_index(minimiser_ref, minimiser_kmer, window,
+                                no_squash)) {
             ret = EXIT_FAILURE;
             goto sort_end;
         }
@@ -3591,8 +3767,10 @@ int bam_sort(int argc, char *argv[])
         ksprintf(&tmpprefix, "samtools.%d.%u.tmp", (int) getpid(), t % 10000);
     }
 
-    ret = bam_sort_core_ext(sam_order, sort_tag, (sam_order == MinHash) ? minimiser_kmer : 0,
-                            try_rev, (nargs > 0) ? argv[optind] : "-",
+    ret = bam_sort_core_ext(sam_order, sort_tag,
+                            (sam_order == MinHash) ? minimiser_kmer : 0,
+                            try_rev, no_squash,
+                            (nargs > 0) ? argv[optind] : "-",
                             tmpprefix.s, fnout, modeout, max_mem, ga.nthreads,
                             &ga.in, &ga.out, arg_list, no_pg, ga.write_index);
     if (ret >= 0)
