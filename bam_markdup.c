@@ -2304,7 +2304,7 @@ int bam_markdup(int argc, char **argv) {
         {"barcode-rgx", required_argument, NULL, 1008},
         {"use-read-groups", no_argument, NULL, 1009},
         {"json", no_argument, NULL, 1010},
-        {"support-count", no_argument, NULL, 1011},
+        {"duplicate-count", no_argument, NULL, 1011},
         {NULL, 0, NULL, 0}
     };
 
