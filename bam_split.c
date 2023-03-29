@@ -1,6 +1,6 @@
 /*  bam_split.c -- split subcommand.
 
-    Copyright (C) 2013-2016,2018-2019 Genome Research Ltd.
+    Copyright (C) 2013-2016,2018-2019,2023 Genome Research Ltd.
 
     Author: Martin Pollard <mp15@sanger.ac.uk>
 
@@ -292,7 +292,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
         }
     }
 
-    retval->merged_input_file = sam_open_format(opts->merged_input_name, "rb", &opts->ga.in);
+    retval->merged_input_file = sam_open_format(opts->merged_input_name, "r", &opts->ga.in);
     if (!retval->merged_input_file) {
         print_error_errno("split", "Could not open \"%s\"", opts->merged_input_name);
         cleanup_state(retval, false);
@@ -341,7 +341,10 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
             }
         }
 
-        retval->unaccounted_file = sam_open_format(opts->unaccounted_name, "wb", &opts->ga.out);
+        char outmode[4] = "w";
+        sam_open_mode(outmode + 1, opts->unaccounted_name, NULL);
+        retval->unaccounted_file = sam_open_format(opts->unaccounted_name, outmode, &opts->ga.out);
+
         if (retval->unaccounted_file == NULL) {
             print_error_errno("split", "Could not open unaccounted output file \"%s\"", opts->unaccounted_name);
             cleanup_state(retval, false);
@@ -381,6 +384,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
     size_t i;
     for (i = 0; i < retval->output_count; i++) {
         char* output_filename = NULL;
+        char outmode[4] = "w";
 
         output_filename = expand_format_string(opts->output_format_string,
                                                input_base_name,
@@ -394,7 +398,10 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
         }
 
         retval->rg_output_file_name[i] = output_filename;
-        retval->rg_output_file[i] = sam_open_format(output_filename, "wb", &opts->ga.out);
+
+        sam_open_mode(outmode + 1, output_filename, NULL);
+        retval->rg_output_file[i] = sam_open_format(output_filename, outmode, &opts->ga.out);
+
         if (retval->rg_output_file[i] == NULL) {
             print_error_errno("split", "Could not open \"%s\"", output_filename);
             cleanup_state(retval, false);
