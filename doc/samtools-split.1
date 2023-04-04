@@ -63,6 +63,10 @@ The \fB-u\fR option may be used to specify the output filename for any
 records with a missing or unrecognised RG tag.  This option will always write
 out a file even if there are no records.
 
+Output format defaults to BAM.  For SAM or CRAM then either set the format with
+\fB--output-fmt\fR or use \fB-f\fR to set the file extension e.g.
+\fB-f %*_%#.sam\fR. 
+
 .SH OPTIONS
 .TP 14
 .BI "-u " FILE1
