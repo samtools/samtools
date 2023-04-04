@@ -57,6 +57,7 @@ samtools markdup
 .IR distance ]
 .RB [ -c ]
 .RB [ -t ]
+.RB [ ---duplicate-count ]
 .RB [ -m ]
 .RB [ --mode ]
 .RB [ --include-fails ]
@@ -116,6 +117,9 @@ Clear previous duplicate settings and tags.
 .TP
 .B -t
 Mark duplicates with the name of the original in a \fBdo\fR tag.
+.TP
+.B --duplicate-count
+Record the original primary read duplication count(include itself) in a \fBdc\fR tag.
 .TP
 .BI "-m, --mode " TYPE
 Duplicate decision method for paired reads.  Values are \fBt\fR or \fBs\fR.
