@@ -2267,7 +2267,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  --use-read-groups  Use the read group tags in duplicate matching.\n");
     fprintf(stderr, "  -t                 Mark primary duplicates with the name of the original in a \'do\' tag."
                                         " Mainly for information and debugging.\n");
-    fprintf(stderr, "  --duplicate-count  Record the original read duplication count(include itself) in a \'dc\' tag.\n");
+    fprintf(stderr, "  --duplicate-count  Record the original primary read duplication count(include itself) in a \'dc\' tag.\n");
 
     sam_global_opt_help(stderr, "-.O..@..");
 
