@@ -139,11 +139,17 @@ static inline uint8_t *skip_aux(uint8_t *s, uint8_t *end)
     }
 }
 
-// Returns 0 to indicate read should be output 1 otherwise
+// Returns 0 to indicate read should be output 1 otherwise,
+// and -1 on error.
 static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
 {
-    if (settings->filter && sam_passes_filter(h, b, settings->filter) < 1)
-        return 1;
+    if (settings->filter) {
+        int r = sam_passes_filter(h, b, settings->filter);
+        if (r < 0)  // err
+            return -1;
+        if (r == 0) // filter-out
+            return 1;
+    }
 
     if (settings->remove_B) bam_remove_B(b);
     if (settings->min_qlen > 0) {
@@ -581,7 +587,9 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
     while ((r =sam_itr_multi_next(conf->in, iter, rec))>=0) {
         if ( (rec->core.flag & BAM_FPAIRED) == 0 ) continue;
         if ( rec->core.mtid>=0 && bed_overlap(conf->bed, sam_hdr_tid2name(conf->header,rec->core.mtid), rec->core.mpos, rec->core.mpos) ) continue;
-        if ( process_aln(conf->header, rec, conf) ) continue;
+        int p = process_aln(conf->header, rec, conf);
+        if (p < 0)  goto out;
+        if (p == 1) continue;
 
         nmates++;
 
@@ -632,13 +640,16 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
              k = kh_get(names,mate_names,bam_get_qname(rec));
              if ( k != kh_end(mate_names) ) drop = 0;
         }
-        if (!drop && process_aln(conf->header, rec, conf) == 0) {
+        int p = 0;
+        if (!drop && (p=process_aln(conf->header, rec, conf))== 0) {
             if (adjust_tags(conf->header, rec, conf) != 0)
                 goto out;
             if (check_sam_write1(conf->out, conf->header, rec, conf->fn_out,
                                  &write_error) < 0)
                 goto out;
         }
+        if (p < 0)
+            goto out;
     }
 
     if (r < -1) {
@@ -669,7 +680,12 @@ static inline int process_one_record(samview_settings_t *conf, bam1_t *b,
         if (bam_sanitize(conf->header, b, conf->sanitize) < 0)
             return -1;
 
-    if (!process_aln(conf->header, b, conf)) {
+    int p;
+    if ((p = process_aln(conf->header, b, conf)) < 0) {
+        // error
+        return -1;
+    } else if (p == 0) {
+        // emit read
         if (!conf->is_count) {
             change_flag(b, conf);
             if (adjust_tags(conf->header, b, conf) != 0)
@@ -710,17 +726,17 @@ static inline int process_one_record(samview_settings_t *conf, bam1_t *b,
 
 static int stream_view(samview_settings_t *conf) {
     bam1_t *b = bam_init1();
-    int write_error = 0, r;
+    int write_error = 0, r, p = 0;
     if (!b) {
         print_error_errno("view", "could not allocate bam record");
         return 1;
     }
     errno = 0; // prevent false error messages.
     while ((r = sam_read1(conf->in, conf->header, b)) >= 0) {
-        if (process_one_record(conf, b, &write_error) < 0) break;
+        if ((p = process_one_record(conf, b, &write_error)) < 0) break;
     }
     bam_destroy1(b);
-    if (r < -1) {
+    if (r < -1 || p < 0) {
         print_error_errno("view", "error reading file \"%s\"", conf->fn_in);
         return 1;
     }
