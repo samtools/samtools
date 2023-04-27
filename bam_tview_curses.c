@@ -330,7 +330,6 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
 
 static void tv_win_help(curses_tview_t *tv) {
     int r = 1;
-    tview_t* base=(tview_t*)base;
     WINDOW *win = tv->whelp;
     wborder(win, '|', '|', '-', '-', '+', '+', '+', '+');
     mvwprintw(win, r++, 2, "        -=-    Help    -=- ");
