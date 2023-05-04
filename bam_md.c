@@ -411,8 +411,11 @@ int bam_fillmd(int argc, char *argv[])
 
     header = sam_hdr_read(fp);
     if (header == NULL || sam_hdr_nref(header) == 0) {
-        fprintf(stderr, "[bam_fillmd] input SAM does not have header. Abort!\n");
-        goto fail;
+        // NB: if we have no SQ headers but have aligned data, then this will
+        // be caught during processing with e.g.
+        // "[E::sam_parse1] no SQ lines present in the header"
+        fprintf(stderr, "[bam_fillmd] warning: input SAM does not have "
+                "header, performing a no-op.\n");
     }
 
     fpout = sam_open_format("-", mode_w, &ga.out);
