@@ -64,8 +64,12 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  -o FILE      write reads designated READ1 or READ2 to FILE\n"
 "               note: if a singleton file is specified with -s, only\n"
 "               paired reads will be written to the -1 and -2 files.\n"
-"  -f INT       only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
-"  -F INT       only include reads with none of the FLAGS in INT present [0x900]\n"       //   F&x == 0
+"  -f, --require-flags INT\n"
+"               only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
+"  -F, --excl[ude]-flags INT\n"
+"               only include reads with none of the FLAGs in INT present [0x900]\n"   //   F&x == 0
+"      --rf, --incl[ude]-flags INT\n"
+"               only include reads with any  of the FLAGs in INT present [0]\n"       // !(F&x == 0)
 "  -G INT       only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
 "  -n           don't append /1 and /2 to the read name\n"
 "  -N           always append /1 and /2 to the read name\n",
@@ -132,7 +136,7 @@ typedef struct bam2fq_opts {
     char *fnr[3];
     char *fn_input; // pointer to input filename in argv do not free
     bool has12, has12always, use_oq, copy_tags, illumina_tag;
-    int flag_on, flag_off, flag_alloff;
+    int flag_on, flag_off, flag_alloff, flag_anyon;
     sam_global_args ga;
     fastfile filetype;
     int def_qual;
@@ -152,7 +156,7 @@ typedef struct bam2fq_state {
     samFile *hstdout;
     sam_hdr_t *h;
     bool has12, use_oq, copy_tags, illumina_tag;
-    int flag_on, flag_off, flag_alloff;
+    int flag_on, flag_off, flag_alloff, flag_anyon;
     fastfile filetype;
     int def_qual;
     char *index_sequence;
@@ -176,6 +180,9 @@ static void free_opts(bam2fq_opts_t *opts)
     free(opts);
 }
 
+// Make mnemonic distinct values for longoption-only options
+#define LONGOPT(c)  ((c) + 128)
+
 // return true if valid
 static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
 {
@@ -193,12 +200,19 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     opts->extra_tags = NULL;
     opts->compression_level = 1;
     opts->flag_off = BAM_FSECONDARY|BAM_FSUPPLEMENTARY;
-    int flag_off_set = 0;
 
     int c;
     sam_global_args_init(&opts->ga);
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '@'),
+        {"require-flags", required_argument, NULL, 'f'},
+        {"excl-flags", required_argument, NULL, 'F'},
+        {"exclude-flags", required_argument, NULL, 'F'},
+        // following the same convention as view: g exists as a longoption_only
+        // argument, accessible from the command line as --rf/--incl[ude]-flags
+        {"rf", required_argument, NULL, LONGOPT('g')},
+        {"incl-flags", required_argument, NULL, LONGOPT('g')},
+        {"include-flags", required_argument, NULL, LONGOPT('g')},
         {"i1", required_argument, NULL, 1},
         {"I1", required_argument, NULL, 1},
         {"i2", required_argument, NULL, 2},
@@ -223,14 +237,11 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
             case '2': opts->fnr[2] = optarg; break;
             case 'o': opts->fnr[1] = optarg; opts->fnr[2] = optarg; break;
             case 'f': opts->flag_on |= strtol(optarg, 0, 0); break;
-            case 'F':
-                if (!flag_off_set) {
-                    flag_off_set = 1;
-                    opts->flag_off = 0;
-                }
-                opts->flag_off |= strtol(optarg, 0, 0);
-                break;
+            // note that flag_off does not have |= because it has a default
+            // value of 0x900 which needs to be replaced by the optarg
+            case 'F': opts->flag_off = strtol(optarg, 0, 0); break;
             case 'G': opts->flag_alloff |= strtol(optarg, 0, 0); break;
+            case LONGOPT('g'): opts->flag_anyon |= strtol(optarg, 0, 0); break;
             case 'n': opts->has12 = false; break;
             case 'N': opts->has12always = true; break;
             case 'O': opts->use_oq = true; break;
@@ -401,6 +412,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     state->flag_on = opts->flag_on;
     state->flag_off = opts->flag_off;
     state->flag_alloff = opts->flag_alloff;
+    state->flag_anyon = opts->flag_anyon;
     state->has12 = opts->has12;
     state->use_oq = opts->use_oq;
     state->illumina_tag = opts->illumina_tag;
@@ -580,6 +592,7 @@ static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state)
 {
     return ((b->core.flag&(state->flag_on)) != state->flag_on // or reads indicated by filter flags
         ||  (b->core.flag&(state->flag_off)) != 0
+        ||  (((b->core.flag&(state->flag_anyon)) == 0) && (state->flag_anyon != 0))
         ||  (b->core.flag&(state->flag_alloff) && (b->core.flag&(state->flag_alloff)) == state->flag_alloff));
 
 }
