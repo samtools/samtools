@@ -2043,20 +2043,30 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
     }
 
     if (opts->all_bases) {
-        if (tid != opts->last_tid && opts->last_tid >= 0) {
-            hts_pos_t len = sam_hdr_tid2len(opts->h, opts->last_tid);
-            if (opts->iter)
-                len =  MIN(opts->iter->end, len);
-            if (empty_pileup2(opts, opts->h, opts->last_tid, opts->last_pos,
-                              len) < 0)
-                return -1;
-            if (tid >= 0) {
-                if (empty_pileup2(opts, opts->h, tid,
-                                  opts->iter ? opts->iter->beg : 0,
-                                  pos-1) < 0)
+        if (tid != opts->last_tid && opts->last_tid >= -1) {
+            if (opts->last_tid >= 0) {
+                // remainder of previous ref
+                hts_pos_t len = sam_hdr_tid2len(opts->h, opts->last_tid);
+                if (opts->iter)
+                    len =  MIN(opts->iter->end, len);
+                if (empty_pileup2(opts, opts->h, opts->last_tid,
+                                  opts->last_pos, len) < 0)
+                    return -1;
+            }
+
+            opts->last_pos = opts->iter ? opts->iter->beg : 0;
+        }
+
+        // Any refs between last_tid and tid
+        if (tid > opts->last_tid && opts->all_bases > 1) {
+            while (++opts->last_tid < tid) {
+                hts_pos_t len = sam_hdr_tid2len(opts->h, opts->last_tid);
+                if (empty_pileup2(opts, opts->h, opts->last_tid, 0, len) < 0)
                     return -1;
             }
         }
+
+        // Any gaps in this ref (same tid) or at start of this new tid
         if (opts->last_pos >= 0 && pos > opts->last_pos+1) {
             if (empty_pileup2(opts, opts->h, p->b.core.tid, opts->last_pos,
                               pos-1) < 0)
@@ -2167,9 +2177,11 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
             return 0;
     }
 
+ next_ref:
     if (tid != opts->last_tid) {
         if (opts->last_tid != -1) {
             if (opts->all_bases) {
+                // Fill in remainder of previous reference
                 int i, N;
                 if (opts->iter) {
                     opts->last_pos = MAX(opts->last_pos, opts->iter->beg-1);
@@ -2197,6 +2209,12 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         }
 
         seq->l = 0; qual->l = 0;
+
+        if (opts->all_bases > 1 && ++opts->last_tid < tid) {
+            opts->last_pos = 0;
+            goto next_ref;
+        }
+
         opts->last_tid = tid;
 //        if (opts->all_bases)
 //            opts->last_pos = 0;
@@ -2710,6 +2728,12 @@ int main_consensus(int argc, char **argv) {
             if (empty_pileup2(&opts, opts.h, tid, pos, len) < 0)
                 goto err;
         }
+        while (opts.all_bases > 1 && ++opts.last_tid < opts.h->n_targets) {
+            int len = sam_hdr_tid2len(opts.h, opts.last_tid);
+            if (empty_pileup2(&opts, opts.h, opts.last_tid, 0, len) < 0)
+                goto err;
+        }
+
     } else {
         if (pileup_loop(opts.fp, opts.h, readaln2,
                         opts.mode != MODE_SIMPLE ? nm_init : NULL,
@@ -2717,6 +2741,8 @@ int main_consensus(int argc, char **argv) {
                         opts.mode != MODE_SIMPLE ? nm_free : NULL,
                         &opts) < 0)
             goto err;
+
+    next_ref_q:
         if (opts.all_bases) {
             // fill out terminator
             int tid = opts.iter ? opts.iter->tid : opts.last_tid;
@@ -2744,6 +2770,12 @@ int main_consensus(int argc, char **argv) {
             dump_fastq(&opts, sam_hdr_tid2name(opts.h, opts.last_tid),
                        opts.ks_ins_seq.s,  opts.ks_ins_seq.l,
                        opts.ks_ins_qual.s, opts.ks_ins_qual.l);
+
+        if (opts.all_bases > 1 && ++opts.last_tid < opts.h->n_targets) {
+            opts.last_pos = 0;
+            opts.ks_ins_seq.l = opts.ks_ins_qual.l = 0;
+            goto next_ref_q;
+        }
 //        if (consensus_loop(&opts) < 0) {
 //            print_error_errno("consensus", "Failed");
 //            goto err;
