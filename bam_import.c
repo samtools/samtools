@@ -93,6 +93,7 @@ typedef struct {
     char *rg;
     char *rg_line;
     char *order;
+    int order_str;
     int compress_level;
     htsThreadPool p;
     int name2;
@@ -358,9 +359,23 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
             }
 
             if (opts->order) {
-                if (bam_aux_update_int(b, opts->order, read_num++) < 0) {
-                    ret = -1;
-                    goto err;
+                if (opts->order_str) {
+                    char buf[25];
+                    snprintf(buf, sizeof(buf), "%0*"PRIu64,
+                             opts->order_str, read_num++);
+                    if (bam_aux_update_str(b, opts->order,
+                                           strlen(buf), buf) < 0) {
+                        ret = -1;
+                        goto err;
+                    }
+                } else {
+                    if (bam_aux_update_int(b, opts->order, read_num++) < 0) {
+                        ret = -1;
+                        goto err;
+                    }
+                    if (read_num == UINT_MAX)
+                        fprintf(stderr, "Warning: --order tag has overflowed."
+                                "  Consider using TAG:LENGTH instead\n");
                 }
             }
 
@@ -421,6 +436,7 @@ int main_import(int argc, char *argv[]) {
         .rg = NULL,
         .rg_line = NULL,
         .order = NULL,
+        .order_str = 0,
         .compress_level = -1,
         .name2 = 0,
     };
@@ -470,7 +486,11 @@ int main_import(int argc, char *argv[]) {
         case 'N': opts.name2 = 1; break;
 
         case 9: opts.no_pg = 1; break;
-        case 3: opts.order = optarg; break;
+        case 3:
+            opts.order = optarg;
+            if (strlen(optarg) > 3 && optarg[2] == ':')
+                opts.order_str = atoi(optarg+3);
+            break;
 
         case 'h': return usage(stdout, EXIT_SUCCESS);
         case '?': return usage(stderr, EXIT_FAILURE);
