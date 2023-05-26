@@ -142,6 +142,12 @@ or collated in some manner and we wish this to be reversible.  In this
 case the tag may be used with \fBsamtools sort -t TAG\fR to regenerate
 the original input order.
 
+Note integer tags can only hold up to 2^32 record numbers
+(approximately 4 billion).  Data sets with more records can switch to
+using a fixed-width string tag instead, with leading 0s to ensure sort
+works.  To do this specify TAG:LENGTH.  E.g. \fB--order rn:12\fR will
+be able to sort up to 1 trillion records.
+
 .TP 8
 .BI -r\  RG_line ,\ --rg-line\  RG_line
 A complete \fB@RG\fR header line may be specified, with or without the
