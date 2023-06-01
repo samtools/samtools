@@ -423,7 +423,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     state->hstdout = NULL;
     state->compression_level = opts->compression_level;
 
-    state->fp = sam_open(opts->fn_input, "r");
+    state->fp = sam_open_format(opts->fn_input, "r", &opts->ga.in);
     if (state->fp == NULL) {
         print_error_errno("bam2fq","Cannot read file \"%s\"", opts->fn_input);
         free(state);
