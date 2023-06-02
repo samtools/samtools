@@ -2058,7 +2058,7 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         }
 
         // Any refs between last_tid and tid
-        if (tid > opts->last_tid && opts->all_bases > 1) {
+        if (!opts->iter && tid > opts->last_tid && opts->all_bases > 1) {
             while (++opts->last_tid < tid) {
                 hts_pos_t len = sam_hdr_tid2len(opts->h, opts->last_tid);
                 if (empty_pileup2(opts, opts->h, opts->last_tid, 0, len) < 0)
@@ -2210,14 +2210,12 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
 
         seq->l = 0; qual->l = 0;
 
-        if (opts->all_bases > 1 && ++opts->last_tid < tid) {
+        if (!opts->iter && opts->all_bases > 1 && ++opts->last_tid < tid) {
             opts->last_pos = 0;
             goto next_ref;
         }
 
         opts->last_tid = tid;
-//        if (opts->all_bases)
-//            opts->last_pos = 0;
         if (opts->iter)
             opts->last_pos = opts->iter->beg;
         else
@@ -2728,7 +2726,8 @@ int main_consensus(int argc, char **argv) {
             if (empty_pileup2(&opts, opts.h, tid, pos, len) < 0)
                 goto err;
         }
-        while (opts.all_bases > 1 && ++opts.last_tid < opts.h->n_targets) {
+        while (!opts.iter && opts.all_bases > 1 &&
+               ++opts.last_tid < opts.h->n_targets) {
             int len = sam_hdr_tid2len(opts.h, opts.last_tid);
             if (empty_pileup2(&opts, opts.h, opts.last_tid, 0, len) < 0)
                 goto err;
@@ -2771,7 +2770,8 @@ int main_consensus(int argc, char **argv) {
                        opts.ks_ins_seq.s,  opts.ks_ins_seq.l,
                        opts.ks_ins_qual.s, opts.ks_ins_qual.l);
 
-        if (opts.all_bases > 1 && ++opts.last_tid < opts.h->n_targets) {
+        if (!opts.iter && opts.all_bases > 1 &&
+            ++opts.last_tid < opts.h->n_targets) {
             opts.last_pos = 0;
             opts.ks_ins_seq.l = opts.ks_ins_qual.l = 0;
             goto next_ref_q;
