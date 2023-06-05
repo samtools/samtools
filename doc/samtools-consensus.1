@@ -1,7 +1,7 @@
 '\" t
 .TH samtools-consensus 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
 .SH NAME
-samtools consensus \- produces produce a consensus FASTA/FASTQ/PILEUP
+samtools consensus \- produces a consensus FASTA/FASTQ/PILEUP
 .\"
 .\" Copyright (C) 2021-2022 Genome Research Ltd.
 .\"
@@ -161,6 +161,11 @@ selected to replicate this.
 Outputs all bases, from start to end of reference, even when the
 aligned data does not extend to the ends.  This is most useful for
 construction of a full length reference sequence.
+
+.TP
+.B -a -a, -aa
+Output absolutely all positions, including references with no data
+aligned against them.
 
 .TP
 \fB--rf\fR, \fB--incl-flags\fR \fISTR\fR|\fIINT\fR
