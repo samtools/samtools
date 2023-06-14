@@ -318,6 +318,14 @@ and associated value
 .IR STR2 ,
 which can be a string or an integer [null].
 The value can be omitted, in which case only the tag is considered.
+
+Note that this option does not specify a tag type.
+For example, use
+.B -d XX:42
+to select alignments with an
+.B XX:i:42
+field, not
+.BR "-d XX:i:42" .
 .TP
 .BI "-D " STR:FILE ", --tag-file " STR:FILE
 Only output alignments with tag
