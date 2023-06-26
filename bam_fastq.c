@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <assert.h>
 #include <inttypes.h>
 #include <unistd.h>
+#include <float.h>
 
 #include "htslib/sam.h"
 #include "htslib/klist.h"
@@ -64,6 +65,8 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  -o FILE      write reads designated READ1 or READ2 to FILE\n"
 "               note: if a singleton file is specified with -s, only\n"
 "               paired reads will be written to the -1 and -2 files.\n"
+"  -d, --tag TAG[:VAL]\n"
+"               only include reads containing TAG, optionally with value VAL\n"
 "  -f, --require-flags INT\n"
 "               only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
 "  -F, --excl[ude]-flags INT\n"
@@ -146,6 +149,10 @@ typedef struct bam2fq_opts {
     char *index_format;
     char *extra_tags;
     char compression_level;
+    const char *filter_tag;       // -d opt
+    const char *filter_value_str;
+    int64_t filter_value_int;
+    float filter_value_flt;
 } bam2fq_opts_t;
 
 typedef struct bam2fq_state {
@@ -222,9 +229,10 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         {"index-format", required_argument, NULL, 3},
         {"barcode-tag", required_argument, NULL, 'b'},
         {"quality-tag", required_argument, NULL, 'q'},
+        {"tag", required_argument, NULL, 'd'},
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "0:1:2:o:f:F:G:niNOs:c:tT:v:@:",
+    while ((c = getopt_long(argc, argv, "0:1:2:o:f:F:G:niNOs:c:tT:v:@:d:",
                             lopts, NULL)) > 0) {
         switch (c) {
             case 'b': opts->barcode_tag = optarg; break;
@@ -257,6 +265,22 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
                 break;
             case 'T': opts->extra_tags = optarg; break;
             case 'v': opts->def_qual = atoi(optarg); break;
+
+            case 'd':
+                if (strlen(optarg) < 2 ||
+                    (strlen(optarg) > 2 && optarg[2] != ':')) {
+                    print_error("fastq",
+                                "Invalid \"tag:value\" option: \"%s\"",
+                                optarg);
+                    free_opts(opts);
+                    return false;
+                }
+
+                opts->filter_tag = optarg;
+                opts->filter_value_str = strlen(optarg) > 2 ? optarg+3 : NULL;
+                opts->filter_value_int = INT64_MAX; // fill out later
+                opts->filter_value_flt = FLT_MAX;
+                break;
 
             case '?':
                 bam2fq_usage(stderr, argv[0]);
@@ -442,7 +466,17 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     }
 
     uint32_t rf = SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL;
-    if (opts->use_oq || opts->extra_tags || opts->index_file[0]) rf |= SAM_AUX;
+    if (opts->use_oq || opts->extra_tags || opts->index_file[0])
+        rf |= SAM_AUX;
+    if (opts->filter_tag) {
+        if (memcmp(opts->filter_tag, "NM", 2) == 0 ||
+            memcmp(opts->filter_tag, "MD", 2) == 0)
+            rf |= SAM_AUX | SAM_SEQ;
+        else if (memcmp(opts->filter_tag, "RG", 2) == 0)
+            rf |= SAM_RGAUX;
+        else
+            rf |= SAM_AUX;
+    }
     if (hts_set_opt(state->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
         fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
         free(state);
@@ -588,8 +622,56 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
     return valid;
 }
 
-static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state)
+static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state,
+                                 bam2fq_opts_t *opts)
 {
+    if (opts->filter_tag) {
+        uint8_t *s = bam_aux_get(b, opts->filter_tag);
+        if (!s)
+            return true;
+
+        if (opts->filter_value_str) {
+            switch (*s) {
+            case 'i': case 'I':
+            case 's': case 'S':
+            case 'c': case 'C':
+                if (opts->filter_value_int == INT64_MAX)
+                    // cache integer conversion for repeated use
+                    opts->filter_value_int =
+                        strtoll(opts->filter_value_str, NULL, 0);
+                if (opts->filter_value_int != bam_aux2i(s))
+                    return true;
+                break;
+
+            case 'f':
+                if (opts->filter_value_flt == FLT_MAX)
+                    opts->filter_value_flt = atof(opts->filter_value_str);
+                // Comparing floats is hard.
+                // Eg (double)0.1 - (double)0.1f is -1.5e-9.
+                // Given BAM binary encoding is float however, just keep it.
+                // This means rounding errors will (hopefully) always be the
+                // same and basic equality still works.
+                if (opts->filter_value_flt != (float)bam_aux2f(s))
+                    return true;
+                break;
+
+            case 'A':
+                if (s[1] != *opts->filter_value_str)
+                    return true;
+                break;
+
+            case 'Z': case 'H':
+                if (strcmp((char *)s+1, opts->filter_value_str) != 0)
+                    return true;
+                break;
+
+            default:
+                // Anything unsupported fails the filter match too.
+                return true;
+            }
+        }
+    }
+
     return ((b->core.flag&(state->flag_on)) != state->flag_on // or reads indicated by filter flags
         ||  (b->core.flag&(state->flag_off)) != 0
         ||  (((b->core.flag&(state->flag_anyon)) == 0) && (state->flag_anyon != 0))
@@ -811,7 +893,7 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
         }
         at_eof = res < 0;
 
-        if (!at_eof && filter_it_out(b[n], state))
+        if (!at_eof && filter_it_out(b[n], state, opts))
             continue;
         if (!at_eof) {
             ++n_reads;

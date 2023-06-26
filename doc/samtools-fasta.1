@@ -216,6 +216,14 @@ present in the FLAG field.
 can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
 or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
 .TP 8
+.BI "-d " TAG [: VAL ]
+Only output alignments containing an auxiliary tag matching both
+\fITAG\fR and \fIVAL\fR.  If \fIVAL\fR is omitted then any value is
+accepted.  The tag types supported are i, f, Z, A and H.  "B" arrays
+are not supported.  This is comparable to the method used in
+\fBsamtools view -d\fR, but for single values only (i.e. there is no
+sibling \fB-D\fR option).
+.TP 8
 .B -i
 add Illumina Casava 1.8 format entry to header (eg 1:N:0:ATCACG)
 .TP 8
