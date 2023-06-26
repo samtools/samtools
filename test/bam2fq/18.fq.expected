@@ -1,0 +1,24 @@
+@ref1_grp1_p005/1	MD:Z:10	NM:i:0	RG:Z:grp1	ia:i:40000
+GGATCCTCTA
++
+))))))))))
+@ref1_grp1_p006/1	MD:Z:10	NM:i:0	RG:Z:grp1	ia:i:255
+CCTCTAGAGT
++
+++++++++++
+@ref1_grp2_p003/1	MD:Z:10	NM:i:0	RG:Z:grp2	ia:i:4294967295
+ACCCGGGGAT
++
+&&&&&&&&&&
+@ref1_grp2_p004/1	MD:Z:10	NM:i:0	RG:Z:grp2	ia:i:-2147483648
+GGGGATCCTC
++
+((((((((((
+@ref1_grp2_p005/1	MD:Z:10	NM:i:0	RG:Z:grp2	ia:i:-1000
+ATCCTCTAGA
++
+**********
+@ref1_grp2_p006/1	MD:Z:10	NM:i:0	RG:Z:grp2	ia:i:-1
+TCTAGAGTCG
++
+,,,,,,,,,,
