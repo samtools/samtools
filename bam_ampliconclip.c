@@ -59,6 +59,7 @@ typedef struct {
     int oa_tag;
     int del_tag;
     int tol;
+    int unmap_len;
     char *arg_list;
     char *stats_file;
     char *rejects_file;
@@ -638,6 +639,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
     long filtered = 0, written = 0, failed = 0;
     kstring_t str = KS_INITIALIZE;
     kstring_t oat = KS_INITIALIZE;
+    kstring_t seq = KS_INITIALIZE;
     bed_entry_list_t *sites;
     FILE *stats_fp = stderr;
     khash_t(bed_list_hash) *bed_hash = kh_init(bed_list_hash);
@@ -829,16 +831,46 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                 }
             }
 
-            if (param->fail_len >= 0 || param->filter_len >= 0) {
-               hts_pos_t aql = active_query_len(b);
+            if (param->fail_len >= 0 || param->filter_len >= 0 || param->unmap_len >= 0) {
+                hts_pos_t aql = active_query_len(b);
 
-               if (param->fail_len >= 0 && aql <= param->fail_len) {
-                   b->core.flag |= BAM_FQCFAIL;
-               }
+                if (param->fail_len >= 0 && aql <= param->fail_len) {
+                    b->core.flag |= BAM_FQCFAIL;
+                }
 
-               if (param->filter_len >= 0 && aql <= param->filter_len) {
-                   filter = 1;
-               }
+                if (param->filter_len >= 0 && aql <= param->filter_len) {
+                    filter = 1;
+                }
+
+                if (param->unmap_len >= 0 && aql <= param->unmap_len) {
+
+                    if (ks_resize(&seq, b->core.l_qseq) < 0) {
+                        fprintf(stderr, "[ampliconclip] error: allocate memory for sequence %s\n", bam_get_seq(b));
+                        goto fail;
+                    }
+
+                    ks_clear(&seq);
+                    char *sb = ks_str(&seq);
+                    uint8_t *sequence = bam_get_seq(b);
+                    int i;
+
+                    for (i = 0; i < b->core.l_qseq ; ++i) {
+                        *sb++ = seq_nt16_str[bam_seqi(sequence, i)];
+                    }
+
+                    if (bam_set1(b_tmp, b->core.l_qname - b->core.l_extranul - 1, bam_get_qname(b),
+                                 (b->core.flag | BAM_FUNMAP), b->core.tid, b->core.pos, 0,
+                                 0, NULL, b->core.mtid, b->core.mpos, b->core.isize,
+                                 b->core.l_qseq, seq.s, (const char *)bam_get_qual(b),
+                                 bam_get_l_aux(b)) < 0) {
+                        fprintf(stderr, "[ampliconclip] error: could not unmap read %s\n", bam_get_seq(b));
+                        goto fail;
+                    }
+
+                    memcpy(bam_get_aux(b_tmp), bam_get_aux(b), bam_get_l_aux(b));
+                    b_tmp->l_data += bam_get_l_aux(b);
+                    swap_bams(&b, &b_tmp);
+                }
            }
 
            if (b->core.flag & BAM_FQCFAIL) {
@@ -913,6 +945,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
 fail:
     destroy_bed_hash(bed_hash);
     ks_free(&oat);
+    ks_free(&seq);
     sam_hdr_destroy(header);
     bam_destroy1(b);
     bam_destroy1(b_tmp);
@@ -935,6 +968,7 @@ static void usage(void) {
     fprintf(stderr, " --fail              mark unclipped, mapped reads as QCFAIL.\n");
     fprintf(stderr, " --filter-len INT    do not output reads INT size or shorter.\n");
     fprintf(stderr, " --fail-len   INT    mark as QCFAIL reads INT size or shorter.\n");
+    fprintf(stderr, " --unmap-len  INT    unmap reads INT size or shorter, default 0.\n");
     fprintf(stderr, " --no-excluded       do not write excluded reads (unmapped or QCFAIL).\n");
     fprintf(stderr, " --rejects-file FILE file to write filtered reads.\n");
     fprintf(stderr, " --original          for clipped entries add an OA tag with original data.\n");
@@ -955,7 +989,7 @@ int amplicon_clip_main(int argc, char **argv) {
     htsThreadPool p = {NULL, 0};
     samFile *in = NULL, *out = NULL, *reject = NULL;
     clipping_type clipping = soft_clip;
-    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, 0, 1, 5, NULL, NULL, NULL};
+    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, 0, 1, 5, 0, NULL, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -973,6 +1007,7 @@ int amplicon_clip_main(int argc, char **argv) {
         {"original", no_argument, NULL, 1013},
         {"keep-tag", no_argument, NULL, 1014},
         {"tolerance", required_argument, NULL, 1015},
+        {"unmap-len", required_argument, NULL, 1016},
         {NULL, 0, NULL, 0}
     };
 
@@ -996,6 +1031,7 @@ int amplicon_clip_main(int argc, char **argv) {
             case 1013: param.oa_tag = 1; break;
             case 1014: param.del_tag = 0; break;
             case 1015: param.tol = atoi(optarg); break;
+            case 1016: param.unmap_len = atoi(optarg); break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage(); exit(1);
