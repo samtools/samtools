@@ -1,6 +1,6 @@
 /*  bam_index.c -- index and idxstats subcommands.
 
-    Copyright (C) 2008-2011, 2013-2016, 2018, 2019  Genome Research Ltd.
+    Copyright (C) 2008-2011, 2013-2016, 2018, 2019, 2023  Genome Research Ltd.
     Portions copyright (C) 2010 Broad Institute.
     Portions copyright (C) 2013 Peter Cock, The James Hutton Institute.
 
@@ -47,12 +47,12 @@ static void index_usage(FILE *fp)
 "Usage: samtools index -M [-bc] [-m INT] <in1.bam> <in2.bam>...\n"
 "   or: samtools index [-bc] [-m INT] <in.bam> [out.index]\n"
 "Options:\n"
-"  -b       Generate BAI-format index for BAM files [default]\n"
-"  -c       Generate CSI-format index for BAM files\n"
-"  -m INT   Set minimum interval size for CSI indices to 2^INT [%d]\n"
-"  -M       Interpret all filename arguments as files to be indexed\n"
-"  -o FILE  Write index to FILE [alternative to <out.index> as an argument]\n"
-"  -@ INT   Sets the number of threads [none]\n", BAM_LIDX_SHIFT);
+"  -b, --bai            Generate BAI-format index for BAM files [default]\n"
+"  -c, --csi            Generate CSI-format index for BAM files\n"
+"  -m, --min-shift INT  Set minimum interval size for CSI indices to 2^INT [%d]\n"
+"  -M                   Interpret all filename arguments as files to be indexed\n"
+"  -o, --output FILE    Write index to FILE [alternative to <out.index> in args]\n"
+"  -@, --threads INT    Sets the number of threads [none]\n", BAM_LIDX_SHIFT);
 }
 
 // Returns 1 if the file does not exist or can be positively
@@ -80,7 +80,16 @@ int bam_index(int argc, char *argv[])
     int n_files, c, i, ret;
     const char *fn_idx = NULL;
 
-    while ((c = getopt(argc, argv, "bcm:Mo:@:")) >= 0)
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', '-', '-', '-', '-', '@'),
+        {"output",    required_argument, NULL, 'o'},
+        {"bai",       no_argument,       NULL, 'b'},
+        {"csi",       no_argument,       NULL, 'c'},
+        {"min-shift", required_argument, NULL, 'm'},
+        { NULL, 0, NULL, 0 }
+    };
+
+    while ((c = getopt_long(argc, argv, "bcm:Mo:@:", lopts, NULL)) >= 0)
         switch (c) {
         case 'b': csi = 0; break;
         case 'c': csi = 1; break;
