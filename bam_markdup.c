@@ -2204,6 +2204,7 @@ static int bam_mark_duplicates(md_param_t *param) {
     if (param->check_chain && (param->tag || param->opt_dist))
         free(dup_list.c);
 
+    free(idx_fn);
     free(stat_array);
     kh_destroy(reads, pair_hash);
     kh_destroy(reads, single_hash);
@@ -2230,6 +2231,7 @@ static int bam_mark_duplicates(md_param_t *param) {
     if (param->check_chain && (param->tag || param->opt_dist))
         free(dup_list.c);
 
+    free(idx_fn);
     free(stat_array);
     kh_destroy(reads, pair_hash);
     kh_destroy(reads, single_hash);
