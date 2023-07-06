@@ -1556,7 +1556,13 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\tbases duplicated:\t%ld\n", (long)stats->total_len_dup);
     fprintf(to, "SN\tmismatches:\t%ld\t# from NM fields\n", (long)stats->nmismatches);
     fprintf(to, "SN\terror rate:\t%e\t# mismatches / bases mapped (cigar)\n", stats->nbases_mapped_cigar ? (float)stats->nmismatches/stats->nbases_mapped_cigar : 0);
-    float avg_read_length = (stats->nreads_1st+stats->nreads_2nd+stats->nreads_other)?stats->total_len/(stats->nreads_1st+stats->nreads_2nd+stats->nreads_other):0;
+    float avg_read_length = (stats->nreads_1st +
+                             stats->nreads_2nd +
+                             stats->nreads_other)
+        ? (float)stats->total_len / (stats->nreads_1st +
+                                     stats->nreads_2nd +
+                                     stats->nreads_other)
+        : 0;
     fprintf(to, "SN\taverage length:\t%.0f\n", avg_read_length);
     fprintf(to, "SN\taverage first fragment length:\t%.0f\n", stats->nreads_1st? (float)stats->total_len_1st/stats->nreads_1st:0);
     fprintf(to, "SN\taverage last fragment length:\t%.0f\n", stats->nreads_2nd? (float)stats->total_len_2nd/stats->nreads_2nd:0);
