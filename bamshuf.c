@@ -537,7 +537,7 @@ static int usage(FILE *fp, int n_files, int reads_store) {
             "      -l INT   Compression level [%d]\n" // DEF_CLEVEL
             "      -n INT   Number of temporary files [%d]\n" // n_files
             "      -T PREFIX\n"
-            "               Write tempory files to PREFIX.nnnn.bam\n"
+            "               Write temporary files to PREFIX.nnnn.bam\n"
             "      --no-PG  do not add a PG line\n",
             reads_store, DEF_CLEVEL, n_files);
 
