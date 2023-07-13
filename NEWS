@@ -1,6 +1,93 @@
 Release a.b
 -----------
 
+New work and changes:
+
+* Add minimiser sort option to collate by an indexed fasta.  Expand the
+minimiser sort to arranged the minimiser values in the same order as they
+occur in the reference genome. This is acts as an extremely crude and simplistic
+read aligner that can be used to boost read compression.
+(PR#1818)
+
+* Add a --duplicate-count option to markdup.  Adds the number of duplicates
+(including itself) to the original read in a 'dc' tag.
+(PR#1816. Thanks to wulj2)
+
+* Make calmd handle unaligned data or empty files without throwing an error.
+This is to make pipelines work more smoothly.  A warning will still be issued.
+(PR#1841, fixes #1839.  Reported by Filipe G. Vieira)
+
+* Consistent, more comprehensive flag filtering for fasta/fastq.  Added
+--rf/--incl[ude]-flags and long options for -F (--excl[ude]-flags and
+-f (--require-flags).
+(PR#1842.  Thanks to Devang Thakkar)
+
+* Apply fastq --input-fmt-option settings.  Previously any options specified
+were not being applied to the input file.
+(PR#1855.  Thanks to John Marshall)
+
+* Add fastq -d TAG[:VAL] check.  This mirrors view -d and will only output
+alignments that match TAG (and VAL if specified).
+(PR#1863, fixes #1854.  Requested by Rasmus Kirkegaard)
+
+* Extend import --order TAG to --order TAG:length.  If length is specified, the
+tag format goes from integer to a 0-padded string format.  This is a workaround
+for BAM and CRAM that cannot encode an order tag of over 4 billion records.
+(PR#1850, fixes #1847.  Reported by Feng Tian)
+
+* New -aa mode for consensus.  This works like the -aa option in depth and
+mpileup. The single 'a' reports all bases in contigs covered by alignments.
+Double 'aa' (or '-a -a') reports Ns even for the references with no alignments
+against them.
+(PR#1851, fixes #1849.  Requested by Tim Fennell)
+
+* Add long option support to samtools index.
+(PR#1872, fixes #1869.  Reported by Jason Bacon)
+
+* Be consistent with rounding of "average length" in samtools stats.
+(PR#1876, fixes #1867.  Reported by Jelinek-J)
+
+Bug Fixes:
+
+* Fix a sort -M bug (regression) when merging sub-blocks.  Data was valid but
+in a poor order for compression.
+(PR#1812)
+
+* Fix bug in split output format.  Now SAM and CRAM format can chosen as well
+as BAM.  Also a documentation change, see below.
+(PR#1821)
+
+* Add error checking to view -e filter expression code.  Invalid expressions
+were not returning an error code.
+(PR#1833, fixes #1829.  Reported by Steve Huang)
+
+* Fix reheader CRAM output version.  Sets the correct CRAM output version for
+non-3.0 CRAMS.
+(PR#1868, fixes #1866.  Reported by John Marshall)
+
+Documentation:
+
+* Expand the default filtering information on the mpileup manpage.
+(PR#1802, fixes #1801.  Reported by gevro)
+
+* Add an explanation of the default behaviour of split files on generating
+a file for reads with missing or unrecognised RG tags.  Also a small bug fix,
+see above.
+(PR#1821, fixes #1817.  Reported by Steve Huang)
+
+* In the INSTALL instructions, switched back to openssl for Alpine.  This
+matches the current Alpine Linux practise.
+(PR#1837, see htslib#1591.  Reported by John Marshall)
+
+* Fix various typos caught by lintian parsers.
+(PR#1877.  Thanks to Étienne Mollier)
+
+Non user-visible changes and build improvements:
+
+* Removed a redundant line that caused a warning in gcc-13.
+(PR#1838)
+
+
 Release 1.17 (21st February 2023)
 ---------------------------------
 
@@ -42,7 +129,7 @@ New work and changes:
 
 * Improve samtools consensus for platforms with instrument specific profiles,
   considerably helping for data with very different indel error models and
-  providing base quality recalibration tables. On PacBio HiFi, ONT and 
+  providing base quality recalibration tables. On PacBio HiFi, ONT and
   Ultima Genomics consensus qualities are also redistributed within homopolymers
   and the likelihood of nearby indel errors is raised.
   (PR#1721, PR#1733)
