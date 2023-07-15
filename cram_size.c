@@ -558,8 +558,8 @@ static int cram_size(hFILE *hf_in, samFile *in, sam_hdr_t *h, FILE *outfp,
     fprintf(outfp, "Number of slices      %18"PRId64"\n", nslice);
     fprintf(outfp, "Number of sequences   %18"PRId64"\n", nseqs);
     fprintf(outfp, "Number of bases       %18"PRId64"\n", nbases);
-    fprintf(outfp, "Total file size       %18"PRId64"\n", end);
-    fprintf(outfp, "Format overhead size  %18"PRId64"\n", end - tot_size);
+    fprintf(outfp, "Total file size       %18"PRId64"\n", (int64_t) end);
+    fprintf(outfp, "Format overhead size  %18"PRId64"\n", (int64_t) (end - tot_size));
 
     return 0;
 
