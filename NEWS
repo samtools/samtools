@@ -48,6 +48,11 @@ New work and changes:
 * Be consistent with rounding of "average length" in samtools stats.
   (PR#1876, fixes #1867.  Reported by Jelinek-J)
 
+* Add option to ampliconclip that marks reads as unmapped when they do not have
+  enough aligned bases left after clipping.  Default is to unmap reads with zero
+  aligned bases.
+  (PR#1865, fixes #1856.  Requested by ces)
+
 Bug Fixes:
 
 * Fix a sort -M bug (regression) when merging sub-blocks.  Data was valid but
@@ -63,12 +68,12 @@ Bug Fixes:
   (PR#1833, fixes #1829.  Reported by Steve Huang)
 
 * Fix reheader CRAM output version.  Sets the correct CRAM output version for
-  non-3.0 CRAMS.
+  non-3.0 CRAMs.
   (PR#1868, fixes #1866.  Reported by John Marshall)
 
 Documentation:
 
-* Expand the default filtering information on the mpileup manpage.
+* Expand the default filtering information on the mpileup man page.
   (PR#1802, fixes #1801.  Reported by gevro)
 
 * Add an explanation of the default behaviour of split files on generating
@@ -77,11 +82,14 @@ Documentation:
   (PR#1821, fixes #1817.  Reported by Steve Huang)
 
 * In the INSTALL instructions, switched back to openssl for Alpine.  This
-  matches the current Alpine Linux practise.
+  matches the current Alpine Linux practice.
   (PR#1837, see htslib#1591.  Reported by John Marshall)
 
 * Fix various typos caught by lintian parsers.
-  (PR#1877.  Thanks to Étienne Mollier)
+  (PR#1877.  Thanks to Ã‰tienne Mollier)
+
+* Document consensus --qual-calibration option.
+  (PR#1880, fixes #1879.  Reported by John Marshall)
 
 Non user-visible changes and build improvements:
 
