@@ -1,7 +1,7 @@
 /*  bam_ampliconclip.c -- loads amplicon primers from a BED file and cuts reads
                           from the 5' end.
 
-    Copyright (C) 2020-2022 Genome Research Ltd.
+    Copyright (C) 2020-2023 Genome Research Ltd.
 
     Authors: Andrew Whitwham <aw7@sanger.ac.uk>
              Rob Davies <rmd+git@sanger.ac.uk>
