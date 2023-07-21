@@ -91,6 +91,9 @@ Documentation:
 * Document consensus --qual-calibration option.
   (PR#1880, fixes #1879.  Reported by John Marshall)
 
+* Updated the page about samtools duplicate marking with more detail at
+  www.htslib.org/algorithms/duplicate.html
+
 Non user-visible changes and build improvements:
 
 * Removed a redundant line that caused a warning in gcc-13.
