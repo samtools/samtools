@@ -55,6 +55,17 @@ New work and changes:
 
 Bug Fixes:
 
+* [From HTSLib] Fix a major bug when searching against a CRAM index where
+  one container has start and end coordinates entirely contained within the
+  previous container. This would occasionally miss data, and sometimes
+  return much more than required.  The bug affected versions 1.11 to 1.17,
+  although the change in 1.11 was bug-fixing multi-threaded index queries.
+  This bug did not affect index building.  There is no need to reindex your
+  CRAM files.
+  (PR#samtools/htslib#1574, PR#samtools/htslib#1640. Fixes
+  #samtools/htslib#1569, #samtools/htslib#1639, #1808, #1819.  Reported by
+  xuxif, Jens Reeder and Jared Simpson)
+
 * Fix a sort -M bug (regression) when merging sub-blocks.  Data was valid but
   in a poor order for compression.
   (PR#1812)
