@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.18 (25th July 2023)
+-----------------------------
+
 New work and changes:
 
 * Add minimiser sort option to collate by an indexed fasta.  Expand the
