@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-consensus 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.TH samtools-consensus 1 "25 July 2023" "samtools-1.18" "Bioinformatics tools"
 .SH NAME
-samtools consensus \- produces produce a consensus FASTA/FASTQ/PILEUP
+samtools consensus \- produces a consensus FASTA/FASTQ/PILEUP
 .\"
-.\" Copyright (C) 2021-2022 Genome Research Ltd.
+.\" Copyright (C) 2021-2023 Genome Research Ltd.
 .\"
 .\" Author: James Bonfield <jkb@sanger.ac.uk>
 .\"
@@ -161,6 +161,11 @@ selected to replicate this.
 Outputs all bases, from start to end of reference, even when the
 aligned data does not extend to the ends.  This is most useful for
 construction of a full length reference sequence.
+
+.TP
+.B -a -a, -aa
+Output absolutely all positions, including references with no data
+aligned against them.
 
 .TP
 \fB--rf\fR, \fB--incl-flags\fR \fISTR\fR|\fIINT\fR
@@ -345,6 +350,31 @@ due to an additional likelihood of sequence specific errors.  The
 quality values are multiplied by \fIFLOAT\fR.  This defaults to 0.5,
 but is not used if \fB-p\fR was not specified.  Adjusting this score
 also automatically enables \fB-p\fR.
+
+.TP
+\fB-t\fR, \fB--qual-calibration\fR \fIFILE\fR
+Loads a quality calibration table from \fIFILE\fR.  The format of
+this is a series of lines with the following fields, each starting with the
+literal text "QUAL":
+
+    \fBQUAL\fR \fIvalue\fR \fIsubstitution\fR \fIundercall\fR \fIovercall\fR
+
+Lines starting with a "#" are ignored.  Each line maps a recorded
+quality value to the Phred equivalent score for substitution,
+undercall and overcall errors.  Quality \fIvalue\fRs are expected to
+be sorted in increasing numerical order, but may skip values.  This
+allows the consensus algorithm to know the most likely cause of an
+error, and whether the instrument is more likely to have indel errors
+(more common in some long read technologies) or substitution errors
+(more common in clocked short-read instruments).
+
+Some pre-defined calibration tables are built in.  These are specified
+with a fake filename starting with a colon.  See the \fB-X\fR option
+for more details.
+
+Note due to the additional heuristics applied by the consensus
+algorithm, these recalibration tables are not a true reflection of the
+instrument error rates and are a work in progress.
 
 .TP
 \fB-X\fR, \fB--config \fISTR\fR

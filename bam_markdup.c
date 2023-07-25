@@ -76,6 +76,7 @@ typedef struct {
     regex_t *bc_rgx;
     int read_groups;
     int json;
+    int dc;
 } md_param_t;
 
 typedef struct {
@@ -96,6 +97,7 @@ typedef struct read_queue_s {
     bam1_t *b;
     struct read_queue_s *duplicate;
     struct read_queue_s *original;
+    int dc;
     hts_pos_t pos;
     int dup_checked;
     int read_group;
@@ -1616,6 +1618,7 @@ static int bam_mark_duplicates(md_param_t *param) {
         in_read->original = NULL;
         in_read->dup_checked = 0;
         in_read->read_group = 0;
+        in_read->dc = 1;
 
         if (param->read_groups) {
             uint8_t *data;
@@ -1703,6 +1706,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                         }
 
                         bp->p = in_read;
+                        bp->p->dc += 1;
 
                         if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->single_optical, &opt_warnings))
                             goto fail;
@@ -1765,6 +1769,7 @@ static int bam_mark_duplicates(md_param_t *param) {
 
                     if (new_score + tie_add > old_score) { // swap reads
                         dup = bp->p->b;
+                        in_read->dc += bp->p->dc;
 
                         if (param->check_chain) {
 
@@ -1805,6 +1810,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                         }
 
                         dup = in_read->b;
+                        bp->p->dc += 1;
                     }
 
                     if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->optical, &opt_warnings))
@@ -1846,6 +1852,8 @@ static int bam_mark_duplicates(md_param_t *param) {
                             in_read->original = bp->p;
                         }
 
+                        bp->p->dc += 1;
+
                         if (mark_duplicates(param, dup_hash, bp->p->b, in_read->b, in_read->read_group, &stats->single_optical, &opt_warnings))
                             goto fail;
 
@@ -1860,6 +1868,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                         // to the single hash and mark the other as duplicate
                         if (new_score > old_score) { // swap reads
                             dup = bp->p->b;
+                            in_read->dc += bp->p->dc;
 
                             if (param->check_chain) {
                                 in_read->duplicate = bp->p;
@@ -1877,6 +1886,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                                 in_read->original = bp->p;
                             }
 
+                            bp->p->dc += 1;
                             dup = in_read->b;
                         }
 
@@ -1914,6 +1924,9 @@ static int bam_mark_duplicates(md_param_t *param) {
             }
 
             if (!param->remove_dups || !(in_read->b->core.flag & BAM_FDUP)) {
+                if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
+                    bam_aux_update_int(in_read->b, "dc", in_read->dc);
+                }
                 if (param->supp) {
                     if (tmp_file_write(&temp, in_read->b)) {
                         print_error("markdup", "error, writing temp output failed.\n");
@@ -1977,12 +1990,20 @@ static int bam_mark_duplicates(md_param_t *param) {
             }
 
             if (!param->remove_dups || !(in_read->b->core.flag & BAM_FDUP)) {
+                if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
+                    bam_aux_update_int(in_read->b, "dc",  in_read->dc);
+                }
+
                 if (param->supp) {
                     if (tmp_file_write(&temp, in_read->b)) {
                         print_error("markdup", "error, writing temp output failed on final write.\n");
                         goto fail;
                     }
                 } else {
+                    if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
+                        bam_aux_update_int(in_read->b, "dc", in_read->dc);
+                    }
+
                     if (sam_write1(param->out, header, in_read->b) < 0) {
                         print_error("markdup", "error, writing output failed on final write.\n");
                         goto fail;
@@ -2044,6 +2065,10 @@ static int bam_mark_duplicates(md_param_t *param) {
             }
 
             if (!param->remove_dups || !(b->core.flag & BAM_FDUP)) {
+                if (param->dc && (b->core.flag & BAM_FDUP)) {
+                    uint8_t* data = bam_aux_get(b, "dc");
+                    if(data) bam_aux_del(b, data);
+                }
                 if (sam_write1(param->out, header, b) < 0) {
                     print_error("markdup", "error, writing final output failed.\n");
                     goto fail;
@@ -2179,6 +2204,7 @@ static int bam_mark_duplicates(md_param_t *param) {
     if (param->check_chain && (param->tag || param->opt_dist))
         free(dup_list.c);
 
+    free(idx_fn);
     free(stat_array);
     kh_destroy(reads, pair_hash);
     kh_destroy(reads, single_hash);
@@ -2205,6 +2231,7 @@ static int bam_mark_duplicates(md_param_t *param) {
     if (param->check_chain && (param->tag || param->opt_dist))
         free(dup_list.c);
 
+    free(idx_fn);
     free(stat_array);
     kh_destroy(reads, pair_hash);
     kh_destroy(reads, single_hash);
@@ -2242,6 +2269,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  --use-read-groups  Use the read group tags in duplicate matching.\n");
     fprintf(stderr, "  -t                 Mark primary duplicates with the name of the original in a \'do\' tag."
                                         " Mainly for information and debugging.\n");
+    fprintf(stderr, "  --duplicate-count  Record the original primary read duplication count(include itself) in a \'dc\' tag.\n");
 
     sam_global_opt_help(stderr, "-.O..@..");
 
@@ -2263,7 +2291,7 @@ int bam_markdup(int argc, char **argv) {
     char *regex = NULL, *bc_regex = NULL;
     char *regex_order = "txy";
     md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL, 0, 0};
+                        1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL, 0, 0, 0};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -2278,6 +2306,7 @@ int bam_markdup(int argc, char **argv) {
         {"barcode-rgx", required_argument, NULL, 1008},
         {"use-read-groups", no_argument, NULL, 1009},
         {"json", no_argument, NULL, 1010},
+        {"duplicate-count", no_argument, NULL, 1011},
         {NULL, 0, NULL, 0}
     };
 
@@ -2314,6 +2343,7 @@ int bam_markdup(int argc, char **argv) {
             case 1008: bc_name = 1, bc_regex = optarg; break;
             case 1009: param.read_groups = 1; break;
             case 1010: param.json = 1; param.do_stats = 1; break;
+            case 1011: param.dc = 1; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();

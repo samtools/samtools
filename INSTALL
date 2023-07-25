@@ -232,7 +232,9 @@ Alpine Linux
 ------------
 
 doas apk update  # Ensure the package list is up to date
-doas apk add autoconf automake make gcc musl-dev perl bash zlib-dev bzip2-dev xz-dev curl-dev libressl-dev ncurses-dev
+doas apk add autoconf automake make gcc musl-dev perl bash zlib-dev bzip2-dev xz-dev curl-dev openssl-dev ncurses-dev
+
+Note: some older Alpine versions use libressl-dev rather than openssl-dev.
 
 OpenSUSE
 --------

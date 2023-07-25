@@ -1,9 +1,9 @@
 '\" t
-.TH samtools 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.TH samtools 1 "25 July 2023" "samtools-1.18" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
-.\" Copyright (C) 2008-2011, 2013-2022 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2023 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -588,7 +588,7 @@ samtools fasta
 
 Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
 command invoked. The files will be automatically compressed if the
-file names have a .gz or .bgzf extension.
+file names have a .gz, .bgz, or .bgzf extension.
 
 The input to this program must be collated by name.
 Use
@@ -1003,7 +1003,7 @@ compression method.  This is on by default for version 3.1 and above
 only when the small and archive profiles are in use.
 .TP
 .BI use_tok= 0|1
-CRAM \(>= 3.1 output only; enables and disables the namne tokeniser
+CRAM \(>= 3.1 output only; enables and disables the name tokeniser
 compression method.  This is on by default for version 3.1 and above.
 .TP
 .BI lossy_names= 0|1
@@ -1354,7 +1354,8 @@ samtools.  Bob Handsaker from the Broad Institute implemented the BGZF
 library.  Petr Danecek and Heng Li wrote the VCF/BCF implementation.
 James Bonfield from the Sanger Institute developed the CRAM
 implementation.  Other large code contributions have been made by
-John Marshall, Rob Davies, Martin Pollard, Andrew Whitwham, Valeriu Ohan
+John Marshall, Rob Davies, Martin Pollard, Andrew Whitwham, Valeriu Ohan,
+Vasudeva Sarma
 (all while primarily at the Sanger Institute), with numerous other
 smaller but valuable contributions.  See the per-command manual pages
 for further authorship.

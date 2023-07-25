@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-reheader 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.TH samtools-reheader 1 "25 July 2023" "samtools-1.18" "Bioinformatics tools"
 .SH NAME
 samtools reheader \- replaces the header in the input file
 .\"
@@ -45,9 +45,8 @@ samtools reheader \- replaces the header in the input file
 .PP
 samtools reheader
 .RB [ -iP ]
-[-c CMD | 
-.I in.header.sam
-] 
+.RB [ -c
+.IR CMD " | " in.header.sam ]
 .I in.bam
 
 .SH DESCRIPTION
@@ -75,24 +74,24 @@ Perform the header edit in-place, if possible.  This only works on CRAM
 files and only if there is sufficient room to store the new header.
 The amount of space available will differ for each CRAM file.
 .TP 8
-.B -c, --command CMD
+.BI "-c, --command " CMD
 Allow the header from 
 .I in.bam
 to be processed by external 
-.B CMD
+.I CMD
 and read back the result. When used in this manner, the external header file
 .I in.header.sam
 has to be omitted.
 
-.B CMD
+.I CMD
 must take the original header through stdin in SAM format and output the
 modified header to stdout.
-.B CMD
+.I CMD
 is passed to the system's command shell.
 Care should be taken to ensure the command is quoted correctly to avoid unwanted
 shell expansions (for example of $ variables).
 
-.B CMD
+.I CMD
 must return an exit status of zero.
 
 .SH EXAMPLES

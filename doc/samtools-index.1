@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-index 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.TH samtools-index 1 "25 July 2023" "samtools-1.18" "Bioinformatics tools"
 .SH NAME
 samtools index \- indexes SAM/BAM/CRAM files
 .\"
@@ -102,16 +102,16 @@ you will need to use a CSI index.
 
 .SH OPTIONS
 .TP 8
-.B -b
+.B -b, --bai
 Create a BAI index.
 This is currently the default when no format options are used.
 .TP
-.B -c
+.B -c, --csi
 Create a CSI index.
 By default, the minimum interval size for the index is 2^14, which is the same
 as the fixed value used by the BAI format.
 .TP
-.BI "-m " INT
+.BI "-m, --min-shift " INT
 Create a CSI index, with a minimum interval size of 2^INT.
 .TP
 .B -M
@@ -120,7 +120,7 @@ Interpret all filename arguments as alignment files to be indexed individually.
 .BR -M ,
 filename arguments are interpreted solely as per the second synopsis.)
 .TP
-.BI "-o " FILE
+.BI "-o, --output " FILE
 Write the output index to
 .IR FILE .
 (Currently may only be used when exactly one alignment file is being indexed.)

@@ -1,0 +1,4 @@
+contact_links:
+  - name:  Conda issues
+    url:   https://github.com/bioconda/bioconda-recipes
+    about: Please report issues specific to the samtools conda package to Bioconda.

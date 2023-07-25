@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-split 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.TH samtools-split 1 "25 July 2023" "samtools-1.18" "Bioinformatics tools"
 .SH NAME
 samtools split \- splits a file by read group.
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018,2023 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -53,8 +53,19 @@ Splits a file by read group, producing one or more output files
 matching a common prefix (by default based on the input filename)
 each containing one read-group.
 
+Records without an RG tag or with an RG tag undefined in the header will cause
+the program to exit with an error unless the \fB-u\fR option is used.
+
+RG values defined in the header but with no records will produce an output file
+only containing a header.
+
 The \fB-u\fR option may be used to specify the output filename for any
-records without an RG tag.
+records with a missing or unrecognised RG tag.  This option will always write
+out a file even if there are no records.
+
+Output format defaults to BAM.  For SAM or CRAM then either set the format with
+\fB--output-fmt\fR or use \fB-f\fR to set the file extension e.g.
+\fB-f %*_%#.sam\fR. 
 
 .SH OPTIONS
 .TP 14

@@ -1,6 +1,6 @@
 /*  consensus__pileup.h -- Pileup orientated data per consensus column
 
-    Copyright (C) 2013-2016, 2020-2021 Genome Research Ltd.
+    Copyright (C) 2013-2016, 2020-2022 Genome Research Ltd.
 
     Author: James Bonfied <jkb@sanger.ac.uk>
 

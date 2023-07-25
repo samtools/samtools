@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-fasta 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.TH samtools-fasta 1 "25 July 2023" "samtools-1.18" "Bioinformatics tools"
 .SH NAME
-samtools fasta / fastq \- converts a SAM/BAM/CRAM file to FASTA or FASTQ
+samtools-fasta, samtools-fastq \- converts a SAM/BAM/CRAM file to FASTA or FASTQ
 .\"
-.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2020, 2023 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -55,7 +55,7 @@ samtools fasta
 .PP
 Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
 command invoked. The files will be automatically compressed if the
-file names have a .gz or .bgzf extension.
+file names have a .gz, .bgz, or .bgzf extension.
 
 Note this command is attempting to reverse the alignment process, so
 if the aligner took a single input FASTQ and produced multiple SAM
@@ -189,7 +189,7 @@ present in the FLAG field.
 can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
 or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
 .TP 8
-.BI "-F " INT
+.BI "-F " INT ", ", --excl-flags " INT ", --exclude-flags " INT
 Do not output alignments with any bits set in
 .I INT
 present in the FLAG field.
@@ -199,6 +199,15 @@ or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0x900].
 This defaults to 0x900 representing filtering of secondary and
 supplementary alignments.
 .TP 8
+.BI "--rf " INT " , --incl-flags " INT ", --include-flags " INT
+Only output alignments with any bits set in
+.I INT
+present in the FLAG field.
+.I INT
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/),
+in octal by beginning with `0' (i.e. /^0[0-7]+/), as a decimal number
+not beginning with '0' or as a comma-separated list of flag names [0].
+.TP
 .BI "-G " INT
 Only EXCLUDE reads with all of the bits set in
 .I INT
@@ -206,6 +215,14 @@ present in the FLAG field.
 .I INT
 can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
 or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
+.TP 8
+.BI "-d " TAG [: VAL ]
+Only output alignments containing an auxiliary tag matching both
+\fITAG\fR and \fIVAL\fR.  If \fIVAL\fR is omitted then any value is
+accepted.  The tag types supported are i, f, Z, A and H.  "B" arrays
+are not supported.  This is comparable to the method used in
+\fBsamtools view -d\fR, but for single values only (i.e. there is no
+sibling \fB-D\fR option).
 .TP 8
 .B -i
 add Illumina Casava 1.8 format entry to header (eg 1:N:0:ATCACG)

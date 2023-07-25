@@ -127,6 +127,11 @@ int cram_reheader(cram_fd *in, sam_hdr_t *h, const char *arg_list, int no_pg)
     if (!h)
         return ret;
 
+    // Match output version number with input file.
+    char vers[99];
+    sprintf(vers, "%d.%d", cram_major_vers(in), cram_minor_vers(in));
+    cram_set_option(out, CRAM_OPT_VERSION, vers);
+
     // Attempt to fill out a cram->refs[] array from @SQ headers
     sam_hdr_t *cram_h = sam_hdr_dup(h);
     if (!cram_h)

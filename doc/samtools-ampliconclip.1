@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-ampliconclip 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.TH samtools-ampliconclip 1 "25 July 2023" "samtools-1.18" "Bioinformatics tools"
 .SH NAME
 samtools ampliconclip \- clip reads using a BED file
 .\"
@@ -56,6 +56,8 @@ samtools ampliconclip
 .RB [ --filter-len
 .IR INT ]
 .RB [ --fail-len
+.IR INT ]
+.RB [ --unmap-len
 .IR INT ]
 .RB [ --no-excluded ]
 .RB [ --rejects-file
@@ -129,6 +131,9 @@ toward read length.  An INT of 0 will filter out reads with no matching bases.
 .TP
 .BI "--fail-len " INT
 As \fB--filter-len\fR but mark as QC fail rather then filter out.
+.TP
+.BI "--unmap-len " INT
+As \fB--filter-len\fR but mark as unmapped. Default is 0 (no matching reads).  -1 will disable.
 .TP
 .B --no-excluded
 Filter out any reads that are marked as QCFAIL or are unmapped.  This works on

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-mpileup 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.TH samtools-mpileup 1 "25 July 2023" "samtools-1.18" "Bioinformatics tools"
 .SH NAME
 samtools mpileup \- produces "pileup" textual format from an alignment
 .\"
-.\" Copyright (C) 2008-2011, 2013-2022 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2023 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -75,6 +75,11 @@ example a BED file containing locations of genes in chromosome 20
 could be specified using \fB-r 20 -l chr20.bed\fR, meaning that the
 index is used to find chromosome 20 and then it is filtered for the
 regions listed in the bed file.
+
+By default secondary alignments, QC failures and duplicate reads will
+be omitted, along with low quality bases and some reads in high depth
+regions.  See the \fB--ff\fR, \fB-Q\fR and \fB-d\fR options for
+changing this.
 
 .SS Pileup Format
 Pileup format consists of TAB-separated lines, with each line representing
@@ -272,12 +277,16 @@ Ignore RG tags. Treat all reads in one BAM as one sample.
 .TP
 .BI --rf,\ --incl-flags \ STR|INT
 Required flags: only include reads with any of the mask bits set [null].
-Note this does not override the \fB--excl-flags\fR option.
+Note this is implemented as a filter-out rule, rejecting reads that have
+none of the mask bits set.  Hence this does not override the
+\fB--excl-flags\fR option.
 .TP
 .BI --ff,\ --excl-flags \ STR|INT
-Filter flags: skip reads with any of the mask bits set
-[UNMAP,SECONDARY,QCFAIL,DUP].
-Note this does not override the \fB--incl-flags\fR option.
+Filter flags: skip reads with any of the mask bits set.  This defaults
+to UNMAP,SECONDARY,QCFAIL,DUP.  The option is not accumulative, so
+specifying e.g. \fB--ff UNMAP,QCFAIL\fR will reenable output of
+secondary and duplicate alignments.  Note this does not override the
+\fB--incl-flags\fR option.
 .TP
 .B -x,\ --ignore-overlaps-removal, --disable-overlap-removal
 Overlap detection and removal is enabled by default.  This option

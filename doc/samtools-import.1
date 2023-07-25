@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-import 1 "21 February 2023" "samtools-1.17" "Bioinformatics tools"
+.TH samtools-import 1 "25 July 2023" "samtools-1.18" "Bioinformatics tools"
 .SH NAME
 samtools import \- converts FASTQ files to unmapped SAM/BAM/CRAM
 .\"
@@ -141,6 +141,12 @@ the Nth record number.  This may be useful if the data is to be sorted
 or collated in some manner and we wish this to be reversible.  In this
 case the tag may be used with \fBsamtools sort -t TAG\fR to regenerate
 the original input order.
+
+Note integer tags can only hold up to 2^32 record numbers
+(approximately 4 billion).  Data sets with more records can switch to
+using a fixed-width string tag instead, with leading 0s to ensure sort
+works.  To do this specify TAG:LENGTH.  E.g. \fB--order rn:12\fR will
+be able to sort up to 1 trillion records.
 
 .TP 8
 .BI -r\  RG_line ,\ --rg-line\  RG_line
