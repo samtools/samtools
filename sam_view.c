@@ -54,6 +54,8 @@ typedef struct samview_settings {
     strhash_t rnhash;
     strhash_t tvhash;
     int min_mapQ;
+    int rghash_discard; // 0 keep, 1 discard
+    int rnhash_discard; // 0 keep, 1 discard
 
     // Described here in the same terms as the usage statement.
     // The code however always negates to "reject if"         keep if:
@@ -176,7 +178,8 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         uint8_t *s = bam_aux_get(b, "RG");
         if (s) {
             khint_t k = kh_get(str, settings->rghash, (char*)(s + 1));
-            if (k == kh_end(settings->rghash)) return 1;
+            if ((k == kh_end(settings->rghash)) != settings->rghash_discard)
+                return 1;
         }
     }
     if (settings->tag) {
@@ -204,9 +207,11 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     }
     if (settings->rnhash) {
         const char* rn = bam_get_qname(b);
-        if (!rn || kh_get(str, settings->rnhash, rn) == kh_end(settings->rnhash)) {
+        strhash_t h = settings->rnhash;
+        if (!rn && !settings->rnhash_discard)
             return 1;
-        }
+        if ((kh_get(str, h, rn) == kh_end(h)) != settings->rnhash_discard)
+            return 1;
     }
     if (settings->library) {
         const char *p = bam_get_library((sam_hdr_t*)h, b);
@@ -305,7 +310,12 @@ static int add_read_group_single(const char *subcmd, samview_settings_t *setting
     if (settings->rghash == NULL) {
         settings->rghash = kh_init(str);
         if (settings->rghash == NULL) goto err;
+    } else if (settings->rghash_discard == 1) {
+        print_error("view", "cannot mix include and exclude read-group files in the same command line");
+        free(d);
+        return -1;
     }
+    settings->rghash_discard = 0;
 
     kh_put(str, settings->rghash, d, &ret);
     if (ret == -1) goto err;
@@ -326,8 +336,14 @@ static int add_read_names_file(const char *subcmd, samview_settings_t *settings,
             perror(NULL);
             return -1;
         }
+    } else if ((settings->rnhash_discard == 0 && *fn == '^') ||
+        (settings->rnhash_discard == 1 && *fn != '^')) {
+        print_error("view", "cannot mix include and exclude read-name files in the same command line");
+        return -1;
     }
-    return populate_lookup_from_file(subcmd, settings->rnhash, fn);
+    settings->rnhash_discard = (*fn == '^');
+    return populate_lookup_from_file(subcmd, settings->rnhash,
+                                     fn + (*fn == '^'));
 }
 
 static int add_read_groups_file(const char *subcmd, samview_settings_t *settings, char *fn)
@@ -338,8 +354,14 @@ static int add_read_groups_file(const char *subcmd, samview_settings_t *settings
             perror(NULL);
             return -1;
         }
+    } else if ((settings->rghash_discard == 0 && *fn == '^') ||
+        (settings->rghash_discard == 1 && *fn != '^')) {
+        print_error("view", "cannot mix include and exclude read-group files in the same command line");
+        return -1;
     }
-    return populate_lookup_from_file(subcmd, settings->rghash, fn);
+    settings->rghash_discard = (*fn == '^');
+    return populate_lookup_from_file(subcmd, settings->rghash,
+                                     fn + (*fn == '^'));
 }
 
 static int add_tag_value_single(const char *subcmd, samview_settings_t *settings, char *name)
@@ -1458,9 +1480,10 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "\n"
 "Filtering options (Only include in output reads that...):\n"
 "  -L, --target[s]-file FILE  ...overlap (BED) regions in FILE\n"
+"  -N, --qname-file [^]FILE   ...whose read name is listed in FILE (\"^\" negates)\n"
 "  -r, --read-group STR       ...are in read group STR\n"
-"  -R, --read-group-file FILE ...are in a read group listed in FILE\n"
-"  -N, --qname-file FILE      ...whose read name is listed in FILE\n"
+"  -R, --read-group-file [^]FILE\n"
+"                             ...are in a read group listed in FILE\n"
 "  -d, --tag STR1[:STR2]      ...have a tag STR1 (with associated value STR2)\n"
 "  -D, --tag-file STR:FILE    ...have a tag STR whose value is listed in FILE\n"
 "  -q, --min-MQ INT           ...have mapping quality >= INT\n"

@@ -292,6 +292,10 @@ or
 .BI "-N " FILE ", --qname-file " FILE
 Output only alignments with read names listed in
 .IR FILE .
+If \fIFILE\fR starts with \fB^\fR then the operation is negated and
+only outputs alignment with read groups not listed in \fIFILE\fR.
+It is not permissible to mix both the filter-in and filter-out style
+syntax in the same command.
 .TP
 .BI "-r " STR ", --read-group " STR
 Output alignments in read group
@@ -306,6 +310,10 @@ This behaviour may change in a future release.
 Output alignments in read groups listed in
 .I FILE
 [null].
+If \fIFILE\fR starts with \fB^\fR then the operation is negated and
+only outputs alignment with read names not listed in \fIFILE\fR.
+It is not permissible to mix both the filter-in and filter-out style
+syntax in the same command.
 Note that records with no
 .B RG
 tag will also be output when using this option.
