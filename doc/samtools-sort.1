@@ -48,11 +48,12 @@ samtools sort
 
 .SH DESCRIPTION
 .PP
-Sort alignments by leftmost coordinates, by read name when \fB-n\fR
-is used, by tag contents with \fB-t\fR, or a minimiser-based collation
-order with \fB-M\fR.  An appropriate
-.B @HD-SO
-sort order header tag will be added or an existing one updated if necessary.
+Sort alignments by leftmost coordinates, by read name when \fB-n\fR or
+\fB-N\fR are used, by tag contents with \fB-t\fR, or a minimiser-based
+collation order with \fB-M\fR.  An appropriate \fB@HD SO\fR
+sort order header tag will be added or an existing one updated if
+necessary, along with the \fB@HD SS\fR sub-sort header tag where
+appropriate.
 
 The sorted output is written to standard output by default, or to the
 specified file
@@ -74,7 +75,8 @@ instead if you need name collated data without a full lexicographical sort.
 Note that if the sorted output file is to be indexed with
 .BR "samtools index" ,
 the default coordinate sort must be used.
-Thus the \fB-n\fR, \fB-t\fR and \fB-M\fR options are incompatible with
+Thus the \fB-n\fR, \fB-N\fR, \fB-t\fR and \fB-M\fR options are
+incompatible with
 .BR "samtools index" .
 
 When sorting by minimisier (\fB-M\fR), the sort order is defined by
@@ -115,11 +117,26 @@ minimum value of 1M for this setting.
 .B -n
 Sort by read names (i.e., the
 .B QNAME
-field) rather than by chromosomal coordinates.
+field) using an alpha-numeric ordering, rather than by chromosomal coordinates.
+The alpha-numeric or \*(lqnatural\*(rq sort order detects runs of digits in the
+strings and sorts these numerically.  Hence "a7b" appears before "a12b".
+Note this is not suitable where hexadecimal values are in use.
+Sets the header sub-sort (\fB@HD SS\fR) tag to \fBqueryname:natural\fR.
+.TP
+.B -N
+Sort by read names (i.e., the
+.B QNAME
+field) using the lexicographical ordering, rather than by chromosomal
+coordinates.  Unlike \fB-n\fR no detection of numeric components is
+used, instead relying purely on the ASCII value of each character.
+Hence "x12" comes before "x7" as "1" is before "7" in ASCII.  This is
+a more appropriate name sort order where all digits in names are
+already zero-padded and/or hexadecimal values are being used.
+Sets the header sub-sort (\fB@HD SS\fR) tag to \fBqueryname:lexicographical\fR.
 .TP
 .BI "-t " TAG
 Sort first by the value in the alignment tag TAG, then by position or name (if
-also using \fB-n\fP).
+also using \fB-n\fP or \fB-N\fR).
 .TP
 .B "-M "
 Sort unmapped reads (those in chromosome "*") by their sequence
@@ -212,7 +229,8 @@ and the sub-sort (SS) is
 The following rules are used for ordering records.
 
 If option \fB-t\fP is in use, records are first sorted by the value of
-the given alignment tag, and then by position or name (if using \fB-n\fP).
+the given alignment tag, and then by position or name (if using \fB-n\fP
+or \fB-N\fP).
 For example, \*(lq-t RG\*(rq will make read group the primary sort key.  The
 rules for ordering by tag are:
 
@@ -236,11 +254,17 @@ Character tags (type A) are compared by binary character value.
 No attempt is made to compare tags of other types \(em notably type B
 array values will not be compared.
 .PP
-When the \fB-n\fP option is present, records are sorted by name.  Names are
-compared so as to give a \*(lqnatural\*(rq ordering \(em i.e. sections
-consisting of digits are compared numerically while all other sections are
-compared based on their binary representation.  This means \*(lqa1\*(rq will
-come before \*(lqb1\*(rq and \*(lqa9\*(rq will come before \*(lqa10\*(rq.
+When the \fB-n\fP or \fB-N\fP option is present, records are sorted by
+name.  Historically samtools has used a \*(lqnatural\*(rq ordering
+\(em i.e. sections consisting of digits are compared numerically while
+all other sections are compared based on their binary representation.
+This means \*(lqa1\*(rq will come before \*(lqb1\*(rq and \*(lqa9\*(rq
+will come before \*(lqa10\*(rq.  However this alpha-numeric sort can
+be confused by runs of hexadecimal digits.  The newer \fB-N\fP
+option adds a simpler lexicographical based name collation which does not
+attempt any numeric comparisons and may be more appropriate for some
+data sets.  Note care must be taken when using \fBsamtools merge\fP to
+ensure all files are using the same collation order.
 Records with the same name will be ordered according to the values of
 the READ1 and READ2 flags (see
 .BR flags ).

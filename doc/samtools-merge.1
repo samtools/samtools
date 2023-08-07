@@ -83,8 +83,10 @@ of existing IDs in the output header will have a suffix appended to them to diff
 records from other files and the read records will be updated to reflect this.
 
 The ordering of the records in the input files must match the usage of the
-\fB-n\fP and \fB-t\fP command-line options.  If they do not, the output
-order will be undefined.  See
+\fB-n\fP, \fB-N\fP and \fB-t\fP command-line options.  If they do not,
+the output order will be undefined.  Note this also extends to
+disallowing mixing of "queryname" files with a combination of natural
+and lexicographical sort orders.  See
 .B sort
 for information about record ordering.
 
@@ -122,8 +124,20 @@ is actually in SAM format, though any alignment records it may contain
 are ignored.)
 .TP
 .B -n
-The input alignments are sorted by read names rather than by chromosomal
-coordinates
+The input alignments are sorted by read names using an alpha-numeric
+ordering, rather than by chromosomal coordinates.
+The alpha-numeric or \*(lqnatural\*(rq sort order detects runs of digits in the
+strings and sorts these numerically.  Hence "a7b" appears before "a12b".
+Note this is not suitable where hexadecimal values are in use.
+.TP
+.B -N
+The input alignments are sorted by read names using a lexicographical
+ordering, rather than by chromosomal coordinates.  Unlike \fB-n\fR no
+detection of numeric components is used, instead relying purely on the
+ASCII value of each character.  Hence "x12" comes before "x7" as "1"
+is before "7" in ASCII.  This is a more appropriate name sort order
+where all digits in names are already zero-padded and/or hexadecimal
+values are being used.
 .TP
 .BI -o \ FILE
 Write merged output to

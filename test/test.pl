@@ -3213,6 +3213,7 @@ sub test_sort
 
     # Name sort
     test_cmd($opts, out=>"sort/name.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -n -m 10M $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+    test_cmd($opts, out=>"sort/name2.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -N -m 10M $$opts{path}/dat/test_input_1_b.bam -O SAM -o -");
 
     # Tag sort (RG)
     test_cmd($opts, out=>"sort/tag.rg.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t RG -m 10M $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
