@@ -1165,6 +1165,7 @@ flag.secondary	int	Single bit, 0 or 256
 flag.qcfail	int	Single bit, 0 or 512
 flag.dup	int	Single bit, 0 or 1024
 flag.supplementary	int	Single bit, 0 or 2048
+hclen	int	Number of hard-clipped bases
 library	string	Library (LB header via RG)
 mapq	int	Mapping quality
 mpos	int	Synonym for pnext
@@ -1193,10 +1194,12 @@ equivalent to \fBflag & 1024\fR.
 "qlen" and "rlen" are measured using the CIGAR string to count the
 number of query (sequence) and reference bases consumed.  Note "qlen"
 may not exactly match the length of the "seq" field if the sequence is
-"*".  "sclen" is the number of soft-clipped bases.  When combined in
-"qlen-sclen" it can give the number of sequence bases used in the
-alignment, distinguishing between global alignment and local alignment
-length.
+"*".
+
+"sclen" and "hclen" are the number of soft and hard-clipped
+bases respectively.  The formula "qlen-sclen" gives the
+number of sequence bases used in the alignment, distinguishing between
+global alignment and local alignment length.
 
 "endpos" is the (1-based inclusive) position of the rightmost mapped base
 of the read, as measured using the CIGAR string, and for mapped reads
