@@ -303,5 +303,14 @@ int main(int argc, char *argv[])
         fprintf(stderr, "[main] unrecognized command '%s'\n", argv[1]);
         return 1;
     }
+
+    // For subcommands that may have produced substantial output on stdout,
+    // make a final check for delayed I/O errors. Ignore EBADF as other code
+    // may have already closed stdout.
+    if (fclose(stdout) != 0 && errno != EBADF) {
+        print_error_errno(argv[1], "closing standard output failed");
+        return 1;
+    }
+
     return ret;
 }
