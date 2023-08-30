@@ -25,6 +25,8 @@
 use strict;
 use warnings;
 use Carp;
+use POSIX qw/floor/;
+use List::Util qw(max);
 
 my $opts = parse_params();
 parse_bamcheck($opts);
@@ -39,6 +41,7 @@ plot_coverage($opts);
 plot_mismatches_per_cycle($opts);
 plot_indel_dist($opts);
 plot_indel_cycles($opts);
+plot_read_len_hist($opts);
 create_html($opts);
 
 exit;
@@ -1202,6 +1205,136 @@ sub plot_indel_cycles
     }
     close($fh);
     plot($$args{gp});
+}
+
+sub plot_read_len_hist
+{
+    my ($opts) = @_;
+
+    my @rl = get_values($opts, 'RL');
+    if ( !@rl ) { return; }
+
+    # TODO: Add modified version for paired end reads.
+    # my $is_paired = get_value($opts,'SN','reads paired:');
+
+    my $args = get_defaults($opts,"$$opts{prefix}read_length.png");
+    my $fh = $$args{fh};
+
+    # anonymous subroutines for code readibility
+    my $log_bin = sub {
+        my $x = $_[0];
+        return floor((log($x) / log(10)) * 10);
+    };
+    my $inv_log_bin = sub {
+        my $x = $_[0];
+        return floor(10**($x/10));
+    };
+
+    # Open files to store data: this is more elegant than copying four sets of
+    # data into a single GNUplot file.
+    open(my $rd_fh, '>', "$$opts{prefix}read_len_rawdata.txt");
+    open(my $hd_fh, '>', "$$opts{prefix}read_len_histdata.txt");
+
+    # Create gnuplot command file options
+    my $min_x = $rl[0][0];
+    my $max_x = $rl[-1][0];
+
+    # Gnuplot commands for normalized binned data
+    # The normalized plot bins reads by read length with bin widths on a
+    # logarithmic scale (i.e. bins 10-11 bp, 12-14 bp, 15-18 bp, etc.), then
+    # bin height is normalized by the width of the bins.
+    # The end goal is to smooth the distribution of reads compared to plotting
+    # each length without binning.  Visualization of unbinned data is included
+    # in order to make single value spikes more visible, for example in the
+    # case that spike ins are used as a control.
+    print $fh qq[
+        set ytics nomirror
+        set y2tic nomirror
+        set terminal png size 800,1000 truecolor
+        set output "$$args{img}"
+        $$args{grid}
+        set grid noy2tics
+        set multiplot layout 2,1 columnsfirst scale 1,0.9
+        set autoscale y
+        set ylabel "Read Count"
+        set autoscale x
+        set logscale x
+        set xrange[$min_x: $max_x]
+        set xtics rotate by -45 out scale 1 nomirror
+        set xlabel "Read Length"
+        set boxwidth .8 relative
+        set title "$$args{title}" noenhanced
+        set title offset -15,-.5
+        set key at graph 1, 1.15
+        plot "$$opts{prefix}read_len_rawdata.txt" using 1:2 lt rgb "orange" with boxes fs solid .7 title 'unbinned', "$$opts{prefix}read_len_histdata.txt" using 4:3 lt rgb "blue" with boxes title 'normalized bins(count/bin width)' axis x1y2
+    ];
+    print $fh qq[];
+
+    # Gnuplot commands for non-normalized binned data
+    # The un-normalized plot has reads assigned to bins identically to the
+    # normalized plot, however, the bin height is not divided by bin width. The
+    # goal of this visualization is to more accurately reflect the distribution
+    # of reads by volume, and will generally collect around the mean read
+    # length.
+    # Inclusion of unbinned data is to give point of visual comparison to
+    # normalized histogram.
+    print $fh qq[
+        set boxwidth 1 relative
+        plot "$$opts{prefix}read_len_rawdata.txt" using 1:2 lt rgb "orange" with boxes fs solid .7 title 'unbinned', "$$opts{prefix}read_len_histdata.txt" using 4:2 lt rgb "blue" with boxes title 'unnormalized bins' axis x1y2
+    ];
+
+    my @logscale_data = (0)x&$log_bin($max_x);
+    my $log_x = 0;
+    my $start_i = 1;
+    for my $line (@rl)
+    {
+        my @deref_line = @{$line};
+        my $curr_x = $deref_line[0];
+        my $curr_y = $deref_line[1];
+
+        print $rd_fh "$curr_x $curr_y\n";
+        $log_x = max(&$log_bin($curr_x), 5);
+        @logscale_data[floor($log_x)] += $curr_y;
+        $start_i = $curr_x + 1;
+    }
+
+    # Copy binned data into its own file
+
+    # This is a special case to deal with the problem that reads of len < 5 do
+    # not cooperate with the log10(x)*10 transformation and cause small
+    # fragments to graph badly.
+    my $start = 1;
+    my $end = 3;
+    my $div_binw_val = $logscale_data[5]/($end - $start);
+    my $start_idx = -1;
+    for my $i (0..@logscale_data-1) {
+        if($logscale_data[$i] != 0)
+        {
+            $start_idx = $i;
+            if ($i == 5)
+            {
+                print $hd_fh "5 $logscale_data[5] $div_binw_val $start $end\n";
+                $start_idx += 1;
+            }
+            last;
+        }
+    }
+
+
+    for my $i ($start_idx..@logscale_data-1) {
+        $start = &$inv_log_bin($i);
+        $end = &$inv_log_bin($i+1);
+        $div_binw_val = $logscale_data[$i]/max(($end - $start), 1);
+        print $hd_fh "$i $logscale_data[$i] $div_binw_val $start $end\n";
+    }
+
+    # Close file buffers and clean up workspace
+    close($fh);
+    close($hd_fh);
+    close($rd_fh);
+    plot($$args{gp});
+    unlink("$$opts{prefix}read_len_rawdata.txt");
+    unlink("$$opts{prefix}read_len_histdata.txt");
 }
 
 sub merge_bamcheck
