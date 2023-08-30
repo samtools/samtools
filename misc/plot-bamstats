@@ -1207,7 +1207,6 @@ sub plot_indel_cycles
 
 sub plot_read_len_hist
 {
-    print("Entering sub plot_read_len_hist\n");
     my ($opts) = @_;
 
     my @rl = get_values($opts, 'RL');
@@ -1219,22 +1218,12 @@ sub plot_read_len_hist
     my $args = get_defaults($opts,"$$opts{prefix}read_length.png");
     my $fh = $$args{fh};
 
-    print join(",",@{$rl[0]}, "\n");
-    print join(",",@{$rl[1]}, "\n");
-
-
-    print "$fh\n";
-    print "$$args{terminal}\n";
-    print "$$args{grid}\n";
-    print "$$args{gp}\n";
-
+    # Create gnuplot command file options
     print $fh qq[
         $$args{terminal}
         set output "$$args{img}"
         $$args{grid}
-        set auto x
-        set auto y
-        set style data histogram
+        set autoscale xy
         set style histogram 
         set style fill solid border -1
         set boxwidth 1
@@ -1244,8 +1233,9 @@ sub plot_read_len_hist
         set title "$$args{title}" noenhanced
     ];
     # TODO: Add modified version for paired end reads.
-    print $fh qq[plot '-' using 2:xticlabels(1) with histogram\n];
-        my $start_i = 0;
+    print $fh qq[plot '-' using 2:xticlabels(1) with histogram title ''\n];
+    # Extract Data from samtools stats output
+    my $start_i = 0;
     for my $line (@rl) 
     { 
         my @deref_line = @{$line};
