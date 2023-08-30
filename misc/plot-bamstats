@@ -39,6 +39,7 @@ plot_coverage($opts);
 plot_mismatches_per_cycle($opts);
 plot_indel_dist($opts);
 plot_indel_cycles($opts);
+plot_read_len_hist($opts);
 create_html($opts);
 
 exit;
@@ -1200,6 +1201,64 @@ sub plot_indel_cycles
         for my $len (@indels) { print $fh "$$len[0]\t$$len[2]\n"; } print $fh "end\n";
         for my $len (@indels) { print $fh "$$len[0]\t$$len[4]\n"; } print $fh "end\n";
     }
+    close($fh);
+    plot($$args{gp});
+}
+
+sub plot_read_len_hist
+{
+    print("Entering sub plot_read_len_hist\n");
+    my ($opts) = @_;
+
+    my @rl = get_values($opts, 'RL');
+    if ( !@rl ) { return; }
+
+    # TODO: Implement paired end reads func
+    my $is_paired = get_value($opts,'SN','reads paired:');
+
+    my $args = get_defaults($opts,"$$opts{prefix}read_length.png");
+    my $fh = $$args{fh};
+
+    print join(",",@{$rl[0]}, "\n");
+    print join(",",@{$rl[1]}, "\n");
+
+
+    print "$fh\n";
+    print "$$args{terminal}\n";
+    print "$$args{grid}\n";
+    print "$$args{gp}\n";
+
+    print $fh qq[
+        $$args{terminal}
+        set output "$$args{img}"
+        $$args{grid}
+        set auto x
+        set auto y
+        set style data histogram
+        set style histogram 
+        set style fill solid border -1
+        set boxwidth 1
+        set xtic rotate by -45 scale 0
+        set ylabel "Read Count"
+        set xlabel "Read Length"
+        set title "$$args{title}" noenhanced
+    ];
+    # TODO: Add modified version for paired end reads.
+    print $fh qq[plot '-' using 2:xticlabels(1) with histogram\n];
+        my $start_i = 0;
+    for my $line (@rl) 
+    { 
+        my @deref_line = @{$line};
+        my $next_x = $deref_line[0];
+        my $next_y = $deref_line[1];
+
+        for my $i ($start_i..$next_x-1) {print $fh "$i 0\n";}
+        print $fh "$next_x $next_y\n";
+        $start_i = $next_x + 1;
+    } 
+        
+    print $fh "end\n";
+
     close($fh);
     plot($$args{gp});
 }
