@@ -102,6 +102,9 @@ Output options:
 .TP 8
 .BI -m,\ --histogram
 Show histogram instead of tabular output.
+.BI -D,\ --plot-depth
+Show histogram instead of tabular output but displays the depth of coverage instead of the percent of coverage.
+This option can be used to visualize copy number varaiations in the terminal..
 .TP
 .BI -A,\ --ascii
 Show only ASCII characters in histogram using colon and fullstop for
@@ -152,6 +155,24 @@ chr1 (249.25Mbp)
 >   2.69% |::::: :::     :::  ::: :::::::::| Histo bin width: 343.8Kbp
 >   0.00% |:::::::::::. :::::::::::::::::::| Histo max bin:   26.873%
         1.00M     4.44M     7.87M       12.00M 
+.EE
+
+.EX 2
+samtools coverage  -m -r 'chr1:24500000-25600000' --plot-depth -w 32 -A input.bam
+
+chr1 (249.25Mbp)
+>    38.8 |            .:::::::            | Number of reads: 283218
+>    34.5 |            ::::::::            |     (3327 filtered)
+>    30.2 |           :::::::::.           | Covered bases:   1.10Mbp
+>    25.9 |.:::::.:.::::::::::::::::::::::.| Percent covered: 99.83%
+>    21.6 |::::::::::::::::::::::::::::::::| Mean coverage:   33.2x
+>    17.2 |::::::::::::::::::::::::::::::::| Mean baseQ:      37.2
+>    12.9 |::::::::::::::::::::::::::::::::| Mean mapQ:       59.3
+>     8.6 |::::::::::::::::::::::::::::::::|
+>     4.3 |::::::::::::::::::::::::::::::::| Histo bin width: 34.5Kbp
+>     0.0 |::::::::::::::::::::::::::::::::| Histo max cov:   43.117
+        24.50M    24.84M    25.19M      25.60M
+
 .EE
 
 
