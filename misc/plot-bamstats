@@ -1217,23 +1217,24 @@ sub plot_read_len_hist
 
     my $args = get_defaults($opts,"$$opts{prefix}read_length.png");
     my $fh = $$args{fh};
-
+    my $max_x = $rl[-1][0];
     # Create gnuplot command file options
     print $fh qq[
         $$args{terminal}
         set output "$$args{img}"
         $$args{grid}
-        set autoscale xy
+        set autoscale y
         set style histogram 
         set style fill solid border -1
-        set boxwidth 1
-        set xtic rotate by -45 scale 0
+        set boxwidth 3
+        set xtics rotate by -45 scale 0
+        set xtics 0, $max_x/10, $max_x
         set ylabel "Read Count"
         set xlabel "Read Length"
         set title "$$args{title}" noenhanced
     ];
     # TODO: Add modified version for paired end reads.
-    print $fh qq[plot '-' using 2:xticlabels(1) with histogram title ''\n];
+    print $fh qq[plot '-' using 2 with histogram title ''\n];
     # Extract Data from samtools stats output
     my $start_i = 0;
     for my $line (@rl) 
