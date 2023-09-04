@@ -25,6 +25,7 @@
 use strict;
 use warnings;
 use Carp;
+use POSIX qw/floor/;
 
 my $opts = parse_params();
 parse_bamcheck($opts);
@@ -1220,36 +1221,66 @@ sub plot_read_len_hist
     my $max_x = $rl[-1][0];
     # Create gnuplot command file options
     print $fh qq[
-        $$args{terminal}
+        set terminal png size 800,1000 truecolor
         set output "$$args{img}"
         $$args{grid}
+        set multiplot layout 2,1 columnsfirst scale 1,0.9
         set autoscale y
         set style histogram 
-        set style fill solid border -1
+        set style fill solid
         set boxwidth 3
         set xtics rotate by -45 scale 0
+        set xrange [0: $max_x]
         set xtics 0, $max_x/10, $max_x
         set ylabel "Read Count"
         set xlabel "Read Length"
         set title "$$args{title}" noenhanced
     ];
     # TODO: Add modified version for paired end reads.
-    print $fh qq[plot '-' using 2 with histogram title ''\n];
+    print $fh qq[plot '-' using 2 with histogram title 'linear scale'\n];
+    print $fh qq[];
     # Extract Data from samtools stats output
-    my $start_i = 0;
+    my @logscale_data = (0, 0, 0, 0, 0);
+    my $curr_log_bin = 0; #floor((log($rl[0][0]) / log(10)) * 10);
+    my $curr_bin_sum = 0;
+    my $log_x = 0;
+    my $start_i = 1;
+    my $bin_start = 1;
     for my $line (@rl) 
     { 
         my @deref_line = @{$line};
-        my $next_x = $deref_line[0];
-        my $next_y = $deref_line[1];
+        my $curr_x = $deref_line[0];
+        my $curr_y = $deref_line[1];
 
-        for my $i ($start_i..$next_x-1) {print $fh "$i 0\n";}
-        print $fh "$next_x $next_y\n";
-        $start_i = $next_x + 1;
+        for my $i ($start_i..$curr_x-1) {print $fh "$i 0\n";}
+        print $fh "$curr_x $curr_y\n";
+        $log_x = log($curr_x) / log(10) * 10;
+        for my $i (@logscale_data..floor($log_x)-1) {
+            @logscale_data[$i] = 0;
+        }
+        @logscale_data[floor($log_x)] += $curr_y;
+        $start_i = $curr_x + 1;
     } 
-        
     print $fh "end\n";
+    print $fh qq[
+        set logscale x
+        unset xtics
+        unset xrange
+        unset style
+        set style fill empty border -1
+        set xtics
+        set xtics rotate by -45 scale 0
+        set boxwidth 1 relative
+        plot '-' using 3:2 with boxes title 'log scale'
+    ];
 
+    for my $i (0..@logscale_data-1) {
+        my $start = floor(10**($i/10));
+        my $end = floor(10**(($i+1)/10));
+        #my $div_binw_val =  $logscale_data[$i]/($end - $start);
+        print $fh "$i $logscale_data[$i] $start $end\n";
+    }
+    print $fh "end\n";
     close($fh);
     plot($$args{gp});
 }
