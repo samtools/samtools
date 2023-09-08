@@ -210,7 +210,7 @@ void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *s
 }
 
 void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, int tid, const uint32_t *hist,
-        const int hist_size, const bool full_utf, bool plot_coverage) {
+        const int hist_size, const bool full_utf, const bool plot_coverage) {
     int i, col;
     bool show_percentiles = false;
     const int n_rows = 10;
@@ -234,8 +234,7 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
         double current_bin = row_bin_size * i;
         if (plot_coverage) {
             fprintf(file_out, ">%8.1f ",i*row_bin_size);
-        }
-        else if (show_percentiles) {
+        } else if (show_percentiles) {
             fprintf(file_out, ">%3i%% ", i*10);
         } else {
             fprintf(file_out, ">%7.2f%% ", current_bin);
