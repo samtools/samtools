@@ -76,6 +76,7 @@ could be specified using \fB-r 20 -l chr20.bed\fR, meaning that the
 index is used to find chromosome 20 and then it is filtered for the
 regions listed in the bed file.
 
+Unmapped reads are not considered and are always discarded.
 By default secondary alignments, QC failures and duplicate reads will
 be omitted, along with low quality bases and some reads in high depth
 regions.  See the \fB--ff\fR, \fB-Q\fR and \fB-d\fR options for
@@ -283,8 +284,8 @@ none of the mask bits set.  Hence this does not override the
 .TP
 .BI --ff,\ --excl-flags \ STR|INT
 Filter flags: skip reads with any of the mask bits set.  This defaults
-to UNMAP,SECONDARY,QCFAIL,DUP.  The option is not accumulative, so
-specifying e.g. \fB--ff UNMAP,QCFAIL\fR will reenable output of
+to SECONDARY,QCFAIL,DUP.  The option is not accumulative, so
+specifying e.g. \fB--ff QCFAIL\fR will reenable output of
 secondary and duplicate alignments.  Note this does not override the
 \fB--incl-flags\fR option.
 .TP
@@ -482,7 +483,42 @@ The
 .B -E
 option can be used to make it ignore the contents of the BQ:Z tag and
 force it to recalculate the BAQ scores by making a new alignment.
+.PP
+.SH EXAMPLES
+Using range:
+With implicit index files in1.bam.<ext> and in2.sam.gz.<ext>,
+.EX 2
+samtools mpileup in1.bam in2.sam.gz -r chr10:100000-200000
+.EE
+With explicit index files,
+.EX 2
+samtools mpileup in1.bam in2.sam.gz idx/in1.csi idx/in2.csi -X -r chr10:100000-200000
+.EE
+With fofn being a file of input file names, and implicit index files present with inputs,
+.EX 2
+samtools mpileup -b fofn -r chr10:100000-200000
+.EE
+Using flags:
+To get reads with flags READ2 or REVERSE and not having any of SECONDARY,QCFAIL,DUP,
+.EX 2
+samtools mpileup --rf READ2,REVERSE in.sam
+.EE
+or
+.EX 2
+samtools mpileup --rf 144 in.sam
+.EE
+To get reads with flag SECONDARY,
+.EX 2
+samtools mpileup --rf SECONDARY --ff QCFAIL,DUP in.sam
+.EE
+Using all possible alignmentes:
+To show all possible alignments, either of below two equivalent commands may be used,
+.EX 2
+samtools mpileup --count-orphans --no-BAQ --max-depth 0 --fasta-ref ref_file.fa \\
+--min-BQ 0 --excl-flags 0 --disable-overlap-removal in.sam
 
+samtools mpileup -A -B -d 0 -f ref_file.fa -Q 0 --ff 0 -x in.sam
+.EE
 .SH AUTHOR
 .PP
 Written by Heng Li from the Sanger Institute.
