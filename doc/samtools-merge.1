@@ -201,7 +201,7 @@ Attach the
 .B RG
 tag while merging sorted alignments:
 .EX 2
-perl -e 'print "@RG\\tID:ga\\tSM:hs\\tLB:ga\\tPL:Illumina\\n@RG\\tID:454\\tSM:hs\\tLB:454\\tPL:454\\n"' > rg.txt
+printf '@RG\\tID:ga\\tSM:hs\\tLB:ga\\tPL:ILLUMINA\\n@RG\\tID:454\\tSM:hs\\tLB:454\\tPL:LS454\\n' > rg.txt
 samtools merge -rh rg.txt merged.bam ga.bam 454.bam
 .EE
 The value in a
