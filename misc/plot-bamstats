@@ -32,15 +32,15 @@ my $opts = parse_params();
 parse_bamcheck($opts);
 if ( @{$$opts{bamcheck}} > 1 ) { merge_bamcheck($opts); exit; }
 
-#plot_qualities($opts);
-#plot_acgt_cycles($opts);
-#plot_gc($opts);
-#plot_gc_depth($opts);
-#plot_isize($opts);
-#plot_coverage($opts);
-#plot_mismatches_per_cycle($opts);
-#plot_indel_dist($opts);
-#plot_indel_cycles($opts);
+plot_qualities($opts);
+plot_acgt_cycles($opts);
+plot_gc($opts);
+plot_gc_depth($opts);
+plot_isize($opts);
+plot_coverage($opts);
+plot_mismatches_per_cycle($opts);
+plot_indel_dist($opts);
+plot_indel_cycles($opts);
 plot_read_len_hist($opts);
 create_html($opts);
 
