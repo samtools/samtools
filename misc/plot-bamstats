@@ -26,20 +26,21 @@ use strict;
 use warnings;
 use Carp;
 use POSIX qw/floor/;
+use List::Util qw(max);
 
 my $opts = parse_params();
 parse_bamcheck($opts);
 if ( @{$$opts{bamcheck}} > 1 ) { merge_bamcheck($opts); exit; }
 
-plot_qualities($opts);
-plot_acgt_cycles($opts);
-plot_gc($opts);
-plot_gc_depth($opts);
-plot_isize($opts);
-plot_coverage($opts);
-plot_mismatches_per_cycle($opts);
-plot_indel_dist($opts);
-plot_indel_cycles($opts);
+#plot_qualities($opts);
+#plot_acgt_cycles($opts);
+#plot_gc($opts);
+#plot_gc_depth($opts);
+#plot_isize($opts);
+#plot_coverage($opts);
+#plot_mismatches_per_cycle($opts);
+#plot_indel_dist($opts);
+#plot_indel_cycles($opts);
 plot_read_len_hist($opts);
 create_html($opts);
 
@@ -1218,6 +1219,12 @@ sub plot_read_len_hist
 
     my $args = get_defaults($opts,"$$opts{prefix}read_length.png");
     my $fh = $$args{fh};
+    # Open files to store data: this is more elegant than copying four sets of 
+    # data into a single GNUplot file.
+    open(my $rd_fh, '>', "read_len_rawdata.txt");
+    open(my $hd_fh, '>', "read_len_histdata.txt");
+    my $rawdata_fh = "rawdata.txt";
+    my $histdata_fh = "histdata.txt";
     my $max_x = $rl[-1][0];
     # Create gnuplot command file options
     print $fh qq[
@@ -1226,63 +1233,63 @@ sub plot_read_len_hist
         $$args{grid}
         set multiplot layout 2,1 columnsfirst scale 1,0.9
         set autoscale y
-        set style histogram 
-        set style fill solid
-        set boxwidth 3
-        set xtics rotate by -45 scale 0
-        set xrange [0: $max_x]
-        set xtics 0, $max_x/10, $max_x
         set ylabel "Read Count"
+        set logscale x
+        set xtics rotate by -45 scale 0
+        set xrange [1: $max_x]
         set xlabel "Read Length"
+        set style fill solid
+        set boxwidth .8 relative
         set title "$$args{title}" noenhanced
+        plot "read_len_rawdata.txt" using 1:2 with boxes title 'unbinned', "read_len_histdata.txt" using 4:3 lt 3 with boxes title 'normalized bins'
     ];
     # TODO: Add modified version for paired end reads.
-    print $fh qq[plot '-' using 2 with histogram title 'linear scale'\n];
     print $fh qq[];
     # Extract Data from samtools stats output
     my @logscale_data = (0, 0, 0, 0, 0);
-    my $curr_log_bin = 0; #floor((log($rl[0][0]) / log(10)) * 10);
-    my $curr_bin_sum = 0;
     my $log_x = 0;
     my $start_i = 1;
-    my $bin_start = 1;
     for my $line (@rl) 
     { 
         my @deref_line = @{$line};
         my $curr_x = $deref_line[0];
         my $curr_y = $deref_line[1];
 
-        for my $i ($start_i..$curr_x-1) {print $fh "$i 0\n";}
-        print $fh "$curr_x $curr_y\n";
-        $log_x = log($curr_x) / log(10) * 10;
+        for my $i ($start_i..$curr_x-1) {print $rd_fh "$i 0\n";}
+        print $rd_fh "$curr_x $curr_y\n";
+        $log_x = max(log($curr_x) / log(10) * 10, 5);
         for my $i (@logscale_data..floor($log_x)-1) {
             @logscale_data[$i] = 0;
         }
         @logscale_data[floor($log_x)] += $curr_y;
         $start_i = $curr_x + 1;
     } 
-    print $fh "end\n";
     print $fh qq[
-        set logscale x
-        unset xtics
-        unset xrange
-        unset style
+        set y2tic
         set style fill empty border -1
-        set xtics
-        set xtics rotate by -45 scale 0
         set boxwidth 1 relative
-        plot '-' using 3:2 with boxes title 'log scale'
+        plot "read_len_rawdata.txt" using 1:2 with boxes title 'unbinned', "read_len_histdata.txt" using 4:2 lt rgb "blue" with boxes title 'unnormalized bins' axis x1y2
     ];
 
-    for my $i (0..@logscale_data-1) {
-        my $start = floor(10**($i/10));
-        my $end = floor(10**(($i+1)/10));
-        #my $div_binw_val =  $logscale_data[$i]/($end - $start);
-        print $fh "$i $logscale_data[$i] $start $end\n";
+    # Copy binned data into 
+    # This is a special case to deal with the problem that reads of len < 5 do not 
+    # want to be binned together, and end up creating a bunch of empty bins that 
+    # should not exist.  
+    my $start = 1;
+    my $end = 3;
+    my $div_binw_val = $logscale_data[5]/max(($end - $start), 1);
+    print $hd_fh "5 $logscale_data[5] $div_binw_val $start $end\n";
+    
+    for my $i (6..@logscale_data-1) {
+        $start = floor(10**($i/10));
+        $end = floor(10**(($i+1)/10));
+        $div_binw_val = $logscale_data[$i]/max(($end - $start), 1);
+        print $hd_fh "$i $logscale_data[$i] $div_binw_val $start $end\n";
     }
-    print $fh "end\n";
     close($fh);
     plot($$args{gp});
+    unlink('read_len_rawdata.txt');
+    unlink('read_len_histdata.txt');
 }
 
 sub merge_bamcheck
