@@ -49,18 +49,36 @@ samtools split
 
 .SH DESCRIPTION
 .PP
-Splits a file by read group, producing one or more output files
-matching a common prefix (by default based on the input filename)
-each containing one read-group.
+Splits a file by read group, or a specified tag,
+producing one or more output files
+matching a common prefix (by default based on the input filename).
 
+Unless the \fB-d\fR option is used, the file will be split according to the
+.B @RG
+tags listed in the header.
 Records without an RG tag or with an RG tag undefined in the header will cause
 the program to exit with an error unless the \fB-u\fR option is used.
 
 RG values defined in the header but with no records will produce an output file
 only containing a header.
 
+If the
+.BI "-d " TAG
+option is used, the file will be split on the value in the given aux tag.
+Note that only string tags (type \fBZ\fR) are currently supported.
+Unless the \fB-u\fR option is used, the program will exit with an error if
+it finds a record without the given tag.
+
+Using
+.B -d RG
+behaves in a similar way to the default (without \fB-d\fR),
+opening an output file for each \fB@RG\fR line in the header.
+However, unlike the default,
+new output files will be opened for any RG tags found in the alignment records
+irrespective of if they have a matching header \fB@RG\fR line.
+
 The \fB-u\fR option may be used to specify the output filename for any
-records with a missing or unrecognised RG tag.  This option will always write
+records with a missing or unrecognised tag.  This option will always write
 out a file even if there are no records.
 
 Output format defaults to BAM.  For SAM or CRAM then either set the format with
@@ -102,8 +120,8 @@ center;
 lb l .
 %%	%
 %*	basename
-%#	@RG index
-%!	@RG ID
+%#	index (of @RG in the header, or count of TAG values seen so far)
+%!	@RG ID or TAG value
 %.	output format filename extension
 .TE
 .TP

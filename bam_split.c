@@ -308,7 +308,8 @@ static int grow_output_lists(state_t *state, size_t count) {
 }
 
 static khiter_t prep_sam_file(parsed_opts_t *opts, state_t *state,
-                              const char *tag, const char *arg_list) {
+                              const char *tag, const char *arg_list,
+                              int is_rg) {
     char *input_base_name = NULL, *new_file_name = NULL, *tag_val = NULL;
     char *new_idx_fn = NULL;
     sam_hdr_t *new_hdr = NULL;
@@ -356,6 +357,23 @@ static khiter_t prep_sam_file(parsed_opts_t *opts, state_t *state,
                                        NULL)) {
         print_error_errno("split", "Adding PG line to file \"%s\" failed", new_file_name);
         goto fail;
+    }
+
+    if (is_rg) {
+        // If here, we've found an RG:Z: tag without a corresponding @RG
+        // line in the header.
+        if (sam_hdr_remove_lines(new_hdr, "RG", "ID", NULL) != 0) {
+            print_error_errno("split",
+                              "Failed to remove @RG lines from file \"%s\"",
+                              new_file_name);
+            goto fail;
+        }
+        if (sam_hdr_add_line(new_hdr, "RG", "ID", tag_val, NULL) != 0) {
+            print_error_errno("split",
+                              "Failed to add @RG line to file \"%s\"",
+                              new_file_name);
+            goto fail;
+        }
     }
 
     char outmode[4] = "w";
@@ -638,9 +656,13 @@ static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
             iter = kh_end(state->tag_val_hash);
         }
 
-        if (!is_rg && val && iter == kh_end(state->tag_val_hash)) {
+        // Check for opts->tag here instead of !is_rg so we open new
+        // files if the user specified '-d RG' and we find a RG:Z: value
+        // that wasn't listed in the header.  If the '-d' option is
+        // not used, we don't open a file to preserve existing behaviour.
+        if (opts->tag && val && iter == kh_end(state->tag_val_hash)) {
             // Need to open a new output file
-            iter = prep_sam_file(opts, state, val, arg_list);
+            iter = prep_sam_file(opts, state, val, arg_list, is_rg);
             if (iter == kh_end(state->tag_val_hash)) { // Open failed
                 print_error("split",
                             "Could not create output file for tag \"%s:%s\"",
