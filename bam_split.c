@@ -49,10 +49,13 @@ struct parsed_opts {
     const char *unaccounted_name;
     const char *output_format_string;
     const char *tag;
+    long max_split;
     bool verbose;
     int no_pg;
     sam_global_args ga;
 };
+
+#define DEFAULT_MAX_SPLIT 100
 
 typedef struct parsed_opts parsed_opts_t;
 
@@ -83,12 +86,14 @@ static void usage(FILE *write_to)
 "Usage: samtools split [-u <unaccounted.bam>] [-h <unaccounted_header.sam>]\n"
 "                      [-f <format_string>] [-v] <merged.bam>\n"
 "Options:\n"
-"  -f STRING       output filename format string [\"%%*_%%#.%%.\"]\n"
-"  -u FILE1        put reads with no RG tag or an unrecognised RG tag in FILE1\n"
-"  -h FILE2        ... and override the header with FILE2 (-u file only)\n"
-"  -d TAG          split by TAG value. TAG value must be a string.\n"
-"  -v              verbose output\n"
-"  --no-PG         do not add a PG line\n");
+"  -f STRING           output filename format string [\"%%*_%%#.%%.\"]\n"
+"  -u FILE1            put left-over reads in FILE1\n"
+"  -h FILE2            ... and override the header with FILE2 (-u file only)\n"
+"  -d TAG              split by TAG value. TAG value must be a string.\n"
+"  -M,--max-split NUM  limit number of output files from -d to NUM [%d]\n"
+"  -v                  verbose output\n"
+"  --no-PG             do not add a PG line\n",
+            DEFAULT_MAX_SPLIT);
     sam_global_opt_help(write_to, "-....@..");
     fprintf(write_to,
 "\n"
@@ -106,17 +111,19 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 {
     if (argc == 1) { usage(stdout); return NULL; }
 
-    const char *optstring = "vf:h:u:d:@:";
+    const char *optstring = "vf:h:u:d:M:@:";
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '@'),
         {"no-PG", no_argument, NULL, 1},
+        {"max-split", required_argument, NULL, 'M'},
         { NULL, 0, NULL, 0 }
     };
 
     parsed_opts_t* retval = calloc(sizeof(parsed_opts_t), 1);
     if (! retval ) { perror("cannot allocate option parsing memory"); return NULL; }
 
+    retval->max_split = DEFAULT_MAX_SPLIT;
     sam_global_args_init(&retval->ga);
 
     int opt;
@@ -138,6 +145,18 @@ static parsed_opts_t* parse_args(int argc, char** argv)
             retval->tag = optarg;
             retval->output_format_string = "%*_%!.%.";
             break;
+        case 'M': {
+            char *end = optarg;
+            retval->max_split = strtol(optarg, &end, 10);
+            if (*optarg == '\0' || *end != '\0' || retval->max_split == 0) {
+                print_error("split", "Invalid -M argument: \"%s\"", optarg);
+                free(retval);
+                return NULL;
+            }
+            if (retval->max_split < 0) // No limit requested
+                retval->max_split = LONG_MAX;
+            break;
+        }
         case 1:
             retval->no_pg = 1;
             break;
@@ -535,6 +554,10 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
     if (!is_rg)
         return retval;  // Done for this case - outputs will be opened later
 
+    // Adjust max_split if too small for the read-groups listed in the header
+    if (opts->max_split < retval->output_count)
+        opts->max_split = retval->output_count;
+
     // Open output files for RGs
     char* dirsep = strrchr(opts->merged_input_name, '/');
     char* input_base_name = strdup(dirsep? dirsep+1 : opts->merged_input_name);
@@ -660,7 +683,8 @@ static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
         // files if the user specified '-d RG' and we find a RG:Z: value
         // that wasn't listed in the header.  If the '-d' option is
         // not used, we don't open a file to preserve existing behaviour.
-        if (opts->tag && val && iter == kh_end(state->tag_val_hash)) {
+        if (opts->tag && val && iter == kh_end(state->tag_val_hash)
+            && state->output_count < opts->max_split) {
             // Need to open a new output file
             iter = prep_sam_file(opts, state, val, arg_list, is_rg);
             if (iter == kh_end(state->tag_val_hash)) { // Open failed

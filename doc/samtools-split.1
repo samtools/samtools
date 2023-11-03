@@ -69,6 +69,11 @@ Note that only string tags (type \fBZ\fR) are currently supported.
 Unless the \fB-u\fR option is used, the program will exit with an error if
 it finds a record without the given tag.
 
+Note that attempting to split on a tag with high cardinality may result
+in the creation of a large number of output files.
+To prevent this, the \fB-M\fR option can be used to set a limit on the
+number of splits made.
+
 Using
 .B -d RG
 behaves in a similar way to the default (without \fB-d\fR),
@@ -107,6 +112,22 @@ Split reads by TAG value into distinct files. Only the TAG key must be
 supplied with the option. The value of the TAG has to be a string (i.e.
 .B key:Z:value
 )
+.TP
+.BI "-M,--max-split " NUM
+Limit the number of files created by the \fB-d\fR option to \fINUM\fR (default
+100).
+This prevents accidents where trying to split on a tag with high cardinality
+could result in the creation of a very large number of output files.
+Once the file limit is reached,
+any tag values not already seen will be treated as unmatched and the program
+will exit with an error unless the \fB-u\fR option is in use.
+
+If desired, the limit can be removed using \fB-M -1\fR,
+although in practice the number of outputs will still be restricted by
+system limits on the number of files that can be open at once.
+
+If splitting by read group, and the read group count in the header
+is higher than the requested limit then the limit will be raised to match.
 .TP
 .B -v
 Verbose output
