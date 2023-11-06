@@ -1,6 +1,5 @@
 @HD	VN:1.4	SO:coordinate
-@RG	ID:grp1	DS:Group 1	LB:Library 1	SM:Sample
-@RG	ID:grp2	DS:Group 2	LB:Library 2	SM:Sample
+@RG	ID:grp3
 @PG	ID:prog1	PN:emacs	CL:emacs	VN:23.1.1
 @CO	The MIT License
 @CO	
@@ -26,9 +25,5 @@
 @SQ	SN:ref1	LN:56	M5:08c04d512d4797d9ba2a156c1daba468
 @SQ	SN:ref2	LN:60	M5:7c35feac7036c1cdef3bee0cc4b21437
 @SQ	SN:ref3_unused	LN:70	M5:5fdd18c2c6ecac4838996d029bf395b5
-ref2_grp3_p001	83	ref2	1	99	15M	=	31	45	ATTCTATAGTGTCAC	~~~~~~~~~~~~~~~	NM:i:0	MD:Z:15	an:Z:cat
 ref2_grp3_p002	147	ref2	16	99	15M	=	46	45	CTAAATAGCTTGGCG	}}}}}}}}}}}}}}}	NM:i:0	MD:Z:15	RG:Z:grp3	an:Z:dog
-ref2_grp3_p001	163	ref2	31	99	15M	=	1	-45	CTGTTTCCTGTGTGA	|||||||||||||||	NM:i:13	MD:Z:0T0A0A1C0A0T0G0G0T0C0A1A0G0	an:Z:cat
 ref2_grp3_p002	99	ref2	46	99	15M	=	16	-45	CTGTTTCCTGTGTGA	{{{{{{{{{{{{{{{	NM:i:0	MD:Z:15	RG:Z:grp3	an:Z:dog
-unaligned_grp3_p001	77	*	0	0	*	*	0	0	CACTCGTTCATGACG	0123456789abcde	an:Z:dog
-unaligned_grp3_p001	141	*	0	0	*	*	0	0	GAAAGTGAGGAGGTG	edcba9876543210	an:Z:dog
