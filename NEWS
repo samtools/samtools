@@ -1,6 +1,69 @@
 Release a.b
 -----------
 
+New work and changes:
+
+* Samtools coverage: add a new --plot-depth option to draw depth (of
+  coverage) rather than the percentage of bases covered.
+  (PR#1910.  Thanks to Pierre Lindenbaum)
+
+* Samtools merge / sort: add a lexicographical name-sort option via the -N
+  option.  The "natural" alpha-numeric sort is still available via -n.
+  (PR#1900, fixes #1500.  Reported by Steve Huang)
+
+* Samtools view: add -N ^NAME_FILE and -R ^RG_FILE options.  The standard -N
+  and -R options only output reads matching a specified list of names or
+  read-groups.  With a caret (^) prefix these may be negated to only output
+  read not matching the specified files.
+  (PR#1896, fixes #1895.  Suggested by Feng Tian)
+
+* Cope with Htslib's change to no longer close stdout on is hts_close is
+  used with the output file being stdout.
+  Htslib companion PR is samtools/htslib#1665.
+  (PR#1909.  Thanks to John Marshall)
+
+* Plot-bamstats: add a new plot of the read lengths ("RL") from samtools
+  stats output.
+  (PR#1922, fixes #1824.  Thanks to @erboone, suggested by Martin Pollard)
+
+* Samtools split: support splitting files based on the contents of
+  auxiliary tags.  Also adds a -M option to limit the number of files split
+  can make, to avoid accidental resource over-allocation, and fixes some
+  issues with --write-index.
+  (PR#1222, PR#1933, fixes #1758.  Thanks to Valeriu Ohan, suggested by
+  Scott Norton)
+
+Bug Fixes
+
+* Samtools stats: empty barcode tags are now treated as having no barcode.
+  (PR#1929, fixes #1926.  Reported by Jukka Matilainen)
+
+* Samtools cat: add support for non-seekable streams.  The file format
+  detection blocked pipes from working before, but now files may be
+  non-seekable such as stdin or a pipe.
+  (PR#1930, fixes #1731.  Reported by Julian Hess)
+
+
+Documentation
+
+* Samtools mpileup: add more usage examples to the man page.
+  (PR#1913, fixes #1801)
+
+* Samtools fastq: explicitly document the order that filters apply.
+  (PR#1907.  fixes ?)
+
+* Samtools merge: fix example output to use an uppercase RG PL field.
+  (PR#1917.  Thanks to John Marshall.  Reported by Michael Macias)
+
+* Add hclen SAM filter documentation.
+  (PR#1902.  See also samtools/htslib#1660)
+
+* Samtools consensus: remove the -5 option from documentation.  This option
+  was renamed before the consensus subcommand was merged, but accidentally
+  left in the man page.
+  (PR#1924)
+
+
 Release 1.18 (25th July 2023)
 -----------------------------
 
