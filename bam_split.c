@@ -64,6 +64,7 @@ struct state {
     sam_hdr_t* merged_input_header;
     samFile* unaccounted_file;
     sam_hdr_t* unaccounted_header;
+    char *unaccounted_idx_fn;
     size_t output_count;
     char **tag_vals;
     char **index_file_name;
@@ -405,6 +406,12 @@ static khiter_t prep_sam_file(parsed_opts_t *opts, state_t *state,
     if (state->p.pool)
         hts_set_opt(new_sam_file, HTS_OPT_THREAD_POOL, &state->p);
 
+    if (sam_hdr_write(new_sam_file, new_hdr) != 0) {
+        print_error_errno("split", "Couldn't write header to \"%s\"",
+                          new_file_name);
+        goto fail;
+    }
+
     if (state->write_index) {
         new_idx_fn = auto_index(new_sam_file, new_file_name, new_hdr);
         if (!new_idx_fn) {
@@ -413,11 +420,6 @@ static khiter_t prep_sam_file(parsed_opts_t *opts, state_t *state,
         }
     }
 
-    if (sam_hdr_write(new_sam_file, new_hdr) != 0) {
-        print_error_errno("split", "Couldn't write header to \"%s\"",
-                          new_file_name);
-        goto fail;
-    }
     int ret = -1;
     i = kh_put_c2i(state->tag_val_hash, tag_val, &ret);
     if (ret < 0) {
@@ -440,8 +442,10 @@ static khiter_t prep_sam_file(parsed_opts_t *opts, state_t *state,
     free(new_file_name);
     free(tag_val);
     free(new_idx_fn);
-    sam_hdr_destroy(new_hdr);
-    sam_close(new_sam_file);
+    if (new_hdr)
+        sam_hdr_destroy(new_hdr);
+    if (new_sam_file)
+        sam_close(new_sam_file);
     return kh_end(state->tag_val_hash);
 }
 
@@ -633,9 +637,22 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
 static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
 {
     int is_rg = !opts->tag || strcmp(opts->tag, "RG") == 0;
-    if (state->unaccounted_file && sam_hdr_write(state->unaccounted_file, state->unaccounted_header) != 0) {
-        print_error_errno("split", "Could not write output file header");
-        return false;
+    if (state->unaccounted_file) {
+        if (sam_hdr_write(state->unaccounted_file, state->unaccounted_header) != 0) {
+            print_error_errno("split", "Could not write output file header");
+            return false;
+        }
+        if (opts->ga.write_index) {
+            state->unaccounted_idx_fn = auto_index(state->unaccounted_file,
+                                                   opts->unaccounted_name,
+                                                   state->unaccounted_header);
+            if (!state->unaccounted_idx_fn) {
+                print_error_errno("split",
+                                  "Creating index file for file \"%s\" failed",
+                                  opts->unaccounted_name);
+                return false;
+            }
+        }
     }
     bam1_t* file_read = bam_init1();
     // Read the first record
@@ -738,10 +755,17 @@ static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
         size_t i;
         for (i = 0; i < state->output_count; i++) {
             if (sam_idx_save(state->output_file[i]) < 0) {
-                print_error_errno("split", "writing index failed");
+                print_error_errno("split", "writing index \"%s\" failed",
+                                  state->index_file_name[i]);
                 return false;
             }
-            free(state->index_file_name[i]);
+        }
+        if (state->unaccounted_file) {
+            if (sam_idx_save(state->unaccounted_file) < 0) {
+                print_error_errno("split", "writing index \"%s\" failed",
+                                  state->unaccounted_idx_fn);
+                return false;
+            }
         }
     }
 
@@ -776,6 +800,7 @@ static int cleanup_state(state_t* status, bool check_close)
         }
         if (status->tag_vals) free(status->tag_vals[i]);
         if (status->output_file_name) free(status->output_file_name[i]);
+        if (status->index_file_name[i]) free(status->index_file_name[i]);
     }
     if (status->merged_input_header)
         sam_hdr_destroy(status->merged_input_header);
@@ -783,6 +808,7 @@ static int cleanup_state(state_t* status, bool check_close)
     free(status->output_file);
     free(status->output_file_name);
     free(status->index_file_name);
+    free(status->unaccounted_idx_fn);
     kh_destroy_c2i(status->tag_val_hash);
 
     free(status->tag_vals);
