@@ -3297,6 +3297,15 @@ sub test_fixmate
     test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
     test_cmd($opts,out=>'fixmate/8_isize_overflow_64bit.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/8_isize_overflow_64bit.sam -");
     test_cmd($opts,out=>'fixmate/sanitize.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/sanitize.sam -");
+
+    # fixmate -M base-modification tests
+    foreach (qw/ok+ ok- draft not_updated not_updated_noML not_updated_noMN
+                bad_MN MN_only ML_only ML_wrong_len noseq bounds/) {
+        test_cmd($opts,
+                 out=>"fixmate/mod_$_.sam.expected",
+                 ignore_pg_header => 1,
+                 cmd=>"$$opts{bin}/samtools fixmate${threads} -M -z off -O sam $$opts{path}/fixmate/mod_$_.sam -");
+    }
 }
 
 sub test_reference
