@@ -70,6 +70,15 @@ Add ms (mate score) tags.  These are used by
 .B markdup
 to select the best reads to keep.
 .TP
+.B -M
+Fix any base modification tags (MM, ML and MN).  If we have secondary
+alignments with hard-clipping and the hard clipped reads do not have
+an MN tag then we use the base modification tags in the primary
+alignment to clip the secondary alignment modifications, adding MN
+tags in the process.
+
+This also does other sanity checks on the consistency of these tags.
+.TP
 .B -u
 Output uncompressed BAM or CRAM.
 .TP

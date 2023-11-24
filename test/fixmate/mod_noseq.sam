@@ -1,0 +1,6 @@
+@CO	Testing of base modification fixing for fixmate -M
+@SQ	SN:I	LN:999
+ok1	0	I	1	0	20M	*	0	0	*	*	MM:Z:C+m,2,0,2;C+h,0,3;	co:Z:primary	ML:B:C,41,51,61,19,29	MN:i:20
+ok1	2048	I	4	0	3S14M3S	*	0	0	*	*	MM:Z:C+m,2,0,2;C+h,0,3;	ML:B:C,41,51,61,19,29	MN:i:20	co:Z:supplementary-S
+ok1	256	I	4	0	3H14M3H	*	0	0	*	*	co:Z:secondary-H	MM:Z:C+m,1,0;C+h,3;	ML:B:C,41,51,29	MN:i:14
+ok1	256	I	9	0	8H4M8H	*	0	0	*	*	MM:Z:C+m;C+h;	ML:B:C	MN:i:4	co:Z:secondary-H
