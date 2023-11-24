@@ -777,13 +777,13 @@ static int multi_region_view(samview_settings_t *conf, hts_itr_multi_t *iter)
     while ((result = sam_itr_multi_next(conf->in, iter, b)) >= 0) {
         if (process_one_record(conf, b, &write_error) < 0) break;
     }
-    hts_itr_multi_destroy(iter);
     bam_destroy1(b);
 
     if (result < -1) {
         print_error("view", "retrieval of region #%d failed", iter->curr_tid);
-        return 1;
+        write_error = 1;
     }
+    hts_itr_multi_destroy(iter);
     return write_error;
 }
 
@@ -1376,8 +1376,6 @@ int main_samview(int argc, char *argv[])
         }
     }
 
-    if ( settings.hts_idx ) hts_idx_destroy(settings.hts_idx);
-
     if (ga.write_index) {
         if (sam_idx_save(settings.out) < 0) {
             print_error_errno("view", "writing index failed");
@@ -1390,6 +1388,8 @@ int main_samview(int argc, char *argv[])
     }
 
 view_end:
+    if ( settings.hts_idx ) hts_idx_destroy(settings.hts_idx);
+
     if (settings.is_count && ret == 0) {
         if (fprintf(settings.fn_out? fp_out : stdout, "%" PRId64 "\n", settings.count) < 0) {
             if (settings.fn_out) print_error_errno("view", "writing to \"%s\" failed", settings.fn_out);
