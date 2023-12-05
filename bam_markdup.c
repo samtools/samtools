@@ -122,6 +122,7 @@ typedef struct {
     int opt;
     int beg;
     int end;
+    int len;
 } check_t;
 
 typedef struct {
@@ -875,7 +876,10 @@ static int is_optical_duplicate(md_param_t *param, bam1_t *ori, bam1_t *dup, lon
         return ret;
     }
 
-    if (strncmp(original + o_beg, duplicate + d_beg, o_end - o_beg) == 0) {
+    int o_len = o_end - o_beg;
+    int d_len = d_end - d_beg;
+
+    if ((o_len == d_len) && memcmp(original + o_beg, duplicate + d_beg, o_len) == 0) {
         long xdiff, ydiff;
 
         if (ox > dx) {
@@ -918,7 +922,10 @@ static int optical_duplicate_partial(md_param_t *param, const char *name, const 
         return ret;
     }
 
-    if (strncmp(name + o_beg, duplicate + d_beg, o_end - o_beg) == 0) {
+    int o_len = o_end - o_beg;
+    int d_len = d_end - d_beg;
+
+    if ((o_len == d_len) && memcmp(name + o_beg, duplicate + d_beg, o_len) == 0) {
         // the initial parts match, look at the numbers
         long xdiff, ydiff;
 
@@ -945,6 +952,7 @@ static int optical_duplicate_partial(md_param_t *param, const char *name, const 
     c->y = dy;
     c->beg = d_beg;
     c->end = d_end;
+    c->len = d_end - d_beg;
 
     return ret;
 }
@@ -1156,9 +1164,15 @@ static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *
 }
 
 
-static int xcoord_sort(const void *a, const void *b) {
+static int chain_sort(const void *a, const void *b) {
     check_t *ac = (check_t *) a;
     check_t *bc = (check_t *) b;
+    int ret;
+
+    if ((ret = ac->len - bc->len))
+        return ret;
+    else if ((ret = memcmp(bam_get_qname(ac->b) + ac->beg, bam_get_qname(bc->b) + bc->beg, ac->len)))
+        return ret;
 
     return (ac->x - bc->x);
 }
@@ -1170,106 +1184,113 @@ static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_has
     int ret = 0;
     size_t curr = 0;
 
-    qsort(list->c, list->length, sizeof(list->c[0]), xcoord_sort);
+    qsort(list->c, list->length, sizeof(list->c[0]), chain_sort);
 
     while (curr < list->length - 1) {
-        check_t *current = &list->c[curr];
-        size_t count = curr;
-        char *cur_name = bam_get_qname(current->b);
-        int current_paired = (current->b->core.flag & BAM_FPAIRED) && !(current->b->core.flag & BAM_FMUNMAP);
+        check_t *base = &list->c[curr];
+        char *base_name = bam_get_qname(base->b);
+        int end_name_match = curr;
 
-        while (++count < list->length && (list->c[count].x - current->x <= param->opt_dist)) {
-            // while close enough along the x coordinate
-            check_t *chk = &list->c[count];
+        // find the end of the matching name parts
+        while (++end_name_match < list->length) {
+            check_t *chk = &list->c[end_name_match];
 
-            if (current->opt && chk->opt)
-                continue;
-
-            // if both are already optical duplicates there is no need to check again, otherwise...
-
-            long ydiff;
-
-            if (current->y > chk->y) {
-                ydiff = current->y - chk->y;
-            } else {
-                ydiff = chk->y - current->y;
-            }
-
-            if (ydiff > param->opt_dist)
-                continue;
-
-            // the number are right, check the names
-            if (strncmp(cur_name + current->beg, bam_get_qname(chk->b) + chk->beg, current->end - current->beg) != 0)
-                continue;
-
-            // optical duplicates
-            int chk_dup = 0;
-            int chk_paired = (chk->b->core.flag & BAM_FPAIRED) && !(chk->b->core.flag & BAM_FMUNMAP);
-
-            if (current_paired != chk_paired) {
-                if (!chk_paired) {
-                    // chk is single vs pair, this is a dup.
-                    chk_dup = 1;
-                }
-            } else {
-                // do it by scores
-                int64_t cur_score, chk_score;
-
-                if ((current->b->core.flag & BAM_FQCFAIL) != (chk->b->core.flag & BAM_FQCFAIL)) {
-                    if (current->b->core.flag & BAM_FQCFAIL) {
-                        cur_score = 0;
-                        chk_score = 1;
-                    } else {
-                        cur_score = 1;
-                        chk_score = 0;
-                    }
-                } else {
-                    cur_score = current->score;
-                    chk_score = chk->score;
-
-                    if (current_paired) {
-                        // they are pairs so add mate scores.
-                        chk_score += chk->mate_score;
-                        cur_score += current->mate_score;
-                    }
-                }
-
-                if (cur_score == chk_score) {
-                    if (strcmp(bam_get_qname(chk->b), cur_name) < 0) {
-                        chk_score++;
-                    } else {
-                        chk_score--;
-                    }
-                }
-
-                if (cur_score > chk_score) {
-                    chk_dup = 1;
-                }
-            }
-
-            if (chk_dup) {
-                // the duplicate is the optical duplicate
-                if (!chk->opt) { // only change if not already an optical duplicate
-                    if (optical_retag(param, dup_hash, chk->b, chk_paired, stats)) {
-                        ret = -1;
-                        goto fail;
-                    }
-
-                    chk->opt = 1;
-                }
-            } else {
-                if (!current->opt) {
-                    if (optical_retag(param, dup_hash, current->b, current_paired, stats)) {
-                        ret = -1;
-                        goto fail;
-                    }
-
-                    current->opt = 1;
-                }
-            }
+            if (memcmp(base_name + base->beg, bam_get_qname(chk->b) + chk->beg, base->len) != 0)
+                break;
         }
 
-        curr++;
+        while (curr < end_name_match) {
+            size_t count = curr;
+            check_t *current = &list->c[curr];
+            int current_paired = (current->b->core.flag & BAM_FPAIRED) && !(current->b->core.flag & BAM_FMUNMAP);
+
+            while (++count < end_name_match && (list->c[count].x - current->x <= param->opt_dist)) {
+                // while close enough along the x coordinate
+                check_t *chk = &list->c[count];
+
+                if (current->opt && chk->opt)
+                    continue;
+
+                long ydiff;
+
+                if (current->y > chk->y) {
+                    ydiff = current->y - chk->y;
+                } else {
+                    ydiff = chk->y - current->y;
+                }
+
+                if (ydiff > param->opt_dist)
+                    continue;
+
+                // optical duplicates
+                int chk_dup = 0;
+                int chk_paired = (chk->b->core.flag & BAM_FPAIRED) && !(chk->b->core.flag & BAM_FMUNMAP);
+
+                if (current_paired != chk_paired) {
+                    if (!chk_paired) {
+                        // chk is single vs pair, this is a dup.
+                        chk_dup = 1;
+                    }
+                } else {
+                    // do it by scores
+                    int64_t cur_score, chk_score;
+
+                    if ((current->b->core.flag & BAM_FQCFAIL) != (chk->b->core.flag & BAM_FQCFAIL)) {
+                        if (current->b->core.flag & BAM_FQCFAIL) {
+                            cur_score = 0;
+                            chk_score = 1;
+                        } else {
+                            cur_score = 1;
+                            chk_score = 0;
+                        }
+                    } else {
+                        cur_score = current->score;
+                        chk_score = chk->score;
+
+                        if (current_paired) {
+                            // they are pairs so add mate scores.
+                            chk_score += chk->mate_score;
+                            cur_score += current->mate_score;
+                        }
+                    }
+
+                    if (cur_score == chk_score) {
+                        if (strcmp(bam_get_qname(chk->b), bam_get_qname(current->b)) < 0) {
+                            chk_score++;
+                        } else {
+                            chk_score--;
+                        }
+                    }
+
+                    if (cur_score > chk_score) {
+                        chk_dup = 1;
+                    }
+                }
+
+                if (chk_dup) {
+                    // the duplicate is the optical duplicate
+                    if (!chk->opt) { // only change if not already an optical duplicate
+                        if (optical_retag(param, dup_hash, chk->b, chk_paired, stats)) {
+                            ret = -1;
+                            goto fail;
+                        }
+
+                        chk->opt = 1;
+                    }
+                } else {
+                    if (!current->opt) {
+                        if (optical_retag(param, dup_hash, current->b, current_paired, stats)) {
+                            ret = -1;
+                            goto fail;
+                        }
+
+                        current->opt = 1;
+                    }
+                }
+            }
+
+            curr++;
+        }
     }
 
  fail:
