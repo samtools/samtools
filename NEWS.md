@@ -17,8 +17,7 @@ New work and changes:
   read not matching the specified files.
   (PR #1896, fixes #1895.  Suggested by Feng Tian)
 
-* Cope with Htslib's change to no longer close stdout on is hts_close is
-  used with the output file being stdout.
+* Cope with Htslib's change to no longer close stdout on hts_close.
   Htslib companion PR is samtools/htslib#1665.
   (PR #1909.  Thanks to John Marshall)
 
@@ -33,7 +32,7 @@ New work and changes:
   (PR #1222, PR #1933, fixes #1758.  Thanks to Valeriu Ohan, suggested by
   Scott Norton)
 
-Bug Fixes
+Bug Fixes:
 
 * Samtools stats: empty barcode tags are now treated as having no barcode.
   (PR #1929, fixes #1926.  Reported by Jukka Matilainen)
@@ -43,8 +42,15 @@ Bug Fixes
   non-seekable such as stdin or a pipe.
   (PR #1930, fixes #1731.  Reported by Julian Hess)
 
+* Samtools mpileup -aa (absolutely all positions) now produces an output
+  even when given an empty input file.
+  (PR #1939.  Reported by Chang Y)
 
-Documentation
+* Samtools markdup: speed up optical duplicate tagging on regions with very
+  deep data.
+  (PR #1952)
+
+Documentation:
 
 * Samtools mpileup: add more usage examples to the man page.
   (PR #1913, fixes #1801)
