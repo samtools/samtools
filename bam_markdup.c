@@ -1195,7 +1195,7 @@ static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_has
         while (++end_name_match < list->length) {
             check_t *chk = &list->c[end_name_match];
 
-            if (memcmp(base_name + base->beg, bam_get_qname(chk->b) + chk->beg, base->len) != 0)
+            if ((base->len == chk->len) && memcmp(base_name + base->beg, bam_get_qname(chk->b) + chk->beg, base->len) != 0)
                 break;
         }
 
