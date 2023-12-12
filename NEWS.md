@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.19 (12th December 2023)
+---------------------------------
+
 New work and changes:
 
 * Samtools coverage: add a new --plot-depth option to draw depth (of
