@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-split 1 "25 July 2023" "samtools-1.18" "Bioinformatics tools"
+.TH samtools-split 1 "12 December 2023" "samtools-1.19" "Bioinformatics tools"
 .SH NAME
 samtools split \- splits a file by read group.
 .\"
@@ -49,18 +49,41 @@ samtools split
 
 .SH DESCRIPTION
 .PP
-Splits a file by read group, producing one or more output files
-matching a common prefix (by default based on the input filename)
-each containing one read-group.
+Splits a file by read group, or a specified tag,
+producing one or more output files
+matching a common prefix (by default based on the input filename).
 
+Unless the \fB-d\fR option is used, the file will be split according to the
+.B @RG
+tags listed in the header.
 Records without an RG tag or with an RG tag undefined in the header will cause
 the program to exit with an error unless the \fB-u\fR option is used.
 
 RG values defined in the header but with no records will produce an output file
 only containing a header.
 
+If the
+.BI "-d " TAG
+option is used, the file will be split on the value in the given aux tag.
+Note that only string tags (type \fBZ\fR) are currently supported.
+Unless the \fB-u\fR option is used, the program will exit with an error if
+it finds a record without the given tag.
+
+Note that attempting to split on a tag with high cardinality may result
+in the creation of a large number of output files.
+To prevent this, the \fB-M\fR option can be used to set a limit on the
+number of splits made.
+
+Using
+.B -d RG
+behaves in a similar way to the default (without \fB-d\fR),
+opening an output file for each \fB@RG\fR line in the header.
+However, unlike the default,
+new output files will be opened for any RG tags found in the alignment records
+irrespective of if they have a matching header \fB@RG\fR line.
+
 The \fB-u\fR option may be used to specify the output filename for any
-records with a missing or unrecognised RG tag.  This option will always write
+records with a missing or unrecognised tag.  This option will always write
 out a file even if there are no records.
 
 Output format defaults to BAM.  For SAM or CRAM then either set the format with
@@ -70,7 +93,7 @@ Output format defaults to BAM.  For SAM or CRAM then either set the format with
 .SH OPTIONS
 .TP 14
 .BI "-u " FILE1
-.RI "Put reads with no RG tag or an unrecognised RG tag into " FILE1
+.RI "Put reads with no tag or an unrecognised tag into " FILE1
 .TP
 .BI "-h " FILE2
 .RI "Use the header from " FILE2 " when writing the file given in the " -u
@@ -84,6 +107,28 @@ references must be in the same order and have the same lengths.
 Output filename format string (see below)
 ["%*_%#.%."]
 .TP
+.BI "-d " TAG
+Split reads by TAG value into distinct files. Only the TAG key must be 
+supplied with the option. The value of the TAG has to be a string (i.e.
+.B key:Z:value
+)
+.TP
+.BI "-M,--max-split " NUM
+Limit the number of files created by the \fB-d\fR option to \fINUM\fR (default
+100).
+This prevents accidents where trying to split on a tag with high cardinality
+could result in the creation of a very large number of output files.
+Once the file limit is reached,
+any tag values not already seen will be treated as unmatched and the program
+will exit with an error unless the \fB-u\fR option is in use.
+
+If desired, the limit can be removed using \fB-M -1\fR,
+although in practice the number of outputs will still be restricted by
+system limits on the number of files that can be open at once.
+
+If splitting by read group, and the read group count in the header
+is higher than the requested limit then the limit will be raised to match.
+.TP
 .B -v
 Verbose output
 .TP
@@ -96,8 +141,8 @@ center;
 lb l .
 %%	%
 %*	basename
-%#	@RG index
-%!	@RG ID
+%#	index (of @RG in the header, or count of TAG values seen so far)
+%!	@RG ID or TAG value
 %.	output format filename extension
 .TE
 .TP

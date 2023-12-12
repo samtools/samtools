@@ -120,6 +120,7 @@ static int usage() {
             "                          effectively removing any depth limit.\n"
             "Output options:\n"
             "  -m, --histogram         show histogram instead of tabular output\n"
+            "  -D, --plot-depth        plot depth instead of tabular output\n"
             "  -A, --ascii             show only ASCII characters in histogram\n"
             "  -o, --output FILE       write output to FILE [stdout]\n"
             "  -H, --no-header         don't print a header in tabular mode\n"
@@ -209,7 +210,7 @@ void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *s
 }
 
 void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, int tid, const uint32_t *hist,
-        const int hist_size, const bool full_utf) {
+        const int hist_size, const bool full_utf, const bool plot_coverage) {
     int i, col;
     bool show_percentiles = false;
     const int n_rows = 10;
@@ -221,7 +222,7 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
     double hist_data[hist_size];
     double max_val = 0.0;
     for (i = 0; i < hist_size; ++i) {
-        hist_data[i] = 100 * hist[i] / (double) stats[tid].bin_width;
+        hist_data[i] = (plot_coverage?1:100) * hist[i] / (double) stats[tid].bin_width;
         if (hist_data[i] > max_val) max_val = hist_data[i];
     }
 
@@ -231,7 +232,9 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
     double row_bin_size = max_val / (double) n_rows;
     for (i = n_rows-1; i >= 0; --i) {
         double current_bin = row_bin_size * i;
-        if (show_percentiles) {
+        if (plot_coverage) {
+            fprintf(file_out, ">%8.1f ",i*row_bin_size);
+        } else if (show_percentiles) {
             fprintf(file_out, ">%3i%% ", i*10);
         } else {
             fprintf(file_out, ">%7.2f%% ", current_bin);
@@ -265,7 +268,13 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
                             stats[tid].summed_mapQ/(double) stats[tid].n_selected_reads); break;
             case 1: fprintf(file_out, "Histo bin width: %sbp",
                             readable_bps(stats[tid].bin_width, buf)); break;
-            case 0: fprintf(file_out, "Histo max bin:   %.5g%%", max_val); break;
+            case 0: if (plot_coverage) {
+                        fprintf(file_out, "Histo max cov:   %.5g",  max_val);
+                    } else {
+                        fprintf(file_out, "Histo max bin:   %.5g%%", max_val);
+                    }
+                    break;
+
         };
         fputc('\n', file_out);
     }
@@ -313,6 +322,7 @@ int main_coverage(int argc, char *argv[]) {
     bool opt_print_header = true;
     bool opt_print_tabular = true;
     bool opt_print_histogram = false;
+    bool opt_plot_coverage = false;
     bool opt_full_utf = true;
 
     FILE *file_out = stdout;
@@ -332,6 +342,7 @@ int main_coverage(int argc, char *argv[]) {
         {"min-bq", required_argument, NULL, 'Q'},
         {"histogram", no_argument, NULL, 'm'},
         {"ascii", no_argument, NULL, 'A'},
+        {"plot-depth", no_argument, NULL, 'D'},
         {"output", required_argument, NULL, 'o'},
         {"no-header", no_argument, NULL, 'H'},
         {"n-bins", required_argument, NULL, 'w'},
@@ -344,7 +355,7 @@ int main_coverage(int argc, char *argv[]) {
     // parse the command line
     int c;
     opterr = 0;
-    while ((c = getopt_long(argc, argv, "Ao:l:q:Q:hHw:r:b:md:", lopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "Ao:l:q:Q:hHw:r:b:md:D", lopts, NULL)) != -1) {
         switch (c) {
             case 1:
                 if ((required_flags = bam_str2flag(optarg)) < 0) {
@@ -368,6 +379,10 @@ int main_coverage(int argc, char *argv[]) {
             case 'A': opt_full_utf = false;
                       opt_print_histogram = true; opt_print_tabular = false;
                       break;
+            case 'D': opt_print_histogram = true;
+                     opt_print_tabular = false;
+                     opt_plot_coverage = true;
+                     break;
             case 'H': opt_print_header = false; break;
             case 'h': return usage();
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
@@ -560,7 +575,7 @@ int main_coverage(int argc, char *argv[]) {
         if (tid != old_tid) { // Next target sequence
             if (old_tid >= 0) {
                 if (opt_print_histogram) {
-                    print_hist(file_out, h, stats, old_tid, hist, n_bins, opt_full_utf);
+                    print_hist(file_out, h, stats, old_tid, hist, n_bins, opt_full_utf, opt_plot_coverage);
                     fputc('\n', file_out);
                 } else if (opt_print_tabular) {
                     print_tabular_line(file_out, h, stats, old_tid);
@@ -604,12 +619,14 @@ int main_coverage(int argc, char *argv[]) {
                 count_base = true;
                 stats[tid].summed_coverage += depth_at_pos;
             }
-            // hist[current_bin] += depth_at_pos;  // Add counts to the histogram here to have one based on coverage
-            //fprintf(file_out, "\t%d", n_plp[i] - m); // this the depth to output
+
+            if(current_bin < n_bins && opt_plot_coverage) {
+                hist[current_bin] += depth_at_pos;
+                }
         }
         if (count_base) {
             stats[tid].n_covered_bases++;
-            if (opt_print_histogram && current_bin < n_bins)
+            if (opt_print_histogram && current_bin < n_bins && !opt_plot_coverage)
                 ++(hist[current_bin]); // Histogram based on breadth of coverage
         }
     }
@@ -620,7 +637,7 @@ int main_coverage(int argc, char *argv[]) {
 
     if (tid < n_targets && tid >=0) {
         if (opt_print_histogram) {
-            print_hist(file_out, h, stats, tid, hist, n_bins, opt_full_utf);
+            print_hist(file_out, h, stats, tid, hist, n_bins, opt_full_utf, opt_plot_coverage);
         } else if (opt_print_tabular) {
             print_tabular_line(file_out, h, stats, tid);
         }

@@ -570,9 +570,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
     int ret;
     int last_tid = -1;
     hts_pos_t last_pos = -1;
+    int one_seq = 0;
 
     // begin pileup
     while ( (ret=bam_mplp64_auto(iter, &tid, &pos, n_plp, plp)) > 0) {
+        one_seq = 1; // at least 1 output
         if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
         mplp_get_ref(data[0], tid, &ref, &ref_len);
         //printf("tid=%d len=%d ref=%p/%s\n", tid, ref_len, ref, ref);
@@ -811,8 +813,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
             last_tid = tid0;
             last_pos = beg0-1;
             mplp_get_ref(data[0], tid0, &ref, &ref_len);
+        } else if (last_tid < 0 && !one_seq && conf->all > 1) {
+            last_tid = 0; // --aa on a blank file
         }
-       while (last_tid >= 0 && last_tid < sam_hdr_nref(h)) {
+        while (last_tid >= 0 && last_tid < sam_hdr_nref(h)) {
+            mplp_get_ref(data[0], last_tid, &ref, &ref_len);
             while (++last_pos < sam_hdr_tid2len(h, last_tid)) {
                 if (last_pos >= end0) break;
                 if (conf->bed && bed_overlap(conf->bed, sam_hdr_tid2name(h, last_tid), last_pos, last_pos + 1) == 0)

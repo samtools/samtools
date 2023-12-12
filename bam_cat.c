@@ -1,6 +1,6 @@
 /*  bam_cat.c -- efficiently concatenates bam files.
 
-    Copyright (C) 2008-2009, 2011-2013, 2015-2017, 2019, 2021 Genome Research Ltd.
+    Copyright (C) 2008-2009, 2011-2013, 2015-2017, 2019, 2021, 2023 Genome Research Ltd.
     Modified SAMtools work copyright (C) 2010 Illumina, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -49,52 +49,76 @@ Illumina.
 #include "samtools.h"
 #include "sam_opts.h"
 
-/*
- * Check the files are consistent and capable of being concatenated.
- * Also fills out the version numbers and produces a new sam_hdr_t
- * structure with merged RG lines.
- * Note it is only a simple merge.
- *
- * Returns updated header on success;
- *        NULL on failure.
- */
-static sam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const sam_hdr_t *h,
-                                     int *vers_maj_p, int *vers_min_p) {
+/// cat_check_merge_hdr - check compatibility and merge RG hearders merges RGon both CRAM and BAM.
+/** @param firstfile - pointer to the 1sr file opened in caller
+ *  @param nfn - number of files to be processed, including the firstfile
+ *  @param fn - array of file paths to be processed
+ *  @param h - sam header pointer which contains explicitly given header
+ *  @param vers_maj_p - cram major version set and send out for output creation
+ *  @param vers_min_p - cram min version set and send out for output creation
+ *  @param out_h - pointer to sam header pointer, outputs the merged header
+ * returns array of opened samFile pointers on success and NULL on failure
+ * This method has the merged header processing for cram and bam.
+ * RG lines are merged for both cram and bam. For cram, version match for each
+ * file and order match of RG lines are compared as well.
+ * Note: it is a simple merge of RG lines alone.
+*/
+static samFile** cat_check_merge_hdr(samFile * const firstfile, int nfn, char * const *fn, const sam_hdr_t *h,
+                                     int *vers_maj_p, int *vers_min_p, sam_hdr_t **out_h) {
     int i, vers_maj = -1, vers_min = -1;
     sam_hdr_t *new_h = NULL, *old_h = NULL;
     samFile *in = NULL;
     kstring_t ks = KS_INITIALIZE;
-
-    if (h) {
-        new_h = sam_hdr_dup(h);
-        if (!new_h) {
-            fprintf(stderr, "[%s] ERROR: header duplication failed.\n",
-                    __func__);
-            goto fail;
+    samFile **files = calloc(nfn, sizeof(samFile *));
+    if(!files) {
+        fprintf(stderr, "[%s] ERROR: failed to allocate space for file handles.\n", __func__);
+        return NULL;
+    }
+    if (!out_h || !firstfile) {
+        fprintf(stderr, "[%s] ERROR: header check failed.\n", __func__);
+        goto fail;
+    }
+    if (*out_h) {           //use header if one is already present
+        new_h = *out_h;
+    }
+    else {
+        if (h) {            //use the explicit header given
+            new_h = sam_hdr_dup(h);
+            if (!new_h) {
+                fprintf(stderr, "[%s] ERROR: header duplication failed.\n",
+                        __func__);
+                goto fail;
+            }
         }
     }
 
     for (i = 0; i < nfn; ++i) {
-        cram_fd *in_c;
         int ki;
-
-        in = sam_open(fn[i], "rc");
+        //1st file is already open and passed, rest open locally
+        files[i] = in = i ? sam_open(fn[i], "r") : firstfile;
         if (in == 0) {
             print_error_errno("cat", "fail to open file '%s'", fn[i]);
             goto fail;
         }
-        in_c = in->fp.cram;
-
-        int vmaj = cram_major_vers(in_c);
-        int vmin = cram_minor_vers(in_c);
-        if ((vers_maj != -1 && vers_maj != vmaj) ||
-            (vers_min != -1 && vers_min != vmin)) {
-            fprintf(stderr, "[%s] ERROR: input files have differing version numbers.\n",
-                    __func__);
+        if (firstfile->format.format != in->format.format) {
+            print_error("cat", "File %s is of different format!", fn[i]);
             goto fail;
         }
-        vers_maj = vmaj;
-        vers_min = vmin;
+        if (firstfile->format.format == cram) {     //version check for cram
+            cram_fd *in_c;
+            in_c = in->fp.cram;
+
+            int vmaj = cram_major_vers(in_c);
+            int vmin = cram_minor_vers(in_c);
+            if ((vers_maj != -1 && vers_maj != vmaj) ||
+                (vers_min != -1 && vers_min != vmin)) {
+                fprintf(stderr, "[%s] ERROR: input files have differing version numbers.\n",
+                        __func__);
+                goto fail;
+            }
+            vers_maj = vmaj;
+            vers_min = vmin;
+        }
 
         old_h = sam_hdr_read(in);
         if (!old_h) {
@@ -111,10 +135,10 @@ static sam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const sam_hdr_t 
                 goto fail;
             }
             sam_hdr_destroy(old_h);
-            sam_close(in);
+            old_h = NULL;
             continue;
         }
-
+        //merge RG lines
         int old_count = sam_hdr_count_lines(old_h, "RG");
         for (ki = 0; ki < old_count; ki++) {
             const char *old_name = sam_hdr_line_name(old_h, "RG", ki);
@@ -136,7 +160,8 @@ static sam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const sam_hdr_t 
             }
         }
 
-        if (old_count > 1 && sam_hdr_count_lines(new_h, "RG") == old_count) {
+        if (firstfile->format.format == cram && old_count > 1 && sam_hdr_count_lines(new_h, "RG") == old_count) {
+            //RG order check for cram
             for (ki = 0; ki < old_count; ki++) {
                 const char *old_name = sam_hdr_line_name(old_h, "RG", ki);
                 const char *new_name = sam_hdr_line_name(new_h, "RG", ki);
@@ -148,72 +173,61 @@ static sam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const sam_hdr_t 
             }
         }
 
-        sam_hdr_destroy(old_h);
-        sam_close(in);
+        sam_hdr_destroy(old_h); old_h = NULL;
     }
 
     ks_free(&ks);
 
-    *vers_maj_p = vers_maj;
-    *vers_min_p = vers_min;
-
-    return new_h;
+    if (vers_maj_p) {
+        *vers_maj_p = vers_maj;
+    }
+    if (vers_min_p) {
+        *vers_min_p = vers_min;
+    }
+    *out_h = new_h;
+    return files;
 
 fail:
     ks_free(&ks);
     if (old_h) sam_hdr_destroy(old_h);
     if (new_h) sam_hdr_destroy(new_h);
-    if (in) sam_close(in);
+    *out_h = NULL;
+    for (i = 1; i < nfn; ++i) {         //close files other than the firstfile
+        if (files[i]) {
+            sam_close(files[i]);
+        }
+    }
+    free(files);
 
     return NULL;
 }
 
-
-/*
- * CRAM files don't store the RG:Z:ID per read in the aux field.
- * Instead they have a numerical data series (RG) to point each read
- * back to the Nth @RG line in the file.  This means that we may need
- * to edit the RG data series (if the files were produced from
- * "samtools split" for example).
- *
- * The encoding method is stored in the compression header. Typical
- * examples:
- *
- * RG => EXTERNAL {18}           # Block content-id 18 holds RG values
- *                               # as a series of ITF8 encoded values
- *
- * RG => HUFFMAN {1, 255, 255, 255, 255, 255, 1, 0}
- *                               # One RG value #-1.  (No RG)
- *
- * RG => HUFFMAN {1, 0, 1, 0}    # One RG value #0 (always first RG)
- *
- * RG => HUFFMAN {2, 0, 1, 2, 1, 1}
- *                               # Two RG values, #0 and #1, written
- *                               # to the CORE block and possibly
- *                               # mixed with other data series.
- *
- * A single value can (but may not be) implemented as a zero bit
- * huffman code.  In this situation we can change the meta-data in the
- * compression header to renumber an RG value..
- */
-int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram, sam_global_args *ga, char *arg_list, int no_pg)
+int cram_cat(samFile * const firstfile, int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram, sam_global_args *ga, char *arg_list, int no_pg)
 {
-    samFile *out;
+    samFile *out = NULL;
     cram_fd *out_c;
-    int i, vers_maj, vers_min;
+    int i, vers_maj, vers_min, ret = -1;
     sam_hdr_t *new_h = NULL;
+    samFile **files = NULL;
 
-    /* Check consistent versioning and compatible headers */
-    if (!(new_h = cram_cat_check_hdr(nfn, fn, h, &vers_maj, &vers_min)))
+    /* Check consistent versioning and compatible headers;
+    merges RG lines, opens all files and returns them that multiple non-seekable
+    stream inputs can be handled */
+    if (!(files = cat_check_merge_hdr(firstfile, nfn, fn, h, &vers_maj, &vers_min, &new_h)))
         return -1;
+
+    if (!new_h) {
+        print_error_errno("cat", "failed to make output header");
+        goto closefiles;
+    }
 
     /* Open the file with cram_vers */
     char vers[100];
-    sprintf(vers, "%d.%d", vers_maj, vers_min);
+    snprintf(vers, sizeof(vers), "%d.%d", vers_maj, vers_min);
     out = sam_open_format(outcram, "wc", &ga->out);
     if (out == 0) {
         print_error_errno("cat", "fail to open output file '%s'", outcram);
-        return -1;
+        goto closefiles;
     }
     out_c = out->fp.cram;
     cram_set_option(out_c, CRAM_OPT_VERSION, vers);
@@ -224,12 +238,13 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
                                  arg_list ? "CL": NULL,
                                  arg_list ? arg_list : NULL,
                                  NULL))
-        return -1;
+        goto closefiles;
 
     if (sam_hdr_write(out, new_h) < 0) {
         print_error_errno("cat", "Couldn't write header");
-        return -1;
+        goto closefiles;
     }
+    out_c = out->fp.cram;
 
     for (i = 0; i < nfn; ++i) {
         samFile *in;
@@ -238,17 +253,17 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
         sam_hdr_t *old_h;
         int new_rg = -1;
 
-        in = sam_open(fn[i], "rc");
+        in = files[i];
         if (in == 0) {
             print_error_errno("cat", "fail to open file '%s'", fn[i]);
-            return -1;
+            goto closefiles;
         }
         in_c = in->fp.cram;
 
         old_h = sam_hdr_read(in);
         if (!old_h) {
             print_error("cat", "fail to read the header of file '%s'", fn[i]);
-            return -1;
+            goto closefiles;
         }
 
         // Compute RG mapping if suitable for changing.
@@ -258,11 +273,11 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
                 new_rg = sam_hdr_line_index(new_h, "RG", old_name);
                 if (new_rg < 0) {
                     print_error("cat", "fail to find @RG line '%s' in the new header", old_name);
-                    return -1;
+                    goto closefiles;
                 }
             } else {
                 print_error("cat", "fail to find @RG line in file '%s'", fn[i]);
-                return -1;
+                goto closefiles;
             }
         } else {
             new_rg = 0;
@@ -274,7 +289,7 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
                 cram_block *blk;
                 // Container compression header
                 if (!(blk = cram_read_block(in_c)))
-                    return -1;
+                    goto closefiles;
                 cram_free_block(blk);
                 cram_free_container(c);
                 continue;
@@ -292,34 +307,42 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
 
                 // Not switching rg so do the usual read/write loop
                 if (cram_write_container(out_c, c) != 0)
-                    return -1;
+                    goto closefiles;
 
                 // Container compression header
                 if (!(blk = cram_read_block(in_c)))
-                    return -1;
+                    goto closefiles;
                 if (cram_write_block(out_c, blk) != 0) {
                     cram_free_block(blk);
-                    return -1;
+                    goto closefiles;
                 }
                 cram_free_block(blk);
-
 
                 // Container num_blocks can be invalid, due to a bug.
                 // Instead we iterate in slice context instead.
                 (void)cram_container_get_landmarks(c, &num_slices);
                 cram_copy_slice(in_c, out_c, num_slices);
             }
-
             cram_free_container(c);
         }
-
         sam_hdr_destroy(old_h);
-        sam_close(in);
     }
-    sam_close(out);
-    sam_hdr_destroy(new_h);
+    ret = 0;
 
-    return 0;
+closefiles:
+    if (out) {
+        sam_close(out);
+    }
+    if (new_h) {
+        sam_hdr_destroy(new_h);
+    }
+    for (i = 1; i < nfn; ++i) {     //skip firstfile and close rest
+        if (files[i]) {
+            sam_close(files[i]);
+        }
+    }
+    free(files);
+    return ret;
 }
 
 
@@ -330,31 +353,40 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
 
 #define BGZF_EMPTY_BLOCK_SIZE 28
 
-int bam_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outbam, char *arg_list, int no_pg)
+int bam_cat(samFile * const firstfile, int nfn, char * const *fn, sam_hdr_t *h, const char* outbam, char *arg_list, int no_pg)
 {
-    BGZF *fp, *in = NULL;
+    BGZF *fp = NULL, *in = NULL;
     uint8_t *buf = NULL;
     uint8_t ebuf[BGZF_EMPTY_BLOCK_SIZE];
     const int es=BGZF_EMPTY_BLOCK_SIZE;
     int i;
+    samFile **files = NULL;
+    sam_hdr_t *new_h = NULL;
 
+    /* merges RG lines, opens all files and returns them that multiple non-seekable
+    stream inputs can be handled */
+    if (!(files = cat_check_merge_hdr(firstfile, nfn, fn, h, NULL, NULL, &new_h)))
+        return -1;
+    if (!new_h) {
+        print_error_errno("cat", "failed to make output header");
+        goto fail;
+    }
     fp = strcmp(outbam, "-")? bgzf_open(outbam, "w") : bgzf_fdopen(fileno(stdout), "w");
     if (fp == 0) {
         print_error_errno("cat", "fail to open output file '%s'", outbam);
-        return -1;
+        goto fail;
     }
-    if (h) {
-        if (!no_pg && sam_hdr_add_pg(h, "samtools",
-                                     "VN", samtools_version(),
-                                     arg_list ? "CL": NULL,
-                                     arg_list ? arg_list : NULL,
-                                     NULL))
-            goto fail;
 
-        if (bam_hdr_write(fp, h) < 0) {
-            print_error_errno("cat", "Couldn't write header");
-            goto fail;
-        }
+    if (!no_pg && sam_hdr_add_pg(new_h, "samtools",
+                                    "VN", samtools_version(),
+                                    arg_list ? "CL": NULL,
+                                    arg_list ? arg_list : NULL,
+                                    NULL))
+        goto fail;
+
+    if (bam_hdr_write(fp, new_h) < 0) {
+        print_error_errno("cat", "Couldn't write header");
+        goto fail;
     }
 
     buf = (uint8_t*) malloc(BUF_SIZE);
@@ -363,35 +395,13 @@ int bam_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outbam, char *a
         goto fail;
     }
     for(i = 0; i < nfn; ++i){
-        sam_hdr_t *old;
         int len,j;
-
-        in = strcmp(fn[i], "-")? bgzf_open(fn[i], "r") : bgzf_fdopen(fileno(stdin), "r");
+        in = files[i]->fp.bgzf;
         if (in == 0) {
             print_error_errno("cat", "fail to open file '%s'", fn[i]);
             goto fail;
         }
-        if (in->is_write) return -1;
-
-        old = bam_hdr_read(in);
-        if (old == NULL) {
-            fprintf(stderr, "[%s] ERROR: couldn't read header for '%s'.\n",
-                    __func__, fn[i]);
-            goto fail;
-        }
-        if (h == 0 && i == 0) {
-            if (!no_pg && sam_hdr_add_pg(old, "samtools",
-                                         "VN", samtools_version(),
-                                         arg_list ? "CL": NULL,
-                                         arg_list ? arg_list : NULL,
-                                         NULL))
-                goto fail;
-
-            if (bam_hdr_write(fp, old) < 0) {
-                print_error_errno("cat", "Couldn't write header");
-                goto fail;
-            }
-        }
+        if (in->is_write) goto fail;
 
         if (in->block_offset < in->block_length) {
             if (bgzf_write(fp, (char *)in->uncompressed_block + in->block_offset, in->block_length - in->block_offset) < 0) goto write_fail;
@@ -432,26 +442,41 @@ int bam_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outbam, char *a
                 if (bgzf_raw_write(fp, ebuf, es) < 0) goto write_fail;
             }
         }
-        sam_hdr_destroy(old);
-        bgzf_close(in);
         in = NULL;
     }
     free(buf);
     if (bgzf_close(fp) < 0) {
         fprintf(stderr, "[%s] Error on closing '%s'.\n", __func__, outbam);
-        return -1;
+        goto fail;
     }
+    for (i = 1; i < nfn; ++i) {     //skip firstfile and close rest
+        if (files[i]) {
+            sam_close(files[i]);
+        }
+    }
+    free(files);
+    sam_hdr_destroy(new_h);
     return 0;
 
  write_fail:
     fprintf(stderr, "[%s] Error writing to '%s'.\n", __func__, outbam);
  fail:
-    if (in) bgzf_close(in);
+    if (new_h) {
+        sam_hdr_destroy(new_h);
+    }
     if (fp) bgzf_close(fp);
     free(buf);
+
+    if (files) {
+        for(i = 1; i < nfn; ++i) {  //except the firstfile
+            if(files[i]) {
+                sam_close(files[i]);
+            }
+        }
+        free(files);
+    }
     return -1;
 }
-
 
 int main_cat(int argc, char *argv[])
 {
@@ -472,21 +497,22 @@ int main_cat(int argc, char *argv[])
     char *arg_list = NULL;
 
     sam_global_args_init(&ga);
-
     while ((c = getopt_long(argc, argv, "h:o:b:@:", lopts, NULL)) >= 0) {
         switch (c) {
             case 'h': {
                 samFile *fph = sam_open(optarg, "r");
                 if (fph == 0) {
                     fprintf(stderr, "[%s] ERROR: fail to read the header from '%s'.\n", __func__, optarg);
-                    return 1;
+                    ret = 1;
+                    goto end;
                 }
                 h = sam_hdr_read(fph);
                 if (h == NULL) {
                     fprintf(stderr,
                             "[%s] ERROR: failed to read the header from '%s'.\n",
                             __func__, optarg);
-                    return 1;
+                    ret = 1;
+                    goto end;
                 }
                 sam_close(fph);
                 break;
@@ -521,7 +547,8 @@ int main_cat(int argc, char *argv[])
 
     if (!no_pg && !(arg_list = stringify_argv(argc+1, argv-1))) {
         print_error("cat", "failed to create arg_list");
-        return 1;
+        ret = 1;
+        goto end;
     }
 
     // Append files specified in argv to the list.
@@ -541,34 +568,34 @@ int main_cat(int argc, char *argv[])
         fprintf(stderr, "         -h FILE  copy the header from FILE [default is 1st input file]\n");
         fprintf(stderr, "         -o FILE  output BAM/CRAM\n");
         fprintf(stderr, "         --no-PG  do not add a PG line\n");
-        sam_global_opt_help(stderr, "--..-@-.");
-        return 1;
+        sam_global_opt_help(stderr, "---.-@-.");
+        ret = 1;
+        goto end;
     }
 
     in = sam_open(infns[0], "r");
     if (!in) {
         print_error_errno("cat", "failed to open file '%s'", infns[0]);
-        return 1;
+        ret = 1;
+        goto end;
     }
 
     switch (hts_get_format(in)->format) {
     case bam:
-        sam_close(in);
-        if (bam_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-", arg_list, no_pg) < 0)
+        if (bam_cat(in, infns_size+nargv_fns, infns, h, outfn? outfn : "-", arg_list, no_pg) < 0)
             ret = 1;
         break;
 
     case cram:
-        sam_close(in);
-        if (cram_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-", &ga, arg_list, no_pg) < 0)
+        if (cram_cat(in, infns_size+nargv_fns, infns, h, outfn? outfn : "-", &ga, arg_list, no_pg) < 0)
             ret = 1;
         break;
 
     default:
-        sam_close(in);
         fprintf(stderr, "[%s] ERROR: input is not BAM or CRAM\n", __func__);
-        return 1;
+        ret = 1;
     }
+    sam_close(in);
 
  end:
     if (infns_size > 0) {
@@ -582,6 +609,7 @@ int main_cat(int argc, char *argv[])
     free(arg_list);
     if (h)
         sam_hdr_destroy(h);
+    sam_global_args_free(&ga);
 
     return ret;
 }

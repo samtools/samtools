@@ -3213,6 +3213,7 @@ sub test_sort
 
     # Name sort
     test_cmd($opts, out=>"sort/name.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -n -m 10M $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+    test_cmd($opts, out=>"sort/name2.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -N -m 10M $$opts{path}/dat/test_input_1_b.bam -O SAM -o -");
 
     # Tag sort (RG)
     test_cmd($opts, out=>"sort/tag.rg.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t RG -m 10M $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
@@ -3509,6 +3510,43 @@ sub test_split
              ignore_pg_header => 1,
              reorder_header => 1,
              cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -u $$opts{path}/split/split.tmp.unk.sam -f $$opts{path}/split/split.tmp.\%!.\%. $$opts{path}/split/split.sam");
+
+    test_cmd($opts,
+             out=>"dat/empty.expected",
+             out_map => {
+                 'split/split.tmp.grp1.sam' => 'split/split.expected.grp1.sam',
+                 'split/split.tmp.grp2.sam' => 'split/split.expected.grp2.sam',
+                 'split/split.tmp.grp3.sam' => 'split/split.expected_d_RG.grp3.sam',
+                 'split/split.tmp.unk.sam' => 'split/split.expected_d_RG.unk.sam',
+             },
+             ignore_pg_header => 1,
+             reorder_header => 1,
+             cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -d RG -u $$opts{path}/split/split.tmp.unk.sam -f $$opts{path}/split/split.tmp.\%!.\%. $$opts{path}/split/split.sam");
+
+    test_cmd($opts,
+             out=>"dat/empty.expected",
+             out_map => {
+                 'split/split.tmp.aardvark.sam' => 'split/split.expected_d_an.aardvark.sam',
+                 'split/split.tmp.badger.sam' => 'split/split.expected_d_an.badger.sam',
+                 'split/split.tmp.cat.sam' => 'split/split.expected_d_an.cat.sam',
+                 'split/split.tmp.dog.sam' => 'split/split.expected_d_an.dog.sam',
+                 'split/split.tmp.unk.sam' => 'split/split.expected_d_an.unk.sam',
+             },
+             ignore_pg_header => 1,
+             reorder_header => 1,
+             cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -d an -u $$opts{path}/split/split.tmp.unk.sam -f $$opts{path}/split/split.tmp.\%!.\%. $$opts{path}/split/split.sam");
+
+    test_cmd($opts,
+             out=>"dat/empty.expected",
+             out_map => {
+                 'split/split.tmp.badger.sam' => 'split/split.expected_d_an.badger.sam',
+                 'split/split.tmp.cat.sam' => 'split/split.expected_d_an.cat.sam',
+                 'split/split.tmp.dog.sam' => 'split/split.expected_d_an.dog.sam',
+                 'split/split.tmp.unk.sam' => 'split/split.expected_d_an_M_3.unk.sam',
+             },
+             ignore_pg_header => 1,
+             reorder_header => 1,
+             cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -d an -M 3 -u $$opts{path}/split/split.tmp.unk.sam -f $$opts{path}/split/split.tmp.\%!.\%. $$opts{path}/split/split.sam");
 }
 
 sub test_ampliconclip

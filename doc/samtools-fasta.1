@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-fasta 1 "25 July 2023" "samtools-1.18" "Bioinformatics tools"
+.TH samtools-fasta 1 "12 December 2023" "samtools-1.19" "Bioinformatics tools"
 .SH NAME
 samtools-fasta, samtools-fastq \- converts a SAM/BAM/CRAM file to FASTA or FASTQ
 .\"
@@ -127,6 +127,8 @@ SAM record (and quality if appropriate).  This means if it has
 soft-clipped CIGAR records then the soft-clipped data will be in the
 output FASTA/FASTQ.  Hard-clipped data is, by definition, absent from
 the SAM record and hence will be absent in any FASTA/FASTQ produced.
+
+The filter options order of precedence is -d, -f, -F, --rf and -G.
 
 .SH OPTIONS
 .TP 8

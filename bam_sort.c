@@ -164,11 +164,15 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
 
 typedef enum {Coordinate, QueryName, TagCoordinate, TagQueryName, MinHash, TemplateCoordinate} SamOrder;
 static SamOrder g_sam_order = Coordinate;
+static int natural_sort = 1; // not ASCII, but alphanumeric: a12b > a7b
 static char g_sort_tag[2] = {0,0};
 
 #define is_digit(c) ((c)<='9' && (c)>='0')
 static int strnum_cmp(const char *_a, const char *_b)
 {
+    if (!natural_sort)
+        return strcmp(_a,_b);
+
     const unsigned char *a = (const unsigned char*)_a, *b = (const unsigned char*)_b;
     const unsigned char *pa = a, *pb = b;
     while (*pa && *pb) {
@@ -1535,7 +1539,8 @@ static void merge_usage(FILE *to)
 "   or: samtools merge [options] <out.bam> <in1.bam> ... <inN.bam>\n"
 "\n"
 "Options:\n"
-"  -n         Input files are sorted by read name\n"
+"  -n         Input files are sorted by read name (natural)\n"
+"  -N         Input files are sorted by read name (ASCII)\n"
 "  -t TAG     Input files are sorted by TAG value\n"
 "  -r         Attach RG tag (inferred from file names)\n"
 "  -u         Uncompressed BAM output\n"
@@ -1581,11 +1586,12 @@ int bam_merge(int argc, char *argv[])
         return 0;
     }
 
-    while ((c = getopt_long(argc, argv, "h:nru1R:o:f@:l:cps:b:O:t:XL:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "h:nNru1R:o:f@:l:cps:b:O:t:XL:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'r': flag |= MERGE_RG; break;
         case 'f': flag |= MERGE_FORCE; break;
         case 'h': fn_headers = optarg; break;
+        case 'N': natural_sort = 0; // fall through
         case 'n': sam_order = QueryName; break;
         case 'o': fnout = optarg; break;
         case 't': sort_tag = optarg; break;
@@ -3287,6 +3293,9 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             break;
         case QueryName:
             new_so = "queryname";
+            new_ss = natural_sort
+                ? "queryname:natural"
+                : "queryname:lexicographical";
             break;
         case MinHash:
             new_so = "coordinate";
@@ -3605,7 +3614,8 @@ static void sort_usage(FILE *fp)
 "  -I FILE    Order minimisers by their position in FILE FASTA\n"
 "  -w INT     Window size for minimiser indexing via -I ref.fa [100]\n"
 "  -H         Squash homopolymers when computing minimiser\n"
-"  -n         Sort by read name (not compatible with samtools index command)\n"
+"  -n         Sort by read name (natural): cannot be used with samtools index\n"
+"  -N         Sort by read name (ASCII): cannot be used with samtools index\n"
 "  -t TAG     Sort by value of TAG. Uses position as secondary index (or read name if -n is set)\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"
 "  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n"
@@ -3658,9 +3668,10 @@ int bam_sort(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "l:m:no:O:T:@:t:MI:K:uRw:H", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "l:m:nNo:O:T:@:t:MI:K:uRw:H", lopts, NULL)) >= 0) {
         switch (c) {
         case 'o': fnout = optarg; o_seen = 1; break;
+        case 'N': natural_sort = 0; // fall through
         case 'n': sam_order = QueryName; break;
         case 't': by_tag = true; sort_tag = optarg; break;
         case 'm': {
@@ -3732,7 +3743,7 @@ int bam_sort(int argc, char *argv[])
         goto sort_end;
     }
 
-    if (ga.write_index && (sam_order == QueryName || sam_order == TagQueryName || sam_order == TagCoordinate || sam_order == TemplateCoordinate)) {
+    if (ga.write_index && sam_order != Coordinate) {
         fprintf(stderr, "[W::bam_sort] Ignoring --write-index as it only works for position sorted files.\n");
         ga.write_index = 0;
     }

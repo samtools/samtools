@@ -766,6 +766,9 @@ static void collect_barcode_stats(bam1_t* bam_line, stats_t* stats) {
             continue;
 
         uint32_t barcode_len = strlen(barcode);
+        if (!barcode_len) {
+            continue;        //consider 0 size barcode same as no barcode - avoids issues with realloc below
+        }
         if (!stats->tags_barcode[tag].nbases) { // tag seen for the first time
             uint32_t offset = 0;
             for (i = 0; i < stats->ntags; i++)

@@ -1,4 +1,4 @@
-@HD	VN:1.4	SO:queryname
+@HD	VN:1.4	SO:queryname	SS:queryname:natural
 @SQ	SN:insert	LN:599
 @SQ	SN:ref1	LN:45
 @SQ	SN:ref2	LN:40
