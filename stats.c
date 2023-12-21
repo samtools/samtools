@@ -2132,7 +2132,7 @@ static void HTS_NORETURN error(const char *format, ...)
 
 void cleanup_stats_info(stats_info_t* info){
     if (info->fai) fai_destroy(info->fai);
-    sam_close(info->sam);
+    if (info->sam) sam_close(info->sam);
     free(info);
 }
 
