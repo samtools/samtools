@@ -555,12 +555,20 @@ hts_itr_multi_t *multi_region_init(samview_settings_t *conf, char **regs, int nr
     int filter_state = ALL;
     if ( nregs ) {
         int filter_op = 0;
-        conf->bed = bed_hash_regions(conf->bed, regs, 0, nregs, &filter_op); // insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
+        void *bed = bed_hash_regions(conf->bed, regs, 0, nregs, &filter_op); // insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
+        if (!bed) {
+            print_error_errno("view", "Couldn't %s region list",
+                              filter_op ? "build" : "filter");
+            return NULL;
+        }
+        conf->bed = bed;
         if ( !filter_op )
             filter_state = FILTERED;
     }
     else
         bed_unify(conf->bed);
+
+    // This check is probably redundant, but left just in case
     if ( !conf->bed) { // index is unavailable or no regions have been specified
         print_error("view", "No regions or BED file have been provided. Aborting.");
         return NULL;
