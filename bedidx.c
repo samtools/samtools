@@ -152,7 +152,7 @@ static int bed_index(reghash_t *h)
     return 0;
 }
 
-static int bed_minoff(const bed_reglist_t *p, hts_pos_t beg, hts_pos_t end) {
+static int bed_minoff(const bed_reglist_t *p, hts_pos_t beg) {
     int min_off=0;
 
     if (p && p->idx && p->max_idx > 0 && beg >= 0) {
@@ -166,7 +166,7 @@ static int bed_overlap_core(const bed_reglist_t *p, hts_pos_t beg, hts_pos_t end
 {
     int i, min_off;
     if (p->n == 0) return 0;
-    min_off = bed_minoff(p, beg, end);
+    min_off = bed_minoff(p, beg);
 
     for (i = min_off; i < p->n; ++i) {
         if (p->a[i].beg >= end) break; // out of range; no need to proceed
@@ -462,7 +462,7 @@ static void *bed_filter(void *reg_hash, void *tmp_hash) {
             beg = q->a[i].beg;
             end = q->a[i].end;
 
-            min_off = bed_minoff(p, beg, end);
+            min_off = bed_minoff(p, beg);
             for (j = min_off; j < p->n; ++j) {
                 if (p->a[j].beg >= end) break; // out of range; no need to proceed
                 if (p->a[j].end > beg && p->a[j].beg < end) {
