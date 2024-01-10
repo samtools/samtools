@@ -263,7 +263,7 @@ void *bed_read(const char *fn)
     if (NULL == h) return NULL;
     // read the list
     fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
-    if (fp == 0) return 0;
+    if (fp == 0) goto fail;
     ks = ks_init(fp);
     if (NULL == ks) goto fail;  // In case ks_init ever gets error checking...
     int ks_len;
