@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2013-2023 Genome Research Ltd.
+#    Copyright (C) 2013-2024 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -3565,6 +3565,19 @@ sub test_split
              ignore_pg_header => 1,
              reorder_header => 1,
              cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -d an -M 3 -u $$opts{path}/split/split.tmp.unk.sam -f $$opts{path}/split/split.tmp.\%!.\%. $$opts{path}/split/split.sam");
+
+    test_cmd($opts,
+             out => "dat/empty.expected",
+             out_map => {
+                 "split/split.tmp.d_nn.-2.sam" => "split/split.expected_d_nn.-2.sam",
+                 "split/split.tmp.d_nn.-1.sam" => "split/split.expected_d_nn.-1.sam",
+                 "split/split.tmp.d_nn.1.sam" => "split/split.expected_d_nn.1.sam",
+                 "split/split.tmp.d_nn.2.sam" => "split/split.expected_d_nn.2.sam",
+                 "split/split.tmp.d_nn.unk.sam" => "split/split.expected_d_nn.unk.sam",
+             },
+             ignore_pg_header => 1,
+             reorder_header => 1,
+             cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -f $$opts{path}/split/split.tmp.d_nn.\%!.\%. -d nn -u $$opts{path}/split/split.tmp.d_nn.unk.sam  $$opts{path}/split/split_d_nn.sam");
 }
 
 sub test_ampliconclip

@@ -1,0 +1,35 @@
+@HD	VN:1.4	SO:coordinate
+@RG	ID:grp1	DS:Group 1	LB:Library 1	SM:Sample
+@RG	ID:grp2	DS:Group 2	LB:Library 2	SM:Sample
+@PG	ID:prog1	PN:emacs	CL:emacs	VN:23.1.1
+@CO	The MIT License
+@CO	
+@CO	Copyright (c) 2024 Genome Research Ltd.
+@CO	
+@CO	Permission is hereby granted, free of charge, to any person obtaining a copy
+@CO	of this software and associated documentation files (the "Software"), to deal
+@CO	in the Software without restriction, including without limitation the rights
+@CO	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+@CO	copies of the Software, and to permit persons to whom the Software is
+@CO	furnished to do so, subject to the following conditions:
+@CO	
+@CO	The above copyright notice and this permission notice shall be included in
+@CO	all copies or substantial portions of the Software.
+@CO	
+@CO	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+@CO	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+@CO	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+@CO	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+@CO	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+@CO	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+@CO	THE SOFTWARE.
+@SQ	SN:ref1	LN:56	M5:08c04d512d4797d9ba2a156c1daba468
+@SQ	SN:ref2	LN:60	M5:7c35feac7036c1cdef3bee0cc4b21437
+@SQ	SN:ref3_unused	LN:70	M5:5fdd18c2c6ecac4838996d029bf395b5
+ref1_grp2_p001	99	ref1	3	1	10M	=	27	34	AGCTCGGTAC	""""""""""	RG:Z:grp2	BC:Z:TGCA	H0:i:1	aa:A:A	ab:A:Z	fa:f:6.67e-11	za:Z:!"$%^&*()	ha:H:CAFE	NM:i:0	MD:Z:10	an:Z:badger	nn:i:-2
+ref1_grp2_p005	99	ref1	19	9	10M	=	43	34	ATCCTCTAGA	**********	RG:Z:grp2	ia:i:-1000	NM:i:0	MD:Z:10	an:Z:aardvark	nn:i:-2
+ref1_grp2_p001	147	ref1	27	13	10M	=	3	-34	GAGTCGACCT	..........	RG:Z:grp2	NM:i:0	MD:Z:10	an:Z:badger	nn:i:-2
+ref12_grp1_p001	145	ref2	2	50	10M	ref1	36	0	TTCTATAGTG	BBBBBBBBBB	RG:Z:grp1	NM:i:0	MD:Z:10	an:Z:cat	nn:i:-2
+ref12_grp2_p001	145	ref2	12	50	10M	ref1	46	0	TCACCTAAAT	BBBBBBBBBB	RG:Z:grp2	NM:i:0	MD:Z:10	an:Z:cat	nn:i:-2
+ref2_grp3_p002	99	ref2	46	99	15M	=	16	-45	CTGTTTCCTGTGTGA	{{{{{{{{{{{{{{{	NM:i:0	MD:Z:15	RG:Z:grp3	an:Z:dog	nn:i:-2
+unaligned_grp3_p001	141	*	0	0	*	*	0	0	GAAAGTGAGGAGGTG	edcba9876543210	an:Z:dog	nn:i:-2

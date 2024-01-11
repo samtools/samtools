@@ -65,7 +65,8 @@ only containing a header.
 If the
 .BI "-d " TAG
 option is used, the file will be split on the value in the given aux tag.
-Note that only string tags (type \fBZ\fR) are currently supported.
+Only string (type \fBZ\fR) and integer (type \fBi\fR in SAM,
+plus equivalents in BAM/CRAM) tags are currently supported.
 Unless the \fB-u\fR option is used, the program will exit with an error if
 it finds a record without the given tag.
 
@@ -110,8 +111,11 @@ Output filename format string (see below)
 .BI "-d " TAG
 Split reads by TAG value into distinct files. Only the TAG key must be 
 supplied with the option. The value of the TAG has to be a string (i.e.
-.B key:Z:value
-)
+.BR key:Z:value ") or an integer (" key:i:value ")."
+
+Using this option changes the default filename format string to "%*_%!.%.",
+so that tag values appear in the output file names.
+This can be overridden by using the \fB-f\fR option.
 .TP
 .BI "-M,--max-split " NUM
 Limit the number of files created by the \fB-d\fR option to \fINUM\fR (default

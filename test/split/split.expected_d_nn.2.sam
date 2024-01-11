@@ -1,0 +1,40 @@
+@HD	VN:1.4	SO:coordinate
+@RG	ID:grp1	DS:Group 1	LB:Library 1	SM:Sample
+@RG	ID:grp2	DS:Group 2	LB:Library 2	SM:Sample
+@PG	ID:prog1	PN:emacs	CL:emacs	VN:23.1.1
+@CO	The MIT License
+@CO	
+@CO	Copyright (c) 2024 Genome Research Ltd.
+@CO	
+@CO	Permission is hereby granted, free of charge, to any person obtaining a copy
+@CO	of this software and associated documentation files (the "Software"), to deal
+@CO	in the Software without restriction, including without limitation the rights
+@CO	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+@CO	copies of the Software, and to permit persons to whom the Software is
+@CO	furnished to do so, subject to the following conditions:
+@CO	
+@CO	The above copyright notice and this permission notice shall be included in
+@CO	all copies or substantial portions of the Software.
+@CO	
+@CO	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+@CO	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+@CO	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+@CO	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+@CO	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+@CO	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+@CO	THE SOFTWARE.
+@SQ	SN:ref1	LN:56	M5:08c04d512d4797d9ba2a156c1daba468
+@SQ	SN:ref2	LN:60	M5:7c35feac7036c1cdef3bee0cc4b21437
+@SQ	SN:ref3_unused	LN:70	M5:5fdd18c2c6ecac4838996d029bf395b5
+ref1_grp1_p001	99	ref1	1	0	10M	=	25	34	CGAGCTCGGT	!!!!!!!!!!	RG:Z:grp1	BC:Z:ACGT	H0:i:1	aa:A:!	ab:A:~	fa:f:3.14159	za:Z:Hello world!	ha:H:DEADBEEF	ba:B:c,-128,0,127	bb:B:C,0,127,255	bc:B:s,-32768,0,32767	bd:B:S,0,32768,65535	be:B:i,-2147483648,0,2147483647	bf:B:I,0,2147483648,4294967295	bg:B:f,2.71828,6.626e-34,2.9979e+09	NM:i:0	MD:Z:10	an:Z:badger	nn:i:2
+ref1_grp1_p002	99	ref1	5	2	10M	=	29	34	CTCGGTACCC	##########	RG:Z:grp1	BC:Z:AATTCCGG	H0:i:1	aa:A:a	ab:A:z	fa:f:4.3597e-18	za:Z:Another string	ha:H:2000AD	NM:i:0	MD:Z:10	an:Z:cat	nn:i:2
+ref1_grp2_p002	99	ref1	7	3	10M	=	31	34	CGGTACCCGG	$$$$$$$$$$	fa:f:6.022e+23	RG:Z:grp2	NM:i:0	MD:Z:10	an:Z:badger	nn:i:2
+ref1_grp1_p004	99	ref1	13	6	10M	=	37	34	CCGGGGATCC	''''''''''	fa:f:1.38e-23	za:Z:xRG:Z:grp2	RG:Z:grp1	NM:i:0	MD:Z:10	an:Z:badger	nn:i:2
+ref1_grp2_p006	99	ref1	23	11	10M	=	47	34	TCTAGAGTCG	,,,,,,,,,,	RG:Z:grp2	ia:i:-1	NM:i:0	MD:Z:10	nn:i:2
+ref1_grp1_p003	147	ref1	33	16	10M	=	9	-34	ACCTGCAGGC	1111111111	RG:Z:grp1	NM:i:0	MD:Z:10	an:Z:cat	nn:i:2
+ref1_grp1_p004	147	ref1	37	18	10M	=	13	-34	GCAGGCATGC	3333333333	RG:Z:grp1	NM:i:0	MD:Z:10	an:Z:badger	nn:i:2
+ref1_grp2_p004	147	ref1	39	19	10M	=	15	-34	AGGCATGCAA	4444444444	RG:Z:grp2	NM:i:0	MD:Z:10	an:Z:aardvark	nn:i:2
+ref2_grp3_p001	83	ref2	1	99	15M	=	31	45	ATTCTATAGTGTCAC	~~~~~~~~~~~~~~~	NM:i:0	MD:Z:15	an:Z:cat	nn:i:2
+ref2_grp3_p002	147	ref2	16	99	15M	=	46	45	CTAAATAGCTTGGCG	}}}}}}}}}}}}}}}	NM:i:0	MD:Z:15	RG:Z:grp3	an:Z:dog	nn:i:2
+ref2_grp3_p001	163	ref2	31	99	15M	=	1	-45	CTGTTTCCTGTGTGA	|||||||||||||||	NM:i:13	MD:Z:0T0A0A1C0A0T0G0G0T0C0A1A0G0	an:Z:cat	nn:i:2
+unaligned_grp3_p001	77	*	0	0	*	*	0	0	CACTCGTTCATGACG	0123456789abcde	an:Z:dog	nn:i:2
