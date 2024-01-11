@@ -1,6 +1,6 @@
 /*  bam_split.c -- split subcommand.
 
-    Copyright (C) 2013-2016,2018-2019,2023 Genome Research Ltd.
+    Copyright (C) 2013-2016,2018-2019,2023,2024 Genome Research Ltd.
 
     Author: Martin Pollard <mp15@sanger.ac.uk>
 
@@ -113,6 +113,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
     if (argc == 1) { usage(stdout); return NULL; }
 
     const char *optstring = "vf:h:u:d:M:@:";
+    char *default_format_string = "%*_%#.%.";
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '@'),
@@ -144,7 +145,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
             break;
         case 'd':
             retval->tag = optarg;
-            retval->output_format_string = "%*_%!.%.";
+            default_format_string = "%*_%!.%.";
             break;
         case 'M': {
             char *end = optarg;
@@ -171,7 +172,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
         }
     }
 
-    if (retval->output_format_string == NULL) retval->output_format_string = "%*_%#.%.";
+    if (retval->output_format_string == NULL) retval->output_format_string = default_format_string;
 
     argc -= optind;
     argv += optind;
@@ -688,8 +689,22 @@ static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
     while (file_read != NULL) {
         // Get RG tag from read and look it up in hash to find file to output it to
         uint8_t* tag = bam_aux_get(file_read, is_rg ? "RG" : opts->tag);
-        char *val = tag ? bam_aux2Z(tag) : NULL;
+        char *val = NULL;
+        char number[28];
         khiter_t iter;
+        if (tag) {
+            switch (*tag) {
+            case 'Z': case 'H':
+                val = bam_aux2Z(tag);
+                break;
+            case 'c': case 'C': case 's': case 'S': case 'i': case 'I':
+                snprintf(number, sizeof(number), "%"PRId64, bam_aux2i(tag));
+                val = number;
+                break;
+            default:
+                break;
+            }
+        }
         if ( val != NULL ) {
             iter = kh_get_c2i(state->tag_val_hash, val);
         } else {
