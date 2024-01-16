@@ -1,0 +1,24 @@
+# CRAM size regression testing, to avoid mistakes where we accidentally
+# degrade compression performance.
+
+# We reuse the mpileup test data as it's the biggest files in the test
+# directory.
+
+# This isn't perfect, but it's sufficient for the most egregious of bugs.
+# We use a small container size here so we can test multiple containers.
+# NB: we can't longer term spot auto-tuning issues easily as that requires
+# large data sets.
+INIT x $samtools merge -f -O cram,version=3.0,seqs_per_slice=500 mpileup.[123].bam -o mpileup.v30.cram
+INIT x $samtools merge -f -O cram,version=3.0,seqs_per_slice=500,archive,level=9 mpileup.[123].bam -o mpileup.v30a.cram
+INIT x $samtools merge -f -O cram,version=3.1,seqs_per_slice=500 mpileup.[123].bam -o mpileup.v31.cram
+INIT x $samtools merge -f -O cram,version=3.1,seqs_per_slice=500,small,level=7 mpileup.[123].bam -o mpileup.v31s.cram
+INIT x $samtools merge -f -O cram,version=3.1,seqs_per_slice=500,archive,level=9 mpileup.[123].bam -o mpileup.v31a.cram
+
+# CRAM size regression test.  2% overhead on top of my local tests, to
+# accommodate differences in zlib vs libdeflate and potentially other
+# libraries too.  We can tune this as desired if we get false positives.
+P csize.out [ `cat mpileup.v30.cram  | wc -c` -lt 94833 ] && echo pass
+P csize.out [ `cat mpileup.v30a.cram | wc -c` -lt 88359 ] && echo pass
+P csize.out [ `cat mpileup.v31.cram  | wc -c` -lt 91923 ] && echo pass
+P csize.out [ `cat mpileup.v31s.cram | wc -c` -lt 85955 ] && echo pass
+P csize.out [ `cat mpileup.v31a.cram | wc -c` -lt 84619 ] && echo pass

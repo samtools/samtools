@@ -244,6 +244,7 @@ check test: samtools $(BGZIP) $(TEST_PROGRAMS)
 	test/merge/test_trans_tbl_init
 	cd test/mpileup && AWK="$(AWK)" ../regression.sh mpileup.reg
 	cd test/mpileup && AWK="$(AWK)" ../regression.sh depth.reg
+	cd test/mpileup && AWK="$(AWK)" ../regression.sh cram-size.reg
 	cd test/consensus && AWK="$(AWK)" ../regression.sh consensus.reg
 	cd test/cram_size && AWK="$(AWK)" ../regression.sh cram_size.reg
 
