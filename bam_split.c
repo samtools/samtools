@@ -52,6 +52,7 @@ struct parsed_opts {
     long max_split;
     bool verbose;
     int no_pg;
+    int zero_pad;
     sam_global_args ga;
 };
 
@@ -91,6 +92,7 @@ static void usage(FILE *write_to)
 "  -u FILE1            put left-over reads in FILE1\n"
 "  -h FILE2            ... and override the header with FILE2 (-u file only)\n"
 "  -d TAG              split by TAG value. TAG value must be a string.\n"
+"  -p NUMBER           zero-pad numbers in filenames to NUMBER digits\n"
 "  -M,--max-split NUM  limit number of output files from -d to NUM [%d]\n"
 "  -v                  verbose output\n"
 "  --no-PG             do not add a PG line\n",
@@ -112,13 +114,14 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 {
     if (argc == 1) { usage(stdout); return NULL; }
 
-    const char *optstring = "vf:h:u:d:M:@:";
+    const char *optstring = "vf:h:u:d:M:p:@:";
     char *default_format_string = "%*_%#.%.";
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '@'),
         {"no-PG", no_argument, NULL, 1},
         {"max-split", required_argument, NULL, 'M'},
+        {"zero-pad", required_argument, NULL, 'p'},
         { NULL, 0, NULL, 0 }
     };
 
@@ -159,6 +162,16 @@ static parsed_opts_t* parse_args(int argc, char** argv)
                 retval->max_split = LONG_MAX;
             break;
         }
+        case 'p': {
+            char *end = optarg;
+            unsigned long val = strtoul(optarg, &end, 10);
+            if (*optarg == '\0' || *end != '\0' || val > 20) {
+                print_error("split", "Invalid -p argument: \"%s\"", optarg);
+                free(retval);
+                return NULL;
+            }
+            retval->zero_pad = (int) val;
+        }
         case 1:
             retval->no_pg = 1;
             break;
@@ -190,7 +203,10 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 }
 
 // Expands a output filename format string
-static char* expand_format_string(const char* format_string, const char* basename, const char* tag_val, const int file_idx, const htsFormat *format)
+static char* expand_format_string(const char* format_string,
+                                  const char* basename, const char* tag_val,
+                                  const int file_idx, const int zero_pad,
+                                  const htsFormat *format)
 {
     kstring_t str = { 0, 0, NULL };
     const char* pointer = format_string;
@@ -206,7 +222,12 @@ static char* expand_format_string(const char* format_string, const char* basenam
                 if (kputs(basename, &str) < 0) goto memfail;
                 break;
             case '#':
-                if (kputl(file_idx, &str) < 0) goto memfail;
+                if (zero_pad == 0) {
+                    if (kputl(file_idx, &str) < 0) goto memfail;
+                } else {
+                    if (ksprintf(&str, "%0*d", zero_pad, file_idx) < 0)
+                        goto memfail;
+                }
                 break;
             case '!':
                 if (kputs(tag_val, &str) < 0) goto memfail;
@@ -360,7 +381,10 @@ static khiter_t prep_sam_file(parsed_opts_t *opts, state_t *state,
     char* extension = strrchr(input_base_name, '.');
     if (extension) *extension = '\0';
 
-    new_file_name = expand_format_string(opts->output_format_string, input_base_name, tag, 0, &opts->ga.out);
+    new_file_name = expand_format_string(opts->output_format_string,
+                                         input_base_name, tag,
+                                         kh_size(state->tag_val_hash),
+                                         opts->zero_pad, &opts->ga.out);
     if (!new_file_name) {
         print_error_errno("split", "Filename creation failed");
         goto fail;
@@ -582,7 +606,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
         output_filename = expand_format_string(opts->output_format_string,
                                                input_base_name,
                                                retval->tag_vals[i], i,
-                                               &opts->ga.out);
+                                               opts->zero_pad, &opts->ga.out);
 
         if ( output_filename == NULL ) {
             cleanup_state(retval, false);
@@ -698,7 +722,13 @@ static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
                 val = bam_aux2Z(tag);
                 break;
             case 'c': case 'C': case 's': case 'S': case 'i': case 'I':
-                snprintf(number, sizeof(number), "%"PRId64, bam_aux2i(tag));
+                if (opts->zero_pad == 0) {
+                    snprintf(number, sizeof(number), "%"PRId64, bam_aux2i(tag));
+                } else {
+                    int64_t v = bam_aux2i(tag);
+                    snprintf(number, sizeof(number), "%0*"PRId64,
+                             v < 0 ? opts->zero_pad + 1 : opts->zero_pad, v);
+                }
                 val = number;
                 break;
             default:
