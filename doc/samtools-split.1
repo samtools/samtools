@@ -117,6 +117,13 @@ Using this option changes the default filename format string to "%*_%!.%.",
 so that tag values appear in the output file names.
 This can be overridden by using the \fB-f\fR option.
 .TP
+.BI "-p " NUMBER
+Pad numeric values in \fB%#\fR and \fB%!\fR format expansions to this many
+digits using leading zeros.
+For \fB%!\fR, only integer tag values will be padded.
+String tag values will be left unchanged,
+even if the value only includes digits.
+.TP
 .BI "-M,--max-split " NUM
 Limit the number of files created by the \fB-d\fR option to \fINUM\fR (default
 100).
