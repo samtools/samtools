@@ -168,7 +168,10 @@ The fields selected appear in the same order as in SAM:
 .B MAPQ
 (displayed numerically),
 .BR RNEXT ,
-.BR PNEXT .
+.BR PNEXT ,
+followed by
+.BR RLEN
+for unclipped read length.
 .IP \(ci 2
 Comma-separated 1-based positions within the alignments, in 5' to 3'
 orientation.  E.g., 5 indicates that it is the fifth base of the
@@ -340,7 +343,7 @@ mpileup command in the same order as in the document (i.e.
 The names are case sensitive. Currently, only the following fields are
 supported:
 .IP
-.B QNAME, FLAG, RNAME, POS, MAPQ, RNEXT, PNEXT
+.B QNAME, FLAG, RNAME, POS, MAPQ, RNEXT, PNEXT, RLEN
 .IP
 Anything that is not on this list is treated as a potential tag, although only
 two character tags are accepted. In the mpileup output, tag columns are

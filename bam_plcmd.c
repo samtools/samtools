@@ -175,6 +175,7 @@ int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
 
 #define MPLP_PRINT_MAPQ_CHAR (1<<11)
 #define MPLP_PRINT_QPOS  (1<<12)
+// Start of struct active_cols elements
 #define MPLP_PRINT_QNAME (1<<13)
 #define MPLP_PRINT_FLAG  (1<<14)
 #define MPLP_PRINT_RNAME (1<<15)
@@ -186,10 +187,12 @@ int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
 #define MPLP_PRINT_TLEN  (1<<21)
 #define MPLP_PRINT_SEQ   (1<<22)
 #define MPLP_PRINT_QUAL  (1<<23)
-#define MPLP_PRINT_MODS  (1<<24)
-#define MPLP_PRINT_QPOS5 (1<<25)
+#define MPLP_PRINT_RLEN  (1<<24)
+// Must occur after struct active_cols element list
+#define MPLP_PRINT_MODS  (1<<25)
+#define MPLP_PRINT_QPOS5 (1<<26)
 
-#define MPLP_PRINT_LAST  (1<<26) // terminator for loop
+#define MPLP_PRINT_LAST  (1<<27) // terminator for loop
 
 #define MPLP_MAX_DEPTH 8000
 #define MPLP_MAX_INDEL_DEPTH 250
@@ -241,11 +244,13 @@ static int build_auxlist(mplp_conf_t *conf, char *optstring) {
         int supported;
     };
 
-    const struct active_cols colnames[11] = {
-            {"QNAME", 1}, {"FLAG", 1}, {"RNAME", 1}, {"POS", 1}, {"MAPQ", 1}, {"CIGAR", 0}, {"RNEXT", 1}, {"PNEXT", 1}, {"TLEN", 0}, {"SEQ", 0}, {"QUAL", 0}
+    const struct active_cols colnames[12] = {
+            {"QNAME", 1}, {"FLAG", 1}, {"RNAME", 1}, {"POS", 1}, {"MAPQ", 1},
+            {"CIGAR", 0}, {"RNEXT", 1}, {"PNEXT", 1}, {"TLEN", 0}, {"SEQ", 0},
+            {"QUAL", 0},  {"RLEN", 1},
     };
 
-    int i, f = MPLP_PRINT_QNAME, colno = 11;
+    int i, f = MPLP_PRINT_QNAME, colno = sizeof(colnames)/sizeof(*colnames);
     for (i = 0; i < colno; i++, f <<= 1)
         if (colnames[i].supported)
             khash_str2int_set(colhash, colnames[i].name, f);
@@ -730,6 +735,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                                 break;
                             case MPLP_PRINT_PNEXT:
                                 fprintf(pileup_fp, "%"PRId64, (int64_t) p->b->core.mpos + 1);
+                                break;
+                            case MPLP_PRINT_RLEN:
+                                fprintf(pileup_fp, "%d", p->b->core.l_qseq);
                                 break;
                             }
                         }
