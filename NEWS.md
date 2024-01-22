@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.19.1 (22nd January 2024)
+----------------------------------
+
 Bug Fixes:
 
 * Fixed a possible array bounds violation when looking up regions in
