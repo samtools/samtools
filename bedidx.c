@@ -1,7 +1,7 @@
 /*  bedidx.c -- BED file indexing.
 
     Copyright (C) 2011 Broad Institute.
-    Copyright (C) 2014, 2017-2019 Genome Research Ltd.
+    Copyright (C) 2014, 2017-2019, 2024 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -58,6 +58,7 @@ typedef struct {
     hts_pair_pos_t *a;
     int *idx;
     int filter;
+    hts_pos_t max_idx;
 } bed_reglist_t;
 
 #include "htslib/khash.h"
@@ -96,63 +97,66 @@ static void bed_print(void *reg_hash) {
 }
 #endif
 
-static int *bed_index_core(int n, hts_pair_pos_t *a)
+static int bed_index_core(bed_reglist_t *regions)
 {
-    int i, j, l, *idx, *new_idx;
-    l = 0; idx = 0;
-    for (i = 0; i < n; ++i) {
-        hts_pos_t beg, end;
-        beg = a[i].beg >> LIDX_SHIFT; end = a[i].end >> LIDX_SHIFT;
-        if (l < end + 1) {
-            int old_l = l;
-            l = end + 1;
-            kroundup32(l);
-            new_idx = realloc(idx, l * sizeof(*idx));
-            if (!new_idx) {
-                free(idx);
-                return NULL;
-            }
-            idx = new_idx;
+    int i, *idx = NULL;
+    size_t idx_size = 0;
+    hts_pos_t last_end = 0;
+    hts_pair_pos_t *a = regions->a;
 
-            for (j = old_l; j < l; ++j)
-                idx[j] = -1;
+    // Construct a linear index on regions, to allow rapid lookup of
+    // where to start searching for matches
+    for (i = 0; i < regions->n; ++i) {
+        hts_pos_t beg = a[i].beg >= 0 ? a[i].beg >> LIDX_SHIFT : 0;
+        hts_pos_t end = a[i].end >= 0 ? a[i].end >> LIDX_SHIFT : 0;
+        hts_pos_t j;
+        if (end + 1 >= SIZE_MAX / sizeof(*idx)) { // Ensure no overflow
+            errno = ENOMEM;
+            free(idx);
+            return -1;
         }
-
-        for (j = beg; j < end+1; ++j)
-            if (idx[j] < 0)
-                idx[j] = i;
+        if (hts_resize(int, (size_t) end + 1, &idx_size, &idx, 0) < 0) {
+            free(idx);
+            return -1;
+        }
+        // Fill any gap prior to this region by pointing to the previous one
+        for (j = last_end; j < beg; j++)
+            idx[j] = i > 0 ? i - 1 : 0;
+        // Fill from max(last_end, beg) to `end` (inclusive) with current region
+        for (; j <= end; j++)
+            idx[j] = i;
+        // Remember where finished for the next gap
+        last_end = end + 1;
     }
-    return idx;
+    regions->idx = idx;
+    regions->max_idx = last_end;
+    return 0;
 }
 
-static void bed_index(void *_h)
+static int bed_index(reghash_t *h)
 {
-    reghash_t *h = (reghash_t*)_h;
     khint_t k;
     for (k = 0; k < kh_end(h); ++k) {
         if (kh_exist(h, k)) {
             bed_reglist_t *p = &kh_val(h, k);
-            if (p->idx) free(p->idx);
+            if (p->idx) {
+                free(p->idx);
+                p->idx = NULL;
+            }
             ks_introsort(hts_pair_pos_t, p->n, p->a);
-            p->idx = bed_index_core(p->n, p->a);
+            if (!bed_index_core(p)) {
+                return -1;
+            }
         }
     }
+    return 0;
 }
 
-static int bed_minoff(const bed_reglist_t *p, hts_pos_t beg, hts_pos_t end) {
-    int i, min_off=0;
+static int bed_minoff(const bed_reglist_t *p, hts_pos_t beg) {
+    int min_off=0;
 
-    if (p && p->idx) {
-        min_off = (beg>>LIDX_SHIFT >= p->n)? p->idx[p->n-1] : p->idx[beg>>LIDX_SHIFT];
-        if (min_off < 0) { // TODO: this block can be improved, but speed should not matter too much here
-            hts_pos_t n = beg>>LIDX_SHIFT;
-            if (n > p->n)
-                n = p->n;
-            for (i = n - 1; i >= 0; --i)
-                if (p->idx[i] >= 0)
-                    break;
-            min_off = i >= 0? p->idx[i] : 0;
-        }
+    if (p && p->idx && p->max_idx > 0 && beg >= 0) {
+        min_off = (beg>>LIDX_SHIFT >= p->max_idx)? p->idx[p->max_idx-1] : p->idx[beg>>LIDX_SHIFT];
     }
 
     return min_off;
@@ -162,7 +166,7 @@ static int bed_overlap_core(const bed_reglist_t *p, hts_pos_t beg, hts_pos_t end
 {
     int i, min_off;
     if (p->n == 0) return 0;
-    min_off = bed_minoff(p, beg, end);
+    min_off = bed_minoff(p, beg);
 
     for (i = min_off; i < p->n; ++i) {
         if (p->a[i].beg >= end) break; // out of range; no need to proceed
@@ -259,7 +263,7 @@ void *bed_read(const char *fn)
     if (NULL == h) return NULL;
     // read the list
     fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
-    if (fp == 0) return 0;
+    if (fp == 0) goto fail;
     ks = ks_init(fp);
     if (NULL == ks) goto fail;  // In case ks_init ever gets error checking...
     int ks_len;
@@ -341,7 +345,8 @@ void *bed_read(const char *fn)
     }
     ks_destroy(ks);
     free(str.s);
-    bed_index(h);
+    if (!bed_index(h))
+        goto fail;
     //bed_unify(h);
     return h;
  fail:
@@ -457,7 +462,7 @@ static void *bed_filter(void *reg_hash, void *tmp_hash) {
             beg = q->a[i].beg;
             end = q->a[i].end;
 
-            min_off = bed_minoff(p, beg, end);
+            min_off = bed_minoff(p, beg);
             for (j = min_off; j < p->n; ++j) {
                 if (p->a[j].beg >= end) break; // out of range; no need to proceed
                 if (p->a[j].end > beg && p->a[j].beg < end) {
@@ -544,18 +549,33 @@ void *bed_hash_regions(void *reg_hash, char **regs, int first, int last, int *op
     }
 
     if (!(*op)) {
-        bed_index(t);
+        if (!bed_index(t))
+            goto fail;
         bed_unify(t);
-        h = bed_filter(h, t);
+        if (bed_filter(h, t) == NULL)
+            goto fail;
         bed_destroy(t);
+        t = NULL;
     }
 
     if (h) {
-        bed_index(h);
+        if (!bed_index(h))
+            goto fail;
         bed_unify(h);
     }
 
     return h;
+
+ fail:
+    // Clean up whichever hash we made
+    if (reg_hash) {
+        if (t)
+            bed_destroy(t);
+    } else {
+        if (h)
+            bed_destroy(h);
+    }
+    return NULL;
 }
 
 const char* bed_get(void *reg_hash, int i, int filter) {

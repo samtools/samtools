@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-stats 1 "12 December 2023" "samtools-1.19" "Bioinformatics tools"
+.TH samtools-stats 1 "22 January 2024" "samtools-1.19.1" "Bioinformatics tools"
 .SH NAME
 samtools stats \- produces comprehensive statistics from alignment file
 .\"
@@ -74,6 +74,7 @@ BCC	ACGT content per cycle for BC barcode
 CRC	ACGT content per cycle for CR barcode
 OXC	ACGT content per cycle for OX barcode
 RXC	ACGT content per cycle for RX barcode
+MPC	Mismatch distribution per cycle
 QTQ	Quality distribution for BC barcode
 CYQ	Quality distribution for CR barcode
 BZQ	Quality distribution for OX barcode
@@ -88,6 +89,10 @@ IC	Indels per cycle
 COV	Coverage (depth) distribution
 GCD	GC-depth
 .TE
+
+The "cycle" terminology used here originates from the Illumina
+instruments, but it is interpreted more generally as the Nth base
+reported in the original read orientation (starting from 1).
 
 Not all sections will be reported as some depend on the data being
 coordinate sorted while others are only present when specific barcode
@@ -309,6 +314,17 @@ will be identical.
 FTC and LTC report the total numbers of nucleotides for first and last
 fragments, respectively. The columns are the raw counters for A, C, G,
 T and N bases.
+
+MPC reports the number of mismatches per cycle and per quality value.
+The MPC statistics are only included when a reference is specified via
+the \fB-r\fR option.  There is one row per cycle number.  Each row
+includes the cycle number, the number of N bases (not counted in the
+per-qual columns), followed by one column per quality value (starting
+at zero and incrementing by one each time) listing the number of non-N
+mismatches with that quality.  A mismatch is defined as an ACGT
+sequence base mismatching an ACGT reference base.  Ambiguity codes are
+ignored (except for sequence N as mentioned above, which is counted
+even when the reference is also N).
 
 BCC, CRC, OXC and RXC are the barcode equivalent of GCC, showing
 nucleotide content for the barcode tags BC, CR, OX and RX respectively.

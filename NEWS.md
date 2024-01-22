@@ -1,3 +1,28 @@
+Release 1.19.1 (22nd January 2024)
+----------------------------------
+
+Bug Fixes:
+
+* Fixed a possible array bounds violation when looking up regions in
+  a BED file (e.g. using `samtools view -L`).  This could lead to crashes
+  or the return of incomplete results if the BED file contained a
+  large number of entries all referencing low positions on a chromosome.
+  (PR #1962, fixes #1961.  Reported by geertvandeweyer)
+
+* Fixed a crash in samtools stats that occurred when trying to clean up
+  after it was unable to open a CRAM reference file.
+  (PR #1957, fixes crash reported in samtools/htslib#1723.  Reported by
+  Alex Leonard)
+
+Documentation:
+
+* Fixed inverted logic in the `samtools consensus --show-del` manual page
+  description.
+  (PR #1955, fixes #1951.  Reported by Mikhail Schelkunov)
+
+* Added a description of the MPC section to the `samtools stats` manual page.
+  (PR #1963, fixes #1954.  Reported by litun-fkby)
+
 Release 1.19 (12th December 2023)
 ---------------------------------
 
