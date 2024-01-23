@@ -2233,6 +2233,7 @@ sub test_view
     my $bed2 = "$$opts{path}/dat/view.001.02.bed";
     my $bed3 = "$$opts{path}/dat/view.002.01.bed";
     my $bed4 = "$$opts{path}/dat/view.002.02.bed";
+    my $bed5 = "$$opts{path}/dat/view.001.03.bed"; # unsorted
     my $bed1reg = [['ref1', 11, 24], ['ref1', 45, 45], ['ref2', 17, 17]];
 
     my @region_tests = (
@@ -2276,6 +2277,9 @@ sub test_view
                       ['Z', 35, 35], ['Z', 40, 50]]}, ['-L', $bed4], []],
         ['bed1', 1, { region => $bed1reg }, ['-L', $bed1], []],
         ['bed2', 1, { region => [['ref1', 6, 20]] }, ['-L', $bed2], []],
+        ['bed5', 1, { region => [['ref1', 11, 24], ['ref1', 45, 45],
+                                 ['ref2', 12, 12], ['ref2', 47, 47]]},
+         ['-L', $bed5], []],
 
         # BED file plus region specification.
 
