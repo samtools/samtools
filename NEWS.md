@@ -1,6 +1,13 @@
 Release a.b
 -----------
 
+Bug Fixes:
+
+* Fixed a regression in 1.19.1 that broke BED filtering for inputs where
+  the region start positions for the same reference were not sorted in
+  ascending order.
+  (PR #1975, fixes #1974.  Reported by Anže Starič)
+
 Release 1.19.1 (22nd January 2024)
 ----------------------------------
 
