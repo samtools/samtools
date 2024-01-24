@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.19.2 (24th January 2024)
+----------------------------------
+
 Bug Fixes:
 
 * Fixed a regression in 1.19.1 that broke BED filtering for inputs where
