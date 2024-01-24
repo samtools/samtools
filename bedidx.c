@@ -144,7 +144,7 @@ static int bed_index(reghash_t *h)
                 p->idx = NULL;
             }
             ks_introsort(hts_pair_pos_t, p->n, p->a);
-            if (!bed_index_core(p)) {
+            if (bed_index_core(p) != 0) {
                 return -1;
             }
         }
@@ -345,7 +345,7 @@ void *bed_read(const char *fn)
     }
     ks_destroy(ks);
     free(str.s);
-    if (!bed_index(h))
+    if (bed_index(h) != 0)
         goto fail;
     //bed_unify(h);
     return h;
@@ -549,7 +549,7 @@ void *bed_hash_regions(void *reg_hash, char **regs, int first, int last, int *op
     }
 
     if (!(*op)) {
-        if (!bed_index(t))
+        if (bed_index(t) != 0)
             goto fail;
         bed_unify(t);
         if (bed_filter(h, t) == NULL)
@@ -559,7 +559,7 @@ void *bed_hash_regions(void *reg_hash, char **regs, int first, int last, int *op
     }
 
     if (h) {
-        if (!bed_index(h))
+        if (bed_index(h) != 0)
             goto fail;
         bed_unify(h);
     }
