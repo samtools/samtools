@@ -40,7 +40,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
-#define DEFAULT_DEPTH 64000
+#define DEFAULT_DEPTH INT_MAX
 
 typedef struct {
     htsFile *fp;
@@ -85,12 +85,13 @@ int main_bedcov(int argc, char *argv[])
     const bam_pileup1_t **plp;
     int usage = 0, has_index_file = 0;
     uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP);
-    int tflags = 0, min_depth = -1;
+    int tflags = 0, min_depth = -1, max_depth = DEFAULT_DEPTH;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         {"min-MQ", required_argument, NULL, 'Q'},
         {"min-mq", required_argument, NULL, 'Q'},
+        {"max-depth", required_argument, NULL, 'd'+1000},
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
         { NULL, 0, NULL, 0 }
     };
@@ -118,6 +119,7 @@ int main_bedcov(int argc, char *argv[])
             break;
         case 'j': skip_DN = 1; break;
         case 'd': min_depth = atoi(optarg); break;
+        case 'd'+1000: max_depth = atoi(optarg); break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
         case '?': usage = 1; break;
@@ -133,7 +135,8 @@ int main_bedcov(int argc, char *argv[])
         fprintf(stderr, "      -G <flags>          add the specified flags to the set used to filter out reads\n"
                         "                          The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704\n");
         fprintf(stderr, "      -j                  do not include deletions (D) and ref skips (N) in bedcov computation\n");
-        fprintf(stderr, "      -d <int>            depth threshold. Number of reference bases with coverage above and"
+        fprintf(stderr, "      --max-depth <int>   sets the maximum depth used in the mpileup algorithm\n");
+        fprintf(stderr, "      -d <int>            depth threshold. Number of reference bases with coverage above and\n"
                         "                          including this value will be displayed in a separate column\n");
         fprintf(stderr, "      -c                  add an additional column showing read count\n");
         sam_global_opt_help(stderr, "-.--.--.");
@@ -220,10 +223,11 @@ int main_bedcov(int argc, char *argv[])
         }
 
         mplp = bam_mplp_init(n, read_bam, (void**)aux);
-        if (min_depth > DEFAULT_DEPTH)
+        if (min_depth > max_depth)
+            // NB: never happens given current DEFAULT_DEPTH of INT_MAX
             bam_mplp_set_maxcnt(mplp, min_depth);
         else
-            bam_mplp_set_maxcnt(mplp, DEFAULT_DEPTH);
+            bam_mplp_set_maxcnt(mplp, max_depth);
 
         memset(cnt, 0, sizeof(*cnt) * n);
         if (min_depth >= 0) memset(pcov, 0, sizeof(*pcov) * n);
