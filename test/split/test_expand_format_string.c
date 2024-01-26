@@ -29,29 +29,72 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <unistd.h>
 
-void setup_test_1(sam_hdr_t** hdr_in)
-{
-    *hdr_in = sam_hdr_init();
-    const char *test1 =
-    "@HD\tVN:1.4\n"
-    "@SQ\tSN:blah\n"
-    "@RG\tID:fish\n";
-    sam_hdr_add_lines(*hdr_in, test1, 0);
+typedef struct {
+    char *tempfname;
+    kstring_t res;
+    int verbose;
+    int test_num;
+    int success;
+    int failure;
+} TestState;
+
+void run_test(TestState *state, const char* format_string, const char* basename,
+              const char* rg_id, const int rg_idx, const char *expected) {
+    FILE* check = NULL;
+
+    ++state->test_num;
+    if (state->verbose) printf("BEGIN test %d\n", state->test_num);
+    if (state->verbose > 1) {
+        printf("format_string:%s\n"
+               "basename:%s\n"
+               "rg_id:%s\n"
+               "rg_idx:%d\n", format_string, basename, rg_id, rg_idx);
+    }
+    if (state->verbose) printf("RUN test %d\n", state->test_num);
+
+    // test
+    xfreopen(state->tempfname, "w", stderr); // Redirect stderr to pipe
+    char* output = expand_format_string(format_string, basename,
+                                        rg_id, rg_idx, 0, NULL);
+    fclose(stderr);
+
+    if (state->verbose) printf("END RUN test %d\n", state->test_num);
+    if (state->verbose > 1) {
+        printf("format_string:%s\n"
+               "basename:%s\n"
+               "rg_id:%s\n"
+               "rg_idx:%d\n", format_string, basename, rg_id, rg_idx);
+    }
+
+    // check result
+    state->res.l = 0;
+    check = fopen(state->tempfname, "r");
+    if (check && output != NULL && !strcmp(output, expected)
+        && kgetline(&state->res, (kgets_func *)fgets, check) < 0
+        && (feof(check) || state->res.l == 0)) {
+        ++state->success;
+    } else {
+        ++state->failure;
+        if (state->verbose) printf("FAIL test %d\n", state->test_num);
+    }
+    fclose(check);
+
+    // teardown
+    free(output);
+    if (state->verbose) printf("END test %d\n", state->test_num);
+    return;
 }
 
 int main(int argc, char**argv)
 {
     // test state
-    const int NUM_TESTS = 1;
-    int verbose = 0;
-    int success = 0;
-    int failure = 0;
+    TestState state = { NULL, KS_INITIALIZE, 0, 0, 0, 0};
 
     int getopt_char;
     while ((getopt_char = getopt(argc, argv, "v")) != -1) {
         switch (getopt_char) {
             case 'v':
-                ++verbose;
+                ++state.verbose;
                 break;
             default:
                 printf(
@@ -64,61 +107,19 @@ int main(int argc, char**argv)
 
 
     // Setup stderr redirect
-    kstring_t res = { 0, 0, NULL };
     FILE* orig_stderr = fdopen(dup(STDERR_FILENO), "a"); // Save stderr
-    char* tempfname = (optind < argc)? argv[optind] : "test_expand_format_string.tmp";
-    FILE* check = NULL;
+    state.tempfname = (optind < argc)? argv[optind] : "test_expand_format_string.tmp";
 
-    // setup
-    if (verbose) printf("BEGIN test 1\n");  // default format string test
-    const char* format_string_1 = "%*_%#.bam";
-    const char* basename_1 = "basename";
-    const char* rg_id_1 = "1#2.3";
-    const int rg_idx_1 = 4;
-    if (verbose > 1) {
-        printf("format_string:%s\n"
-               "basename:%s\n"
-               "rg_id:%s\n"
-               "rg_idx:%d\n", format_string_1, basename_1, rg_id_1, rg_idx_1);
-    }
-    if (verbose) printf("RUN test 1\n");
-
-    // test
-    xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
-    char* output_1 = expand_format_string(format_string_1, basename_1, rg_id_1, rg_idx_1, 0, NULL);
-    fclose(stderr);
-
-    if (verbose) printf("END RUN test 1\n");
-    if (verbose > 1) {
-        printf("format_string:%s\n"
-               "basename:%s\n"
-               "rg_id:%s\n"
-               "rg_idx:%d\n", format_string_1, basename_1, rg_id_1, rg_idx_1);
-    }
-
-    // check result
-    res.l = 0;
-    check = fopen(tempfname, "r");
-    if (output_1 != NULL && !strcmp(output_1, "basename_4.bam")
-        && kgetline(&res, (kgets_func *)fgets, check) < 0
-        && (feof(check) || res.l == 0)) {
-        ++success;
-    } else {
-        ++failure;
-        if (verbose) printf("FAIL test 1\n");
-    }
-    fclose(check);
-
-    // teardown
-    free(output_1);
-    if (verbose) printf("END test 1\n");
+    // default format string test
+    run_test(&state, "%*_%#.bam", "basename", "1#2.3", 4, "basename_4.bam");
 
     // Cleanup test harness
-    free(res.s);
-    remove(tempfname);
-    if (failure > 0)
-        fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
+    free(state.res.s);
+    remove(state.tempfname);
+    if (state.failure > 0)
+        fprintf(orig_stderr, "%d failures %d successes\n",
+                state.failure, state.success);
     fclose(orig_stderr);
 
-    return (success == NUM_TESTS)? EXIT_SUCCESS : EXIT_FAILURE;
+    return (state.success == state.test_num)? EXIT_SUCCESS : EXIT_FAILURE;
 }
