@@ -1,6 +1,6 @@
 /*  test/split/test_expand_format_string.c -- split format string test cases.
 
-    Copyright (C) 2014-2015 Genome Research Ltd.
+    Copyright (C) 2014-2015,2024 Genome Research Ltd.
 
     Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
@@ -39,7 +39,8 @@ typedef struct {
 } TestState;
 
 void run_test(TestState *state, const char* format_string, const char* basename,
-              const char* rg_id, const int rg_idx, const char *expected) {
+              const char* rg_id, const int rg_idx, const int padding,
+              const htsFormat *format, const char *expected) {
     FILE* check = NULL;
 
     ++state->test_num;
@@ -55,11 +56,15 @@ void run_test(TestState *state, const char* format_string, const char* basename,
     // test
     xfreopen(state->tempfname, "w", stderr); // Redirect stderr to pipe
     char* output = expand_format_string(format_string, basename,
-                                        rg_id, rg_idx, 0, NULL);
+                                        rg_id, rg_idx, padding, format);
     fclose(stderr);
 
     if (state->verbose) printf("END RUN test %d\n", state->test_num);
     if (state->verbose > 1) {
+        printf("got: \"%s\" expected: \"%s\"\n", output ? output : "(null)",
+               expected ? expected : "(null)");
+    }
+    if (state->verbose > 2) {
         printf("format_string:%s\n"
                "basename:%s\n"
                "rg_id:%s\n"
@@ -69,13 +74,26 @@ void run_test(TestState *state, const char* format_string, const char* basename,
     // check result
     state->res.l = 0;
     check = fopen(state->tempfname, "r");
-    if (check && output != NULL && !strcmp(output, expected)
-        && kgetline(&state->res, (kgets_func *)fgets, check) < 0
-        && (feof(check) || state->res.l == 0)) {
-        ++state->success;
+    if (expected != NULL) {
+        // Good input, should produce a file name
+        if (check && output != NULL && !strcmp(output, expected)
+            && kgetline(&state->res, (kgets_func *)fgets, check) < 0
+            && (feof(check) || state->res.l == 0)) {
+            ++state->success;
+        } else {
+            ++state->failure;
+            if (state->verbose) printf("FAIL test %d\n", state->test_num);
+        }
     } else {
-        ++state->failure;
-        if (state->verbose) printf("FAIL test %d\n", state->test_num);
+        // Bad input, should return NULL and print an error message
+        if (check && output == NULL
+            && kgetline(&state->res, (kgets_func *)fgets, check) == 0
+            && state->res.l > 0) {
+            ++state->success;
+        } else {
+            ++state->failure;
+            if (state->verbose) printf("FAIL test %d\n", state->test_num);
+        }
     }
     fclose(check);
 
@@ -89,6 +107,9 @@ int main(int argc, char**argv)
 {
     // test state
     TestState state = { NULL, KS_INITIALIZE, 0, 0, 0, 0};
+    const static htsFormat sam_fmt  = { sequence_data, sam  };
+    const static htsFormat bam_fmt  = { sequence_data, bam  };
+    const static htsFormat cram_fmt = { sequence_data, cram };
 
     int getopt_char;
     while ((getopt_char = getopt(argc, argv, "v")) != -1) {
@@ -111,7 +132,35 @@ int main(int argc, char**argv)
     state.tempfname = (optind < argc)? argv[optind] : "test_expand_format_string.tmp";
 
     // default format string test
-    run_test(&state, "%*_%#.bam", "basename", "1#2.3", 4, "basename_4.bam");
+    run_test(&state, "%*_%#.%.", "basename", "1#2.3", 4, 0, &bam_fmt,
+             "basename_4.bam");
+
+    // default for non-RG tags
+    run_test(&state, "%*_%!.%.", "basename", "1#2.3", 4, 0, &bam_fmt,
+             "basename_1#2.3.bam");
+
+    // alternate file types
+    run_test(&state, "%*_%#.%.", "basename", "1#2.3", 4, 0, &sam_fmt,
+             "basename_4.sam");
+    run_test(&state, "%*_%#.%.", "basename", "1#2.3", 4, 0, &cram_fmt,
+             "basename_4.cram");
+
+    // zero padding
+    run_test(&state, "%*_%#.%.", "basename", "1#2.3", 4, 5, &bam_fmt,
+             "basename_00004.bam");
+
+    // percent sign
+    run_test(&state, "%%%*_%#.%.%%", "basename", "1#2.3", 4, 0, &bam_fmt,
+             "%basename_4.bam%");
+
+    // Bad input - single percent sign at end
+    run_test(&state, "%%%*_%#.%.%", "basename", "1#2.3", 4, 0, &bam_fmt,
+             NULL);
+
+    // Bad input - invalid format character
+    run_test(&state, "%s_%#.%.", "basename", "1#2.3", 4, 0, &bam_fmt,
+             NULL);
+
 
     // Cleanup test harness
     free(state.res.s);
