@@ -44,7 +44,8 @@ AOBJS=      bam_aux.o bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
             bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o \
             bam_ampliconclip.o amplicon_stats.o bam_import.o bam_samples.o \
-            bam_consensus.o consensus_pileup.o reference.o reset.o cram_size.o
+            bam_consensus.o consensus_pileup.o reference.o reset.o cram_size.o \
+	    bam_mergealign.o
 LZ4OBJS  =  $(LZ4DIR)/lz4.o
 
 prefix      = /usr/local
@@ -214,7 +215,8 @@ bam_markdup.o: bam_markdup.c config.h $(htslib_thread_pool_h) $(htslib_sam_h) $(
 tmp_file.o: tmp_file.c config.h $(tmp_file_h) $(htslib_sam_h)
 bam_ampliconclip.o: bam_ampliconclip.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_hts_h) $(htslib_hfile_h) $(htslib_kstring_h) $(htslib_sam_h) $(samtools_h) bam_ampliconclip.h
 bam_samples.o: bam_samples.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_kseq_h) $(samtools_h)
-reset.o: reset.c $(samtools_h) $(htslib_sam_h) $(sam_opts_h) $(htslib_thread_pool_h) $(htslib_khash_h)
+reset.o: reset.c config.h $(samtools_h) $(htslib_sam_h) $(sam_opts_h) $(htslib_thread_pool_h) $(htslib_khash_h) $(sam_utils_h)
+bam_mergealign.o: bam_mergealign.c $(samtools_h) $(htslib_sam_h) $(sam_opts_h) $(htslib_thread_pool_h)
 
 # Maintainer source code checks
 # - copyright boilerplate presence
