@@ -1,6 +1,6 @@
 /*  stats.c -- This is the former bamcheck integrated into samtools/htslib.
 
-    Copyright (C) 2020-2021 Genome Research Ltd.
+    Copyright (C) 2020-2021, 2024 Genome Research Ltd.
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
@@ -1652,15 +1652,34 @@ int main_ampliconstats(int argc, char **argv) {
         {"single-ref", no_argument, NULL, 'S'},
         {NULL, 0, NULL, 0}
     };
-    int opt;
+    int opt, tmp_flag;
 
     while ( (opt=getopt_long(argc,argv,"?hf:F:@:p:m:d:sa:l:t:o:c:b:D:S",loptions,NULL))>0 ) {
         switch (opt) {
-        case 'f': args.flag_require = bam_str2flag(optarg); break;
+        case 'f':
+            tmp_flag = bam_str2flag(optarg);
+
+            if (tmp_flag < 0) {
+                print_error("ampliconstats", "Unknown flag '%s'\n", optarg);
+                return 1;
+            }
+
+            args.flag_require = tmp_flag;
+            break;
+
         case 'F':
+            tmp_flag = bam_str2flag(optarg);
+
             if (args.flag_filter & 0x10000)
                 args.flag_filter = 0; // strip default on first -F usage
-            args.flag_filter |= bam_str2flag(optarg); break;
+
+            if (tmp_flag < 0) {
+                print_error("ampliconstats", "Unknown flag '%s'\n", optarg);
+                return 1;
+            }
+
+            args.flag_filter |= tmp_flag;
+            break;
 
         case 'm': args.max_delta = atoi(optarg); break; // margin
         case 'D': args.depth_bin = atof(optarg); break; // depth bin fraction
