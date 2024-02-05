@@ -472,6 +472,94 @@ int bam_sanitize(sam_hdr_t *h, bam1_t *b, int flags) {
     return 0;
 }
 
+// Ensure the b[] array is at least n.
+// Returns 0 on success,
+//        -1 on failure
+static int grow_b_array(bam1_t **b, int *ba, int n) {
+    if (n < *ba)
+        return 0;
+
+    bam1_t *bnew = realloc(*b, (n+10) * sizeof(**b));
+    if (!bnew)
+        return -1;
+    *b = bnew;
+
+    // bam_init1 equivalent
+    int i;
+    for (i = *ba; i < n; i++)
+        memset(&(*b)[i], 0, sizeof(bam1_t));
+
+    *b = bnew;
+    *ba = n;
+
+    return 0;
+}
+
+// We have b[0]..b[bn-1] entries all from the same template (qname)
+typedef struct {
+    bam1_t *b;
+    int n, ba;  // number used and number allocated
+    int b_next; // b[b_next] for start of next set, -1 if unset
+    int eof;    // marker for having seen eof
+} bam_set;
+
+// Fetches a new batch of BAM records all containing the same name.
+// NB: we cache the last (non-matching) name in b[n], so we can use it to
+// start the next batch.
+// Returns the number of records on success,
+//         <0 on failure or EOF (sam_read1 return vals)
+static int next_template(samFile *in, sam_hdr_t *header, bam_set *bs,
+                         int sanitize_flags) {
+    int result;
+
+    if (bs->eof)
+        return -1;
+
+    // First time through, prime the template name
+    if (bs->b_next < 0) {
+        if (grow_b_array(&bs->b, &bs->ba, 1) < 0)
+            return -2;
+        result = sam_read1(in, header, &bs->b[0]);
+        if (result < 0)
+            return result;
+        if (bam_sanitize(header, &bs->b[0], sanitize_flags) < 0)
+            return -2;
+    } else {
+        // Otherwise use the previous template name read
+        bam1_t btmp = bs->b[0];
+        bs->b[0] = bs->b[bs->b_next];
+        bs->b[bs->b_next] = btmp; // For ->{,l_,m_}data
+    }
+    bs->n = 1;
+
+    // Now keep reading until we find a read that mismatches or we hit eof.
+    char *name = bam_get_qname(&bs->b[0]);
+    for (;;) {
+        if (grow_b_array(&bs->b, &bs->ba, bs->n+1) < 0)
+            return -2;
+
+        result = sam_read1(in, header, &bs->b[bs->n]);
+        if (result < -1)
+            return result;
+        if (bam_sanitize(header, &bs->b[0], sanitize_flags) < 0)
+            return -2;
+
+        if (result < 0) {
+            bs->eof = 1;
+            bs->b_next = -1;
+            break;
+        } else {
+            bs->b_next = bs->n;
+            if (strcmp(name, bam_get_qname(&bs->b[bs->n])) != 0)
+                break;
+        }
+
+        bs->n++;
+    }
+
+    return bs->n;
+}
+
 // currently, this function ONLY works if each read has one hit
 static int bam_mating_core(samFile *in, samFile *out, int remove_reads,
                            int proper_pair_check, int add_ct,
@@ -479,10 +567,9 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads,
                            int sanitize_flags)
 {
     sam_hdr_t *header;
-    bam1_t *b[2] = { NULL, NULL };
-    int curr, has_prev, result;
-    hts_pos_t pre_end = 0, cur_end = 0;
+    int result, n;
     kstring_t str = KS_INITIALIZE;
+    bam_set bs = {NULL, 0, 0, -1, 0};
 
     header = sam_hdr_read(in);
     if (header == NULL) {
@@ -506,101 +593,114 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads,
 
     if (sam_hdr_write(out, header) < 0) goto write_fail;
 
-    b[0] = bam_init1();
-    b[1] = bam_init1();
-    curr = 0; has_prev = 0;
-    while ((result = sam_read1(in, header, b[curr])) >= 0) {
-        bam1_t *cur = b[curr], *pre = b[1-curr];
-        if (bam_sanitize(header, cur, sanitize_flags) < 0)
-            goto fail;
-        if (cur->core.flag & BAM_FSECONDARY)
-        {
-            if ( !remove_reads ) {
-                if (sam_write1(out, header, cur) < 0) goto write_fail;
+    // Iterate template by template fetching bs->n records at a time
+    while ((result = next_template(in, header, &bs, sanitize_flags)) >= 0) {
+        bam1_t *cur = NULL, *pre = NULL;
+        int prev = -1, curr = -1;
+        hts_pos_t pre_end = 0, cur_end = 0;
+
+        // Find and fix up primary alignments
+        for (n = 0; n < bs.n; n++) {
+            if (bs.b[n].core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY))
+                continue;
+
+            if (!pre) {
+                pre = &bs.b[prev = n];
+                pre_end = (pre->core.flag & BAM_FUNMAP) == 0
+                    ? bam_endpos(pre) : 0;
+                continue;
             }
-            continue; // skip secondary alignments
-        }
-        if (cur->core.flag & BAM_FSUPPLEMENTARY)
-        {
-            if (sam_write1(out, header, cur) < 0) goto write_fail;
-            continue; // pass supplementary alignments through unchanged (TODO:make them match read they came from)
-        }
-        if ((cur->core.flag&BAM_FUNMAP) == 0) // If mapped calculate end
-        {
-            cur_end = bam_endpos(cur);
-        }
 
-        if (has_prev) { // do we have a pair of reads to examine?
-            if (strcmp(bam_get_qname(cur), bam_get_qname(pre)) == 0) { // identical pair name
-                pre->core.flag |= BAM_FPAIRED;
-                cur->core.flag |= BAM_FPAIRED;
-                if (sync_mate(pre, cur)) goto fail;
+            // Note, more than 2 primary alignments will use 'curr' as last
+            cur = &bs.b[curr = n];
+            cur_end = (cur->core.flag & BAM_FUNMAP) == 0
+                ? bam_endpos(cur) : 0;
 
-                if (pre->core.tid == cur->core.tid && !(cur->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))
-                    && !(pre->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))) // if safe set TLEN/ISIZE
-                {
-                    hts_pos_t cur5, pre5;
-                    cur5 = (cur->core.flag&BAM_FREVERSE)? cur_end : cur->core.pos;
-                    pre5 = (pre->core.flag&BAM_FREVERSE)? pre_end : pre->core.pos;
-                    cur->core.isize = pre5 - cur5; pre->core.isize = cur5 - pre5;
-                } else cur->core.isize = pre->core.isize = 0;
-                if (add_ct) bam_template_cigar(pre, cur, &str);
-                // TODO: Add code to properly check if read is in a proper pair based on ISIZE distribution
-                if (proper_pair_check && !plausibly_properly_paired(pre,cur)) {
-                    pre->core.flag &= ~BAM_FPROPER_PAIR;
-                    cur->core.flag &= ~BAM_FPROPER_PAIR;
-                }
+            pre->core.flag |= BAM_FPAIRED;
+            cur->core.flag |= BAM_FPAIRED;
+            if (sync_mate(pre, cur))
+                goto fail;
 
-                if (do_mate_scoring) {
-                    if ((add_mate_score(pre, cur) == -1) || (add_mate_score(cur, pre) == -1)) {
-                        fprintf(stderr, "[bam_mating_core] ERROR: unable to add mate score.\n");
-                        goto fail;
-                    }
-                }
+            // If safe set TLEN/ISIZE
+            if (pre->core.tid == cur->core.tid
+                && !(cur->core.flag & (BAM_FUNMAP | BAM_FMUNMAP))
+                && !(pre->core.flag & (BAM_FUNMAP | BAM_FMUNMAP))) {
+                hts_pos_t cur5, pre5;
+                cur5 = (cur->core.flag & BAM_FREVERSE)
+                    ? cur_end
+                    : cur->core.pos;
+                pre5 = (pre->core.flag & BAM_FREVERSE)
+                    ? pre_end
+                    : pre->core.pos;
+                cur->core.isize = pre5 - cur5;
+                pre->core.isize = cur5 - pre5;
+            } else {
+                cur->core.isize = pre->core.isize = 0;
+            }
 
-                // Write out result
-                if ( !remove_reads ) {
-                    if (sam_write1(out, header, pre) < 0) goto write_fail;
-                    if (sam_write1(out, header, cur) < 0) goto write_fail;
-                } else {
-                    // If we have to remove reads make sure we do it in a way that doesn't create orphans with bad flags
-                    if(pre->core.flag&BAM_FUNMAP) cur->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
-                    if(cur->core.flag&BAM_FUNMAP) pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
-                    if(!(pre->core.flag&BAM_FUNMAP)) {
-                        if (sam_write1(out, header, pre) < 0) goto write_fail;
-                    }
-                    if(!(cur->core.flag&BAM_FUNMAP)) {
-                        if (sam_write1(out, header, cur) < 0) goto write_fail;
-                    }
-                }
-                has_prev = 0;
-            } else { // unpaired?  clear bad info and write it out
-                pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
-                pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
-                if ( !remove_reads || !(pre->core.flag&BAM_FUNMAP) ) {
-                    if (sam_write1(out, header, pre) < 0) goto write_fail;
+            if (add_ct)
+                bam_template_cigar(pre, cur, &str);
+
+            // TODO: Add code to properly check if read is in a proper
+            // pair based on ISIZE distribution
+            if (proper_pair_check && !plausibly_properly_paired(pre,cur)) {
+                pre->core.flag &= ~BAM_FPROPER_PAIR;
+                cur->core.flag &= ~BAM_FPROPER_PAIR;
+            }
+
+            if (do_mate_scoring) {
+                if ((add_mate_score(pre, cur) == -1) ||
+                    (add_mate_score(cur, pre) == -1)) {
+                    fprintf(stderr, "[bam_mating_core] ERROR: "
+                            "unable to add mate score.\n");
+                    goto fail;
                 }
             }
-        } else has_prev = 1;
-        curr = 1 - curr;
-        pre_end = cur_end;
-    }
-    if (result < -1) goto read_fail;
-    if (has_prev && !remove_reads) { // If we still have a BAM in the buffer it must be unpaired
-        bam1_t *pre = b[1-curr];
-        if (pre->core.tid < 0 || pre->core.pos < 0 || pre->core.flag&BAM_FUNMAP) { // If unmapped
-            pre->core.flag |= BAM_FUNMAP;
-            pre->core.tid = -1;
-            pre->core.pos = -1;
-        }
-        pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
-        pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
 
-        if (sam_write1(out, header, pre) < 0) goto write_fail;
+            // If we have to remove reads make sure we do it in a way that
+            // doesn't create orphans with bad flags
+            if (remove_reads) {
+                if (pre->core.flag&BAM_FUNMAP)
+                    cur->core.flag &=
+                        ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
+                if (cur->core.flag&BAM_FUNMAP)
+                    pre->core.flag &=
+                        ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
+            }
+        }
+
+        // Handle unpaired primary data
+        if (!cur) {
+            pre->core.mtid = -1;
+            pre->core.mpos = -1;
+            pre->core.isize = 0;
+            pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
+        }
+
+        // Now process secondary and supplementary alignments.
+        // TODO: we could reject secondaries / supplementaries that have no
+        // known primary.  For now though we don't have anything to do here.
+        // (However see fix MM in subsequent commits)
+
+        // Finally having curated everything, write out all records in their
+        // original ordering
+        for (n = 0; n < bs.n; n++) {
+            bam1_t *cur = &bs.b[n];
+            // We may remove unmapped and secondary alignments
+            if (remove_reads && (cur->core.flag & (BAM_FSECONDARY|BAM_FUNMAP)))
+                continue;
+
+            if (sam_write1(out, header, cur) < 0)
+                goto write_fail;
+        }
     }
+    if (result < -1)
+        goto read_fail;
+
     sam_hdr_destroy(header);
-    bam_destroy1(b[0]);
-    bam_destroy1(b[1]);
+    for (n = 0; n < bs.ba; n++)
+        free(bs.b[n].data);
+    free(bs.b);
     ks_free(&str);
     return 0;
 
@@ -612,8 +712,9 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads,
     print_error_errno("fixmate", "Couldn't write to output file");
  fail:
     sam_hdr_destroy(header);
-    bam_destroy1(b[0]);
-    bam_destroy1(b[1]);
+    for (n = 0; n < bs.ba; n++)
+        free(bs.b[n].data);
+    free(bs.b);
     ks_free(&str);
     return 1;
 }
