@@ -1,7 +1,7 @@
 /*  bam2depth.c -- depth subcommand.
 
     Copyright (C) 2011, 2012 Broad Institute.
-    Copyright (C) 2012-2016, 2018, 2019-2022 Genome Research Ltd.
+    Copyright (C) 2012-2016, 2018, 2019-2022, 2024 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk> (to 2020)
     Author: James Bonfield <jkb@sanger.ac.uk> (2021 rewrite)
@@ -745,7 +745,7 @@ static void usage_exit(FILE *fp, int exit_status)
 
 int main_depth(int argc, char *argv[])
 {
-    int nfiles, i;
+    int nfiles, i, tmp_flag;
     samFile **fp;
     sam_hdr_t **header;
     int c, has_index_file = 0;
@@ -806,16 +806,44 @@ int main_depth(int argc, char *argv[])
             break;
 
         case 'g':
-            opt.flag &= ~bam_str2flag(optarg);
+            tmp_flag = bam_str2flag(optarg);
+
+            if (tmp_flag < 0) {
+                print_error("depth", "Unknown flag '%s'", optarg);
+                return 1;
+            }
+
+            opt.flag &= ~tmp_flag;
             break;
         case 'G': // reject if any set
-            opt.flag |= bam_str2flag(optarg);
+            tmp_flag = bam_str2flag(optarg);
+
+            if (tmp_flag < 0) {
+                print_error("depth", "Unknown flag '%s'", optarg);
+                return 1;
+            }
+
+            opt.flag |= tmp_flag;
             break;
         case 1: // reject unless at least one set (0 means ignore option)
-            opt.incl_flag |= bam_str2flag(optarg);
+            tmp_flag = bam_str2flag(optarg);
+
+            if (tmp_flag < 0) {
+                print_error("depth", "Unknown flag '%s'", optarg);
+                return 1;
+            }
+
+            opt.incl_flag |= tmp_flag;
             break;
         case 2: // reject unless all set
-            opt.require_flag |= bam_str2flag(optarg);
+            tmp_flag = bam_str2flag(optarg);
+
+            if (tmp_flag < 0) {
+                print_error("depth", "Unknown flag '%s'", optarg);
+                return 1;
+            }
+
+            opt.require_flag |= tmp_flag;
             break;
 
         case 'l':
