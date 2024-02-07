@@ -3521,6 +3521,28 @@ sub test_split
     test_cmd($opts,
              out=>"dat/empty.expected",
              out_map => {
+                 'split/split.tmp.0.sam' => 'split/split.expected.grp1.sam',
+                 'split/split.tmp.1.sam' => 'split/split.expected.grp2.sam',
+                 'split/split.tmp.unk.sam' => 'split/split.expected.unk.sam',
+             },
+             ignore_pg_header => 1,
+             reorder_header => 1,
+             cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -u $$opts{path}/split/split.tmp.unk.sam -f $$opts{path}/split/split.tmp.\%#.\%. $$opts{path}/split/split.sam");
+
+    test_cmd($opts,
+             out=>"dat/empty.expected",
+             out_map => {
+                 'split/split.tmp.00000.sam' => 'split/split.expected.grp1.sam',
+                 'split/split.tmp.00001.sam' => 'split/split.expected.grp2.sam',
+                 'split/split.tmp.unk.sam' => 'split/split.expected.unk.sam',
+             },
+             ignore_pg_header => 1,
+             reorder_header => 1,
+             cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -u $$opts{path}/split/split.tmp.unk.sam -p 5 -f $$opts{path}/split/split.tmp.\%#.\%. $$opts{path}/split/split.sam");
+
+    test_cmd($opts,
+             out=>"dat/empty.expected",
+             out_map => {
                  'split/split.tmp.grp1.sam' => 'split/split.expected.grp1.sam',
                  'split/split.tmp.grp2.sam' => 'split/split.expected.grp2.sam',
                  'split/split.tmp.unk.sam' => 'split/split.expected.unk.sam',
@@ -3578,6 +3600,19 @@ sub test_split
              ignore_pg_header => 1,
              reorder_header => 1,
              cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -f $$opts{path}/split/split.tmp.d_nn.\%!.\%. -d nn -u $$opts{path}/split/split.tmp.d_nn.unk.sam  $$opts{path}/split/split_d_nn.sam");
+
+    test_cmd($opts,
+             out => "dat/empty.expected",
+             out_map => {
+                 "split/split.tmp.d_nn.-0002.sam" => "split/split.expected_d_nn.-2.sam",
+                 "split/split.tmp.d_nn.-0001.sam" => "split/split.expected_d_nn.-1.sam",
+                 "split/split.tmp.d_nn.0001.sam" => "split/split.expected_d_nn.1.sam",
+                 "split/split.tmp.d_nn.0002.sam" => "split/split.expected_d_nn.2.sam",
+                 "split/split.tmp.d_nn.0unk.sam" => "split/split.expected_d_nn.unk.sam",
+             },
+             ignore_pg_header => 1,
+             reorder_header => 1,
+             cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -f $$opts{path}/split/split.tmp.d_nn.\%!.\%. -p 4 -d nn -u $$opts{path}/split/split.tmp.d_nn.0unk.sam  $$opts{path}/split/split_d_nn.sam");
 }
 
 sub test_ampliconclip
