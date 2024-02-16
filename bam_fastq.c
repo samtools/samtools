@@ -40,8 +40,12 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 #include "htslib/bgzf.h"
 #include "htslib/thread_pool.h"
+#include "htslib/khash.h"
 #include "samtools.h"
 #include "sam_opts.h"
+
+KHASH_SET_INIT_STR(str)
+typedef khash_t(str) strhash_t;
 
 #define DEFAULT_BARCODE_TAG "BC"
 #define DEFAULT_QUALITY_TAG "QT"
@@ -67,6 +71,8 @@ static void bam2fq_usage(FILE *to, const char *command)
 "               paired reads will be written to the -1 and -2 files.\n"
 "  -d, --tag TAG[:VAL]\n"
 "               only include reads containing TAG, optionally with value VAL\n"
+"  -D, --tag-file STR:FILE\n"
+"               only include reads containing TAG, with a value listed in FILE\n"
 "  -f, --require-flags INT\n"
 "               only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
 "  -F, --excl[ude]-flags INT\n"
@@ -150,9 +156,7 @@ typedef struct bam2fq_opts {
     char *extra_tags;
     char compression_level;
     const char *filter_tag;       // -d opt
-    const char *filter_value_str;
-    int64_t filter_value_int;
-    float filter_value_flt;
+    strhash_t *filter_tag_vals;
 } bam2fq_opts_t;
 
 typedef struct bam2fq_state {
@@ -171,6 +175,45 @@ typedef struct bam2fq_state {
     htsThreadPool p;
 } bam2fq_state_t;
 
+// Adds a single tag value to the filter tag value hash
+static int add_tag_value(bam2fq_opts_t *opts, char *val) {
+    if (!opts->filter_tag_vals) {
+        if (!(opts->filter_tag_vals = kh_init(str)))
+            return -1;
+    }
+
+    if (!(val = strdup(val)))
+        return -1;
+
+    int ret = 0;
+    kh_put(str, opts->filter_tag_vals, val, &ret);
+    if (ret <= 0)
+        free(val);
+
+    return ret < 0 ? -1 : 0;
+}
+
+// Adds multiple values, listed in a file
+static int add_tag_file(bam2fq_opts_t *opts, char *fn) {
+    FILE *fp;
+    kstring_t ks = {0,0};
+
+    if (!(fp = fopen(fn, "r"))) {
+        print_error_errno("fastq", "failed to open \"%s\" for reading", fn);
+        return -1;
+    }
+
+    while (ks.l = 0, kgetline(&ks, (kgets_func *)fgets, fp) >= 0) {
+        if (add_tag_value(opts, ks.s) < 0) {
+            ks_free(&ks);
+            return -1;
+        }
+    }
+
+    ks_free(&ks);
+    return 0;
+}
+
 static readpart which_readpart(const bam1_t *b)
 {
     if ((b->core.flag & BAM_FREAD1) && !(b->core.flag & BAM_FREAD2)) {
@@ -184,6 +227,14 @@ static readpart which_readpart(const bam1_t *b)
 
 static void free_opts(bam2fq_opts_t *opts)
 {
+    if (opts->filter_tag_vals) {
+        khint_t k;
+        for (k = 0; k < kh_end(opts->filter_tag_vals); k++)
+            if (kh_exist(opts->filter_tag_vals, k))
+                free((char *)kh_key(opts->filter_tag_vals, k));
+
+        kh_destroy(str, opts->filter_tag_vals);
+    }
     free(opts);
 }
 
@@ -230,9 +281,10 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         {"barcode-tag", required_argument, NULL, 'b'},
         {"quality-tag", required_argument, NULL, 'q'},
         {"tag", required_argument, NULL, 'd'},
+        {"tag-file", required_argument, NULL, 'D'},
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "0:1:2:o:f:F:G:niNOs:c:tT:v:@:d:",
+    while ((c = getopt_long(argc, argv, "0:1:2:o:f:F:G:niNOs:c:tT:v:@:d:D:",
                             lopts, NULL)) > 0) {
         switch (c) {
             case 'b': opts->barcode_tag = optarg; break;
@@ -276,10 +328,44 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
                     return false;
                 }
 
+                if (opts->filter_tag && memcmp(opts->filter_tag, optarg, 2)) {
+                    print_error("fastq", "Different tag type specified "
+                                "to before");
+                    free_opts(opts);
+                    return false;
+                }
+
+                if (strlen(optarg) >= 3)
+                    add_tag_value(opts, optarg+3);
                 opts->filter_tag = optarg;
-                opts->filter_value_str = strlen(optarg) > 2 ? optarg+3 : NULL;
-                opts->filter_value_int = INT64_MAX; // fill out later
-                opts->filter_value_flt = FLT_MAX;
+                break;
+
+            case 'D':
+                // Allow ";" as delimiter besides ":" to support MinGW CLI POSIX
+                // path translation as described at:
+                // http://www.mingw.org/wiki/Posix_path_conversion
+                if (strlen(optarg) < 4
+                    || (optarg[2] != ':' && optarg[2] != ';')) {
+                    print_error("view", "Invalid \"tag:file\" option: \"%s\"",
+                                optarg);
+                    free_opts(opts);
+                    return false;
+                }
+
+                if (opts->filter_tag && memcmp(opts->filter_tag, optarg, 2)) {
+                    print_error("fastq", "Different tag type specified "
+                                "to before");
+                    free_opts(opts);
+                    return false;
+                }
+
+                if (strlen(optarg) >= 3) {
+                    if (add_tag_file(opts, optarg+3) < 0) {
+                        free_opts(opts);
+                        return false;
+                    }
+                }
+                opts->filter_tag = optarg;
                 break;
 
             case '?':
@@ -630,45 +716,43 @@ static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state,
         if (!s)
             return true;
 
-        if (opts->filter_value_str) {
+        if (opts->filter_tag_vals) {
+            char t[32], *val = t;
             switch (*s) {
             case 'i': case 'I':
             case 's': case 'S':
             case 'c': case 'C':
-                if (opts->filter_value_int == INT64_MAX)
-                    // cache integer conversion for repeated use
-                    opts->filter_value_int =
-                        strtoll(opts->filter_value_str, NULL, 0);
-                if (opts->filter_value_int != bam_aux2i(s))
+                if (snprintf(t, 32, "%"PRId64, bam_aux2i(s)) <= 0)
                     return true;
                 break;
 
             case 'f':
-                if (opts->filter_value_flt == FLT_MAX)
-                    opts->filter_value_flt = atof(opts->filter_value_str);
                 // Comparing floats is hard.
                 // Eg (double)0.1 - (double)0.1f is -1.5e-9.
                 // Given BAM binary encoding is float however, just keep it.
                 // This means rounding errors will (hopefully) always be the
                 // same and basic equality still works.
-                if (opts->filter_value_flt != (float)bam_aux2f(s))
+                if (snprintf(t, 32, "%f", (float)bam_aux2f(s)) <= 0)
                     return true;
                 break;
 
             case 'A':
-                if (s[1] != *opts->filter_value_str)
-                    return true;
+                t[0] = s[1];
+                t[1] = 0;
                 break;
 
             case 'Z': case 'H':
-                if (strcmp((char *)s+1, opts->filter_value_str) != 0)
-                    return true;
+                val = (char *)s+1;
                 break;
 
             default:
                 // Anything unsupported fails the filter match too.
                 return true;
             }
+
+            khint_t k = kh_get(str, opts->filter_tag_vals, val);
+            if (k == kh_end(opts->filter_tag_vals))
+                return 1; // tag value not found
         }
     }
 

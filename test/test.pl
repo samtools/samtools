@@ -3032,6 +3032,11 @@ sub test_bam2fq
     test_cmd($opts, out=>'bam2fq/16.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -T '*' -d MD:10 $$opts{path}/dat/bam2fq.001.sam");
     test_cmd($opts, out=>'bam2fq/17.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -T '*' -d NM:0 $$opts{path}/dat/bam2fq.001.sam");
     test_cmd($opts, out=>'bam2fq/18.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -T '*' -d ia $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'bam2fq/20.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -d NM:13 -d NM:14 $$opts{path}/dat/bam2fq.001.sam");
+
+    # -D TAG
+    test_cmd($opts, out=>'bam2fq/20.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -D NM:test/dat/bam2fq.NM-D $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'bam2fq/19.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -D MD:test/dat/bam2fq.MD-D $$opts{path}/dat/bam2fq.001.sam");
 }
 
 
