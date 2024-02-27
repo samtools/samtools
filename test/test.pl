@@ -2707,6 +2707,7 @@ sub test_cat
     print "$test_name:\n";
 
     my @sams;
+    my @sams_r;
     my @bams;
     my @crams;
     my @bgbams;
@@ -2720,11 +2721,17 @@ sub test_cat
 
         # Convert to BAM
         $bams[$i] = sprintf("%s.%d.bam", $out, $i + 1);
+        $sams_r[$i] = sprintf("%s.%d.reg.sam", $out, $i + 1);
         run_view_test($opts,
                       msg =>  sprintf("Generate BAM file #%d", $i + 1),
-                      args => ['-b', $sams[$i], '--no-PG'],
+                      args => ['-b', $sams[$i], '--no-PG', '--write-index'],
                       out => $bams[$i],
                       compare_sam => $sams[$i],
+                      pipe => 1);
+        run_view_test($opts,
+                      msg =>  sprintf("Generate BAM region file #%d", $i + 1),
+                      args => ['-h', $bams[$i], '--no-PG', 'ref1:4240-7150'],
+                      out => "$sams_r[$i]",
                       pipe => 1);
 
         # Recompress with bgzip to alter the location of the bgzf boundaries.
@@ -2735,7 +2742,8 @@ sub test_cat
         $crams[$i] = sprintf("%s.%d.cram", $out, $i + 1);
         run_view_test($opts,
                       msg =>  sprintf("Generate CRAM file #%d", $i + 1),
-                      args => ['-C', $sams[$i], '--no-PG'],
+                      args => ['-O', 'CRAM,seqs_per_slice=100', $sams[$i],
+                               '--no-PG', '--write-index'],
                       out => $crams[$i],
                       compare_sam => $sams[$i],
                       pipe => 1);
@@ -2743,7 +2751,9 @@ sub test_cat
 
     # Make a concatenated SAM file to compare
     my $catsam1 = "$out.all1.sam";
+    my $catsam1r = "$out.all1r.sam";
     cat_sams($catsam1, @sams);
+    cat_sams($catsam1r, @sams_r);
 
     foreach my $redirect (0, 1) {
         my $to_stdout = $redirect ? ' to stdout' : '';
@@ -2777,7 +2787,39 @@ sub test_cat
                       redirect => $redirect,
                       compare_sam => $catsam1);
         $test++;
+
+        # Test CRAM sub-regions
+        run_view_test($opts,
+                      msg =>  "$test: cat CRAM subregion files$to_stdout",
+                      cmd => 'cat',
+                      args => ['-r', 'ref1:4240-7150', @crams],
+                      out => sprintf("%s.test%03d.cram", $out, $test),
+                      redirect => $redirect,
+                      compare_sam => $catsam1r);
+        $test++;
     }
+
+    # Test CRAM -p option.  Do 1/2 and 2/2 and check the combined result matches
+    run_view_test($opts,
+                  msg =>  "$test: cat CRAM part 1/2",
+                  cmd => 'cat',
+                  args => ['-p', '1/2', @crams],
+                  out => sprintf("%s.test_p1.cram", $out));
+    run_view_test($opts,
+                  msg =>  "$test: cat CRAM part 2/2",
+                  cmd => 'cat',
+                  args => ['-p', '2/2', @crams],
+                  out => sprintf("%s.test_p2.cram", $out));
+
+    run_view_test($opts,
+                  msg =>  "$test: cat CRAM parts 1/2 + 2/2",
+                  cmd => 'cat',
+                  args => ['--no-PG',
+                           sprintf("%s.test_p1.cram", $out),
+                           sprintf("%s.test_p2.cram", $out)],
+                  out => sprintf("%s.test_p12.cram", $out),
+                  compare_sam => $catsam1);
+    $test++;
 
     # Test reheader option
     my $hdr_no_ur   = "$$opts{path}/dat/cat.hdr";
