@@ -1,0 +1,21 @@
+@HD	VN:1.5	SO:queryname	SS:queryname:natural
+@SQ	SN:1	LN:249250621	M5:1b22b98cdeb4a9304cb5d48026a85128	UR:/nfs/srpipe_references/references/Human/1000Genomes_hs37d5/all/fasta/hs37d5.fa
+@PG	ID:samtools	PN:samtools	VN:1.19.2-19-g11384b23-dirty	CL:samtools sort -Osam -n ../samtools/_sort.sam
+a	64	1	999	60	151M	*	0	0	*	*
+a	68	1	999	60	151M	*	0	0	*	*
+a	2112	1	999	60	151M	*	0	0	*	*
+a	320	1	999	60	151M	*	0	0	*	*
+a	2368	1	999	60	151M	*	0	0	*	*
+a	128	1	999	60	151M	*	0	0	*	*
+a	2176	1	999	60	151M	*	0	0	*	*
+a	384	1	999	60	151M	*	0	0	*	*
+a	2432	1	999	60	151M	*	0	0	*	*	cc:Z:reversed order
+b	68	1	999	60	151M	*	0	0	*	*	cr:Z:read1	cc:Z:correct order
+b	64	1	999	60	151M	*	0	0	*	*	cr:Z:read1	cc:Z:correct order
+b	2112	1	999	60	151M	*	0	0	*	*
+b	320	1	999	60	151M	*	0	0	*	*
+b	2368	1	999	60	151M	*	0	0	*	*
+b	128	1	999	60	151M	*	0	0	*	*	cr:Z:read2	cc:Z:correct order
+b	2176	1	999	60	151M	*	0	0	*	*
+b	384	1	999	60	151M	*	0	0	*	*
+b	2432	1	999	60	151M	*	0	0	*	*
