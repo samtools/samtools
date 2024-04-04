@@ -591,8 +591,6 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
     while ( (ret=bam_mplp64_auto(iter, &tid, &pos, n_plp, plp)) > 0) {
         one_seq = 1; // at least 1 output
         if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
-        mplp_get_ref(data[0], tid, &ref, &ref_len);
-        //printf("tid=%d len=%d ref=%p/%s\n", tid, ref_len, ref, ref);
         if (conf->all) {
             // Deal with missing portions of previous tids
             while (tid > last_tid) {
@@ -607,8 +605,13 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
                 last_pos = -1;
                 if (conf->all < 2)
                     break;
+                if (tid > last_tid)
+                    // multiple missing references and -aa used
+                    mplp_get_ref(data[0], last_tid, &ref, &ref_len);
             }
         }
+        mplp_get_ref(data[0], tid, &ref, &ref_len);
+
         if (conf->all) {
             // Deal with missing portion of current tid
             while (++last_pos < pos) {
