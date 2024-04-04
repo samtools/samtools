@@ -1,6 +1,61 @@
 Release a.b
 -----------
 
+* Added a `--max-depth` option to `bedcov`, for more control over the depth
+  limit used when calculating the pileup.  Previously this limit was set
+  at 64000; now it is set to over 2 billion, so effectively all bases will
+  be counted.
+  (PR #1970, fixes #1950.  Reported by ellisjj)
+
+* Added `mpileup --output-extra RLEN` to display the unclipped read length.
+  (PR #1971, feature request #1959.  Requested by Feng Tian)
+
+* Improved checking of symbolic flag names (e.g. UNMAP) passed to samtools.
+  (PR #1981, fixes #1977.  Reported by Ilya Shlyakhter)
+
+* The `samtools consensus --min-depth` option now works for the Bayesian
+  mode as well as the simple one.
+  (PR #1989, feature request #1982.  Requested by Gautier Richard)
+
+* It's now possible to use the `samtools fastq` `-d tag:val` option multiple
+  times, allowing matches on more than one tag/value.  It also gets
+  a `-D` option which allows the values to be listed in a file.
+  (PR #1993, feature request #1958.  Requested by Tristan Lefebure)
+
+* Added `samtools fixmate` `-M` option to sanity check base modification
+  (`ML`, `MM`, `MN`) tags, and where necessary adjust modification data
+  on hard-clipped records.
+  (PR #1990)
+
+* Made `mpileup` run faster.
+  (PR #1995)
+
+* `samtools import` now adds a `@PG` header to the files it makes.
+  As with other sub-commands, this can be disabled by using `--no-PG`.
+  (PR #2008.  Requested by Steven Leonard)
+
+* The `samtools split` `-d` option to split by tag value now works on
+  tags with integer values.
+  (PR #2005, feature request #1956.  Requested by Alex Leonard)
+
+Documentation:
+
+* Added a note that BAQ is applied before filtering and overlap removal
+  during mpileup processing.
+  (PR #1988, fixes #1985.  Reported by Joseph Galasso)
+
+* Added 3.1 to the list of supported CRAM versions in the samtools manual page.
+  (PR #2009.  Thanks to Andrew Thrasher)
+
+* Made assorted improvements to ampliconclip, flagstat and markdup manual
+  pages.
+  (PR #2014)
+
+Bug Fixes:
+
+* Corrected error message printed when faidx fails to load the fai index.
+  (PR #1987.  Thanks to Nick Moore)
+
 Release 1.19.2 (24th January 2024)
 ----------------------------------
 
