@@ -1,6 +1,6 @@
 /*  bam_fastq.c -- FASTA and FASTQ file generation
 
-    Copyright (C) 2009-2017, 2019-2020, 2023 Genome Research Ltd.
+    Copyright (C) 2009-2017, 2019-2020, 2023-2024 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
