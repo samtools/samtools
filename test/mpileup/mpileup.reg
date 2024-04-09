@@ -165,6 +165,10 @@ P m5_b3aa.out  $samtools mpileup -ABQ0 -aa -l xx.bed3 xx#depth3.bam
 # Fail as -a shouldn't output xn:16-20 (it doesn't with -r)
 F m5_b3a.out   $samtools mpileup -ABQ0 -a  -l xx.bed3 xx#depth3.bam
 
+# -a with multiple chromosomes (see samtools#2018)
+P mp_2018a.out  $samtools mpileup -aB  -f mp_2018.fa mp_2018.sam
+P mp_2018aa.out $samtools mpileup -aaB -f mp_2018.fa mp_2018.sam
+
 # compound I and D ops along with Pads.
 P mp_D.out      $samtools mpileup -ABQ0 -f mp.fa mp_D.sam
 P mp_DI.out     $samtools mpileup -ABQ0 -f mp.fa mp_DI.sam
