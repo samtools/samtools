@@ -16,6 +16,8 @@ Samtools and HTSlib depend on the following libraries:
                (optional but strongly recommended, for network access)
     libcrypto  <https://www.openssl.org/>
                (optional, for Amazon S3 support; not needed on MacOS)
+    libdeflate <https://github.com/ebiggers/libdeflate>
+               (optional, but strongly recommended for faster gzip)
 
 See the "System Specific Details" below for guidance on how to install
 these.
@@ -215,14 +217,14 @@ Debian / Ubuntu
 ---------------
 
 sudo apt-get update  # Ensure the package list is up to date
-sudo apt-get install autoconf automake make gcc perl zlib1g-dev libbz2-dev liblzma-dev libcurl4-gnutls-dev libssl-dev libncurses5-dev
+sudo apt-get install autoconf automake make gcc perl zlib1g-dev libbz2-dev liblzma-dev libcurl4-gnutls-dev libssl-dev libncurses5-dev libdeflate-dev
 
 Note: libcurl4-openssl-dev can be used as an alternative to libcurl4-gnutls-dev.
 
 RedHat / CentOS
 ---------------
 
-sudo yum install autoconf automake make gcc perl-Data-Dumper zlib-devel bzip2 bzip2-devel xz-devel curl-devel openssl-devel ncurses-devel
+sudo yum install autoconf automake make gcc perl-Data-Dumper zlib-devel bzip2 bzip2-devel xz-devel curl-devel openssl-devel ncurses-devel libdeflate-devel
 
 Note: On some versions, Perl FindBin will need to be installed to make the tests work.
 
@@ -234,12 +236,18 @@ Alpine Linux
 doas apk update  # Ensure the package list is up to date
 doas apk add autoconf automake make gcc musl-dev perl bash zlib-dev bzip2-dev xz-dev curl-dev openssl-dev ncurses-dev
 
+Ideally also install a copy of libdeflate-dev for faster (de)compression.
+This can be found in the Alpine community repository.
+
 Note: some older Alpine versions use libressl-dev rather than openssl-dev.
 
 OpenSUSE
 --------
 
 sudo zypper install autoconf automake make gcc perl zlib-devel libbz2-devel xz-devel libcurl-devel libopenssl-devel ncurses-devel
+
+Also install libdeflate-devel, available on OpenSUSE Leap 15.4 onwards
+or directly via git releases above.
 
 Windows MSYS2/MINGW64
 ---------------------
