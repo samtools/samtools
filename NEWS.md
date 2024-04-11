@@ -38,6 +38,10 @@ Release a.b
   tags with integer values.
   (PR #2005, feature request #1956.  Requested by Alex Leonard)
 
+* Adjusted `samtools sort -n` (by name) so that primary reads are always sorted
+  before secondary / supplementary.
+  (PR #2012, feature request #2010.  Requested by Stijn van Dongen)
+
 Documentation:
 
 * Added a note that BAQ is applied before filtering and overlap removal
@@ -55,6 +59,11 @@ Bug Fixes:
 
 * Corrected error message printed when faidx fails to load the fai index.
   (PR #1987.  Thanks to Nick Moore)
+
+* Fixed bug introduced in release 1.4 that caused incorrect reference
+  bases to be printed by `samtools mpileup -a -f ref.fa` in the zero-depth
+  regions at the end of each reference.
+  (PR #2019, fixes #2018.  Reported by Joe Georgeson)
 
 Release 1.19.2 (24th January 2024)
 ----------------------------------
