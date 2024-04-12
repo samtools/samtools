@@ -85,7 +85,7 @@ int main_bedcov(int argc, char *argv[])
     const bam_pileup1_t **plp;
     int usage = 0, has_index_file = 0;
     uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP);
-    int tflags = 0, min_depth = -1, max_depth = DEFAULT_DEPTH;
+    int tflags = 0, min_depth = -1, max_depth = DEFAULT_DEPTH, print_header=0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -96,11 +96,12 @@ int main_bedcov(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "Q:Xg:G:jd:c", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Q:Xg:G:jd:Hc", lopts, NULL)) >= 0) {
         switch (c) {
         case 'Q': min_mapQ = atoi(optarg); break;
         case 'X': has_index_file = 1; break;
         case 'c': do_rcount = 1; break;
+        case 'H': print_header = 1; break;
         case 'g':
             tflags = bam_str2flag(optarg);
             if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
@@ -139,6 +140,7 @@ int main_bedcov(int argc, char *argv[])
         fprintf(stderr, "      -d <int>            depth threshold. Number of reference bases with coverage above and\n"
                         "                          including this value will be displayed in a separate column\n");
         fprintf(stderr, "      -c                  add an additional column showing read count\n");
+        fprintf(stderr, "      -H                  print a comment/header line with column information.\n");
         sam_global_opt_help(stderr, "-.--.--.");
         return 1;
     }
@@ -193,6 +195,23 @@ int main_bedcov(int argc, char *argv[])
         print_error_errno("bedcov", "can't open BED file '%s'", argv[optind]);
         return 2;
     }
+
+    if (print_header) {
+        printf("#chrom\tstart\tend");
+        for (i = 0; i < n; ++i) {
+            printf("\t%s_cov", argv[i+optind+1]);
+        }
+        if (min_depth >= 0) {
+            for (i = 0; i < n; ++i)
+                printf("\t%s_depth", argv[i+optind+1]);
+        }
+        if (do_rcount) {
+            for (i = 0; i < n; ++i)
+                printf("\t%s_count", argv[i+optind+1]);
+        }
+        putchar('\n');
+    }
+
     ks = ks_init(fp);
     n_plp = calloc(n, sizeof(int));
     plp = calloc(n, sizeof(bam_pileup1_t*));
