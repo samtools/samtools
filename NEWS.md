@@ -42,6 +42,10 @@ Release a.b
   before secondary / supplementary.
   (PR #2012, feature request #2010.  Requested by Stijn van Dongen)
 
+* Added `samtools bedcov` `-H` option to print column headers in the
+  output.
+  (PR #2025.  Thanks to Dr. K. D. Murray)
+
 Documentation:
 
 * Added a note that BAQ is applied before filtering and overlap removal
@@ -56,6 +60,10 @@ Documentation:
   (PR #2014)
 
 Bug Fixes:
+
+* Security fix: Fixed double free that could occur if bed file indexing failed
+  due to running out of memory.  This bug first appeared in version 1.19.1.
+  (PR #2026)
 
 * Corrected error message printed when faidx fails to load the fai index.
   (PR #1987.  Thanks to Nick Moore)
