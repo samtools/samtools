@@ -65,6 +65,11 @@ Bug Fixes:
   regions at the end of each reference.
   (PR #2019, fixes #2018.  Reported by Joe Georgeson)
 
+Non user-visible changes and build improvements:
+
+* Added tests to ensure that CRAM compression is working properly.
+  (PR #1969, part of fix for #1968.  Reported by Clockris)
+
 Release 1.19.2 (24th January 2024)
 ----------------------------------
 
