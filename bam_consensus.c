@@ -1,7 +1,7 @@
 /*  bam_consensus.c -- consensus subcommand.
 
     Copyright (C) 1998-2001,2003 Medical Research Council (Gap4/5 source)
-    Copyright (C) 2003-2005,2007-2023 Genome Research Ltd.
+    Copyright (C) 2003-2005,2007-2024 Genome Research Ltd.
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
@@ -2083,7 +2083,10 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         calculate_consensus_gap5m(pos, opts->use_mqual ? CONS_MQUAL : 0,
                                   depth, p, opts, &cons, opts->default_qual,
                                   &cons_prob_recall, &cons_prob_precise);
-        if (cons.het_logodd > 0 && opts->ambig) {
+        if (cons.depth < opts->min_depth) {
+            cb = 'N';
+            cq = 0;
+        } else if (cons.het_logodd > 0 && opts->ambig) {
             cb = "AMRWa" // 5x5 matrix with ACGT* per row / col
                  "MCSYc"
                  "RSGKg"
@@ -2228,14 +2231,17 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         calculate_consensus_gap5m(pos, opts->use_mqual ? CONS_MQUAL : 0,
                                   depth, p, opts, &cons, opts->default_qual,
                                   &cons_prob_recall, &cons_prob_precise);
-        if (cons.het_logodd > 0 && opts->ambig) {
+        if (cons.depth < opts->min_depth) {
+            cb = 'N';
+            cq = 0;
+        } else if (cons.het_logodd > 0 && opts->ambig) {
             cb = "AMRWa" // 5x5 matrix with ACGT* per row / col
                  "MCSYc"
                  "RSGKg"
                  "WYKTt"
                  "acgt*"[cons.het_call];
             cq = cons.het_logodd;
-        } else{
+        } else {
             cb = "ACGT*"[cons.call];
             cq = cons.phred;
         }
@@ -2319,10 +2325,10 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "  --show-ins yes/no     Whether to show insertions [yes]\n");
     fprintf(fp, "  --mark-ins            Add '+' before every inserted base/qual [off]\n");
     fprintf(fp, "  -A, --ambig           Enable IUPAC ambiguity codes [off]\n");
+    fprintf(fp, "  -d, --min-depth INT   Minimum depth of INT [1]\n");
     fprintf(fp, "\nFor simple consensus mode:\n");
     fprintf(fp, "  -q, --(no-)use-qual   Use quality values in calculation [off]\n");
     fprintf(fp, "  -c, --call-fract INT  At least INT portion of bases must agree [0.75]\n");
-    fprintf(fp, "  -d, --min-depth INT   Minimum depth of INT [2]\n");
     fprintf(fp, "  -H, --het-fract INT   Minimum fraction of 2nd-most to most common base [0.15]\n");
     fprintf(fp, "\nFor default \"Bayesian\" consensus mode:\n");
     fprintf(fp, "  -C, --cutoff C        Consensus cutoff quality C [10]\n");

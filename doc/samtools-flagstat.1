@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-flagstat 1 "24 January 2024" "samtools-1.19.2" "Bioinformatics tools"
+.TH samtools-flagstat 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
 .SH NAME
 samtools flagstat \- counts the number of alignments for each FLAG type
 .\"
-.\" Copyright (C) 2008-2011, 2013-2019, 2021 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2019, 2021, 2024 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -74,43 +74,44 @@ Following this, additional categories are given for reads which are:
 .RS 4
 .TP
 primary
-neither 0x100 nor 0x800 bit set
+neither 0x100 (SECONDARY) nor 0x800 (SUPPLEMENTARY) bit set
 .TP
 secondary
-0x100 bit set
+0x100 (SECONDARY) bit set
 .TP
 supplementary
-0x800 bit set
+0x800 (SUPPLEMENTARY) bit set
 .TP
 duplicates
-0x400 bit set
+0x400 (DUP) bit set
 .TP
 primary duplicates
-0x400 bit set and neither 0x100 nor 0x800 bit set 
+0x400 (DUP) bit set and neither 0x100 (SECONDARY) nor 0x800 (SUPPLEMENTARY) bit
+set 
 .TP
 mapped
-0x4 bit not set
+0x4 (UNMAP) bit not set
 .TP
 primary mapped
-0x4, 0x100 and 0x800 bits not set
+0x4 (UNMAP), 0x100 (SECONDARY) and 0x800 (SUPPLEMENTARY) bits not set
 .TP
 paired in sequencing
-0x1 bit set
+0x1 (PAIRED) bit set
 .TP
 read1
-both 0x1 and 0x40 bits set
+both 0x1 (PAIRED) and 0x40 (READ1) bits set
 .TP
 read2
-both 0x1 and 0x80 bits set
+both 0x1 (PAIRED) and 0x80 (READ2) bits set
 .TP
 properly paired
-both 0x1 and 0x2 bits set and 0x4 bit not set
+both 0x1 (PAIRED) and 0x2 (PROPER_PAIR) bits set and 0x4 (UNMAP) bit not set
 .TP
 with itself and mate mapped
-0x1 bit set and neither 0x4 nor 0x8 bits set
+0x1 (PAIRED) bit set and neither 0x4 (UNMAP) nor 0x8 (MUNMAP) bits set
 .TP
 singletons
-both 0x1 and 0x8 bits set and bit 0x4 not set
+both 0x1 (PAIRED) and 0x8 (MUNMAP) bits set and bit 0x4 (UNMAP) not set
 .RE
 
 .PP
@@ -120,10 +121,11 @@ name (RNAME), mate reference name (MRNM), and mapping quality (MAPQ) fields:
 .RS 4
 .TP
 with mate mapped to a different chr
-0x1 bit set and neither 0x4 nor 0x8 bits set and MRNM not equal to RNAME
+0x1 (PAIRED) bit set and neither 0x4 (UNMAP) nor 0x8 (MUNMAP) bits set and MRNM
+not equal to RNAME
 .TP
 with mate mapped to a different chr (mapQ>=5)
-0x1 bit set and neither 0x4 nor 0x8 bits set
+0x1 (PAIRED) bit set and neither 0x4 (UNMAP) nor 0x8 (MUNMAP) bits set
 and MRNM not equal to RNAME and MAPQ >= 5
 .RE
 

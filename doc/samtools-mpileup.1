@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-mpileup 1 "24 January 2024" "samtools-1.19.2" "Bioinformatics tools"
+.TH samtools-mpileup 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
 .SH NAME
 samtools mpileup \- produces "pileup" textual format from an alignment
 .\"
-.\" Copyright (C) 2008-2011, 2013-2023 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2024 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -168,7 +168,10 @@ The fields selected appear in the same order as in SAM:
 .B MAPQ
 (displayed numerically),
 .BR RNEXT ,
-.BR PNEXT .
+.BR PNEXT ,
+followed by
+.BR RLEN
+for unclipped read length.
 .IP \(ci 2
 Comma-separated 1-based positions within the alignments, in 5' to 3'
 orientation.  E.g., 5 indicates that it is the fifth base of the
@@ -340,7 +343,7 @@ mpileup command in the same order as in the document (i.e.
 The names are case sensitive. Currently, only the following fields are
 supported:
 .IP
-.B QNAME, FLAG, RNAME, POS, MAPQ, RNEXT, PNEXT
+.B QNAME, FLAG, RNAME, POS, MAPQ, RNEXT, PNEXT, RLEN
 .IP
 Anything that is not on this list is treated as a potential tag, although only
 two character tags are accepted. In the mpileup output, tag columns are
@@ -470,6 +473,10 @@ BAQ is calculated using the probabilistic realignment method described
 in the paper \*(lqImproving SNP discovery by base alignment quality\*(rq,
 Heng Li, Bioinformatics, Volume 27, Issue 8
 <https://doi.org/10.1093/bioinformatics/btr076>
+
+BAQ is applied to modify quality values before the \fB-Q\fR filtering
+happens and before the choice of which sequence to retain when
+removing overlaps.
 
 BAQ is turned on when a reference file is supplied using the
 .B -f

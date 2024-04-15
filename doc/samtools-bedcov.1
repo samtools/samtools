@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-bedcov 1 "24 January 2024" "samtools-1.19.2" "Bioinformatics tools"
+.TH samtools-bedcov 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
 .SH NAME
 samtools bedcov \- reports coverage over regions in a supplied BED file
 .\"
@@ -53,7 +53,9 @@ samtools bedcov
 Reports the total read base count (i.e. the sum of per base read depths)
 for each genomic region specified in the supplied BED file. The regions
 are output as they appear in the BED file and are 0-based.
-Counts for each alignment file supplied are reported in separate columns.
+Columns 1-3 are chrom/start/end as per the input BED file, followed by N
+columns of coverages (for N input BAMs), then (if given -d), N columns of
+bases-at-depth-X, then (if given -c) N columns of read counts.
 
 .SH OPTIONS
 .TP
@@ -87,6 +89,13 @@ Print an additional column, for each file, containing the number of bases having
 a depth above and including the given threshold. If the option is not used, the
 extra column is not displayed. The option value must be an integer >= 0.
 .TP
+.BI "--max-depth " INT
+Specifies the maximum depth used for the mpileup algorithm.
+If \fB-d\fR is used and is larger then this value will be used instead.
+Defaults to 2 billion, but smaller values may be used when we do not
+require an exact count in excessively deep regions and are interested
+in maximising speed of results.
+.TP
 .B -c
 Print an additional column with the read count for this region.  This
 will be +1 for every read covering the region, not just starting
@@ -97,6 +106,9 @@ will not.
 .B "-X"
 If this option is set, it will allows user to specify customized index file location(s) if the data
 folder does not contain any index file. Example usage: samtools bedcov [options] -X <in.bed> </data_folder/in1.bam> [...] </index_folder/index1.bai> [...]
+.TP
+.B "-H"
+.RI "print a comment/header describing columns"
 
 .SH AUTHOR
 .PP

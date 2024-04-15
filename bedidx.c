@@ -343,10 +343,10 @@ void *bed_read(const char *fn)
         fp = NULL;
         goto fail;
     }
-    ks_destroy(ks);
-    free(str.s);
     if (bed_index(h) != 0)
         goto fail;
+    ks_destroy(ks);
+    free(str.s);
     //bed_unify(h);
     return h;
  fail:

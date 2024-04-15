@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-fasta 1 "24 January 2024" "samtools-1.19.2" "Bioinformatics tools"
+.TH samtools-fasta 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
 .SH NAME
 samtools-fasta, samtools-fastq \- converts a SAM/BAM/CRAM file to FASTA or FASTQ
 .\"
-.\" Copyright (C) 2008-2011, 2013-2020, 2023 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2020, 2023-2024 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -128,7 +128,7 @@ soft-clipped CIGAR records then the soft-clipped data will be in the
 output FASTA/FASTQ.  Hard-clipped data is, by definition, absent from
 the SAM record and hence will be absent in any FASTA/FASTQ produced.
 
-The filter options order of precedence is -d, -f, -F, --rf and -G.
+The filter options order of precedence is -d/-D, -f, -F, --rf and -G.
 
 .SH OPTIONS
 .TP 8
@@ -223,8 +223,14 @@ Only output alignments containing an auxiliary tag matching both
 \fITAG\fR and \fIVAL\fR.  If \fIVAL\fR is omitted then any value is
 accepted.  The tag types supported are i, f, Z, A and H.  "B" arrays
 are not supported.  This is comparable to the method used in
-\fBsamtools view -d\fR, but for single values only (i.e. there is no
-sibling \fB-D\fR option).
+\fBsamtools view -d\fR.  The option may be specified multiple times
+and is equivalent to using the \fB-D\fR option.
+.TP 8
+.BI "-D " TAG:FILE
+Only output alignments containing an auxiliary tag matching \fITAG\fR
+and having a value listed in \fIFILE\fR.  The format of the file is
+one line per value.  This is equivalent to specifying \fB-d\fR
+multiple times.
 .TP 8
 .B -i
 add Illumina Casava 1.8 format entry to header (eg 1:N:0:ATCACG)

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-consensus 1 "24 January 2024" "samtools-1.19.2" "Bioinformatics tools"
+.TH samtools-consensus 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
 .SH NAME
 samtools consensus \- produces a consensus FASTA/FASTQ/PILEUP
 .\"
-.\" Copyright (C) 2021-2023 Genome Research Ltd.
+.\" Copyright (C) 2021-2024 Genome Research Ltd.
 .\"
 .\" Author: James Bonfield <jkb@sanger.ac.uk>
 .\"
@@ -212,6 +212,13 @@ derivation of the consensus to reference coordinate mapping.
 Enables IUPAC ambiguity codes in the consensus output.  Without this
 the output will be limited to A, C, G, T, N and *.
 
+.TP
+.BI "-d " D ", --min-depth " D
+The minimum depth required to make a call.  Defaults to 1.  Failing
+this depth check will produce consensus "N", or absent if it is an
+insertion.  Note this check is performed after filtering by flags
+and mapping/base quality.
+
 .TP 0
 The following options apply only to the simple consensus mode:
 
@@ -227,13 +234,6 @@ parameters too.  Quality values are always used for the "Gap5"
 consensus method and this option has no affect.
 Note currently  quality values only affect SNPs and not inserted
 sequences, which still get scores with a fixed +1 per base type occurrence.
-
-.TP
-.BI "-d " D ", --min-depth " D
-The minimum depth required to make a call.  Defaults to 1.  Failing
-this depth check will produce consensus "N", or absent if it is an
-insertion.  Note this check is performed after filtering by flags
-and mapping/base quality.
 
 .TP
 .BI "-H " H ", --het-fract " H

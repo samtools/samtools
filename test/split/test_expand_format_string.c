@@ -1,6 +1,6 @@
 /*  test/split/test_expand_format_string.c -- split format string test cases.
 
-    Copyright (C) 2014-2015 Genome Research Ltd.
+    Copyright (C) 2014-2015,2024 Genome Research Ltd.
 
     Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
@@ -29,29 +29,93 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <unistd.h>
 
-void setup_test_1(sam_hdr_t** hdr_in)
-{
-    *hdr_in = sam_hdr_init();
-    const char *test1 =
-    "@HD\tVN:1.4\n"
-    "@SQ\tSN:blah\n"
-    "@RG\tID:fish\n";
-    sam_hdr_add_lines(*hdr_in, test1, 0);
+typedef struct {
+    char *tempfname;
+    kstring_t res;
+    int verbose;
+    int test_num;
+    int success;
+    int failure;
+} TestState;
+
+void run_test(TestState *state, const char* format_string, const char* basename,
+              const char* rg_id, const int rg_idx, const int padding,
+              const htsFormat *format, const char *expected) {
+    FILE* check = NULL;
+
+    ++state->test_num;
+    if (state->verbose) printf("BEGIN test %d\n", state->test_num);
+    if (state->verbose > 1) {
+        printf("format_string:%s\n"
+               "basename:%s\n"
+               "rg_id:%s\n"
+               "rg_idx:%d\n", format_string, basename, rg_id, rg_idx);
+    }
+    if (state->verbose) printf("RUN test %d\n", state->test_num);
+
+    // test
+    xfreopen(state->tempfname, "w", stderr); // Redirect stderr to pipe
+    char* output = expand_format_string(format_string, basename,
+                                        rg_id, rg_idx, padding, format);
+    fclose(stderr);
+
+    if (state->verbose) printf("END RUN test %d\n", state->test_num);
+    if (state->verbose > 1) {
+        printf("got: \"%s\" expected: \"%s\"\n", output ? output : "(null)",
+               expected ? expected : "(null)");
+    }
+    if (state->verbose > 2) {
+        printf("format_string:%s\n"
+               "basename:%s\n"
+               "rg_id:%s\n"
+               "rg_idx:%d\n", format_string, basename, rg_id, rg_idx);
+    }
+
+    // check result
+    state->res.l = 0;
+    check = fopen(state->tempfname, "r");
+    if (expected != NULL) {
+        // Good input, should produce a file name
+        if (check && output != NULL && !strcmp(output, expected)
+            && kgetline(&state->res, (kgets_func *)fgets, check) < 0
+            && (feof(check) || state->res.l == 0)) {
+            ++state->success;
+        } else {
+            ++state->failure;
+            if (state->verbose) printf("FAIL test %d\n", state->test_num);
+        }
+    } else {
+        // Bad input, should return NULL and print an error message
+        if (check && output == NULL
+            && kgetline(&state->res, (kgets_func *)fgets, check) == 0
+            && state->res.l > 0) {
+            ++state->success;
+        } else {
+            ++state->failure;
+            if (state->verbose) printf("FAIL test %d\n", state->test_num);
+        }
+    }
+    fclose(check);
+
+    // teardown
+    free(output);
+    if (state->verbose) printf("END test %d\n", state->test_num);
+    return;
 }
 
 int main(int argc, char**argv)
 {
     // test state
-    const int NUM_TESTS = 1;
-    int verbose = 0;
-    int success = 0;
-    int failure = 0;
+    TestState state = { NULL, KS_INITIALIZE, 0, 0, 0, 0};
+    const static htsFormat sam_fmt  = { sequence_data, sam  };
+    const static htsFormat bam_fmt  = { sequence_data, bam  };
+    const static htsFormat cram_fmt = { sequence_data, cram };
 
     int getopt_char;
     while ((getopt_char = getopt(argc, argv, "v")) != -1) {
         switch (getopt_char) {
             case 'v':
-                ++verbose;
+                ++state.verbose;
                 break;
             default:
                 printf(
@@ -64,61 +128,47 @@ int main(int argc, char**argv)
 
 
     // Setup stderr redirect
-    kstring_t res = { 0, 0, NULL };
     FILE* orig_stderr = fdopen(dup(STDERR_FILENO), "a"); // Save stderr
-    char* tempfname = (optind < argc)? argv[optind] : "test_expand_format_string.tmp";
-    FILE* check = NULL;
+    state.tempfname = (optind < argc)? argv[optind] : "test_expand_format_string.tmp";
 
-    // setup
-    if (verbose) printf("BEGIN test 1\n");  // default format string test
-    const char* format_string_1 = "%*_%#.bam";
-    const char* basename_1 = "basename";
-    const char* rg_id_1 = "1#2.3";
-    const int rg_idx_1 = 4;
-    if (verbose > 1) {
-        printf("format_string:%s\n"
-               "basename:%s\n"
-               "rg_id:%s\n"
-               "rg_idx:%d\n", format_string_1, basename_1, rg_id_1, rg_idx_1);
-    }
-    if (verbose) printf("RUN test 1\n");
+    // default format string test
+    run_test(&state, "%*_%#.%.", "basename", "1#2.3", 4, 0, &bam_fmt,
+             "basename_4.bam");
 
-    // test
-    xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
-    char* output_1 = expand_format_string(format_string_1, basename_1, rg_id_1, rg_idx_1, NULL);
-    fclose(stderr);
+    // default for non-RG tags
+    run_test(&state, "%*_%!.%.", "basename", "1#2.3", 4, 0, &bam_fmt,
+             "basename_1#2.3.bam");
 
-    if (verbose) printf("END RUN test 1\n");
-    if (verbose > 1) {
-        printf("format_string:%s\n"
-               "basename:%s\n"
-               "rg_id:%s\n"
-               "rg_idx:%d\n", format_string_1, basename_1, rg_id_1, rg_idx_1);
-    }
+    // alternate file types
+    run_test(&state, "%*_%#.%.", "basename", "1#2.3", 4, 0, &sam_fmt,
+             "basename_4.sam");
+    run_test(&state, "%*_%#.%.", "basename", "1#2.3", 4, 0, &cram_fmt,
+             "basename_4.cram");
 
-    // check result
-    res.l = 0;
-    check = fopen(tempfname, "r");
-    if (output_1 != NULL && !strcmp(output_1, "basename_4.bam")
-        && kgetline(&res, (kgets_func *)fgets, check) < 0
-        && (feof(check) || res.l == 0)) {
-        ++success;
-    } else {
-        ++failure;
-        if (verbose) printf("FAIL test 1\n");
-    }
-    fclose(check);
+    // zero padding
+    run_test(&state, "%*_%#.%.", "basename", "1#2.3", 4, 5, &bam_fmt,
+             "basename_00004.bam");
 
-    // teardown
-    free(output_1);
-    if (verbose) printf("END test 1\n");
+    // percent sign
+    run_test(&state, "%%%*_%#.%.%%", "basename", "1#2.3", 4, 0, &bam_fmt,
+             "%basename_4.bam%");
+
+    // Bad input - single percent sign at end
+    run_test(&state, "%%%*_%#.%.%", "basename", "1#2.3", 4, 0, &bam_fmt,
+             NULL);
+
+    // Bad input - invalid format character
+    run_test(&state, "%s_%#.%.", "basename", "1#2.3", 4, 0, &bam_fmt,
+             NULL);
+
 
     // Cleanup test harness
-    free(res.s);
-    remove(tempfname);
-    if (failure > 0)
-        fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
+    free(state.res.s);
+    remove(state.tempfname);
+    if (state.failure > 0)
+        fprintf(orig_stderr, "%d failures %d successes\n",
+                state.failure, state.success);
     fclose(orig_stderr);
 
-    return (success == NUM_TESTS)? EXIT_SUCCESS : EXIT_FAILURE;
+    return (state.success == state.test_num)? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-split 1 "24 January 2024" "samtools-1.19.2" "Bioinformatics tools"
+.TH samtools-split 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
 .SH NAME
 samtools split \- splits a file by read group.
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018,2023 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018,2023-2024 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -65,7 +65,8 @@ only containing a header.
 If the
 .BI "-d " TAG
 option is used, the file will be split on the value in the given aux tag.
-Note that only string tags (type \fBZ\fR) are currently supported.
+Only string (type \fBZ\fR) and integer (type \fBi\fR in SAM,
+plus equivalents in BAM/CRAM) tags are currently supported.
 Unless the \fB-u\fR option is used, the program will exit with an error if
 it finds a record without the given tag.
 
@@ -110,8 +111,18 @@ Output filename format string (see below)
 .BI "-d " TAG
 Split reads by TAG value into distinct files. Only the TAG key must be 
 supplied with the option. The value of the TAG has to be a string (i.e.
-.B key:Z:value
-)
+.BR key:Z:value ") or an integer (" key:i:value ")."
+
+Using this option changes the default filename format string to "%*_%!.%.",
+so that tag values appear in the output file names.
+This can be overridden by using the \fB-f\fR option.
+.TP
+.BI "-p " NUMBER
+Pad numeric values in \fB%#\fR and \fB%!\fR format expansions to this many
+digits using leading zeros.
+For \fB%!\fR, only integer tag values will be padded.
+String tag values will be left unchanged,
+even if the value only includes digits.
 .TP
 .BI "-M,--max-split " NUM
 Limit the number of files created by the \fB-d\fR option to \fINUM\fR (default

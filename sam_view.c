@@ -883,6 +883,7 @@ int main_samview(int argc, char *argv[])
         {"use-index", no_argument, NULL, 'M'},
         {"with-header", no_argument, NULL, 'h'},
         {"sanitize", required_argument, NULL, 'z'},
+        {NULL, 0, NULL, 0}
     };
 
     /* parse command-line options */
@@ -898,6 +899,8 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     char *tmp;
+    int tmp_flag;
+
     while ((c = getopt_long(argc, argv,
                             "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:pPz:",
                             lopts, NULL)) >= 0) {
@@ -942,19 +945,47 @@ int main_samview(int argc, char *argv[])
         case 'U': settings.fn_un_out = strdup(optarg); break;
         case 'X': has_index_file = 1; break;
         case 'f':
-            settings.flag_on |= bam_str2flag(optarg);
+            tmp_flag = bam_str2flag(optarg);
+
+            if (tmp_flag < 0) {
+                print_error("view", "Unknown flag '%s'", optarg);
+                return 1;
+            }
+
+            settings.flag_on |= tmp_flag;
             settings.count_rf |= SAM_FLAG | SAM_RNEXT;
             break;
         case 'F':
-            settings.flag_off |= bam_str2flag(optarg);
+            tmp_flag = bam_str2flag(optarg);
+
+            if (tmp_flag < 0) {
+                print_error("view", "Unknown flag '%s'", optarg);
+                return 1;
+            }
+
+            settings.flag_off |= tmp_flag;
             settings.count_rf |= SAM_FLAG | SAM_RNEXT;
             break;
         case LONGOPT('g'):
-            settings.flag_anyon |= bam_str2flag(optarg);
+            tmp_flag = bam_str2flag(optarg);
+
+            if (tmp_flag < 0) {
+                print_error("view", "Unknown flag '%s'", optarg);
+                return 1;
+            }
+
+            settings.flag_anyon |= tmp_flag;
             settings.count_rf |= SAM_FLAG | SAM_RNEXT;
             break;
         case 'G':
-            settings.flag_alloff |= bam_str2flag(optarg);
+            tmp_flag = bam_str2flag(optarg);
+
+            if (tmp_flag < 0) {
+                print_error("view", "Unknown flag '%s'", optarg);
+                return 1;
+            }
+
+            settings.flag_alloff |= tmp_flag;
             settings.count_rf |= SAM_FLAG | SAM_RNEXT;
             break;
         case 'q':
@@ -1114,8 +1145,27 @@ int main_samview(int argc, char *argv[])
             }
             settings.count_rf = INT_MAX; // no way to know what we need
             break;
-        case LONGOPT('r'): settings.remove_flag |= bam_str2flag(optarg); break;
-        case LONGOPT('a'): settings.add_flag |= bam_str2flag(optarg); break;
+        case LONGOPT('r'):
+            tmp_flag = bam_str2flag(optarg);
+
+            if (tmp_flag < 0) {
+                print_error("view", "Unknown flag '%s'", optarg);
+                return 1;
+            }
+
+            settings.remove_flag |= tmp_flag;
+            break;
+
+        case LONGOPT('a'):
+            tmp_flag = bam_str2flag(optarg);
+
+            if (tmp_flag < 0) {
+                print_error("view", "Unknown flag '%s'", optarg);
+                return 1;
+            }
+
+            settings.add_flag |= tmp_flag;
+            break;
 
         case 'x':
             if (*optarg == '^') {

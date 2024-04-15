@@ -1,6 +1,6 @@
 /*  bam_sort.c -- sorting and merging.
 
-    Copyright (C) 2008-2023 Genome Research Ltd.
+    Copyright (C) 2008-2024 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -240,8 +240,12 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
         case QueryName:
             t = strnum_cmp(bam_get_qname(a.entry.bam_record), bam_get_qname(b.entry.bam_record));
             if (t != 0) return t > 0;
-            fa = a.entry.bam_record->core.flag & 0xc0;
-            fb = b.entry.bam_record->core.flag & 0xc0;
+            fa = a.entry.bam_record->core.flag;
+            fb = b.entry.bam_record->core.flag;
+            // Sort order is READ1, READ2, (PRIMARY), SUPPLEMENTARY, SECONDARY
+            // Get the bits in this order so sort is a natural a-b
+            fa = ((fa&0xc0)<<8)|((fa&0x100)<<3)|((fa&0x800)>>3);
+            fb = ((fb&0xc0)<<8)|((fb&0x100)<<3)|((fb&0x800)>>3);
             if (fa != fb) return fa > fb;
             break;
         case TagQueryName:
@@ -262,7 +266,7 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
             break;
     }
 
-    // This compares by position in the input file(s)
+    // This compares by position (i/idx'th read) in the input file(s)
     if (a.i != b.i) return a.i > b.i;
     return a.idx > b.idx;
 }
@@ -1965,7 +1969,13 @@ static inline int bam1_cmp_core(const bam1_tag a, const bam1_tag b)
     if (g_sam_order == QueryName || g_sam_order == TagQueryName) {
         int t = strnum_cmp(bam_get_qname(a.bam_record), bam_get_qname(b.bam_record));
         if (t != 0) return t;
-        return (int) (a.bam_record->core.flag&0xc0) - (int) (b.bam_record->core.flag&0xc0);
+        int af = a.bam_record->core.flag;
+        int bf = b.bam_record->core.flag;
+        // Sort order is READ1, READ2, (PRIMARY), SUPPLEMENTARY, SECONDARY
+        // Get the bits in this order so sort is a natural a-b
+        af = ((af&0xc0)<<8)|((af&0x100)<<3)|((af&0x800)>>3);
+        bf = ((bf&0xc0)<<8)|((bf&0x100)<<3)|((bf&0x800)>>3);
+        return af - bf;
     } else {
         pa = a.bam_record->core.tid;
         pb = b.bam_record->core.tid;

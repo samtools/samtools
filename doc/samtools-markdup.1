@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-markdup 1 "24 January 2024" "samtools-1.19.2" "Bioinformatics tools"
+.TH samtools-markdup 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
 .SH NAME
 samtools markdup \- mark duplicate alignments in a coordinate sorted file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2022 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2024 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -75,8 +75,25 @@ samtools markdup
 .SH DESCRIPTION
 .PP
 Mark duplicate alignments from a coordinate sorted file that
-has been run through \fBsamtools fixmate\fR with the \fB-m\fR option.  This program
-relies on the MC and ms tags that fixmate provides.
+has been run through \fBsamtools fixmate\fR with the \fB-m\fR option.  This
+program relies on the MC and ms tags that fixmate provides.
+
+Duplicates are found by using the alignment data for each read (and its mate for
+paired reads).  Position and orientation (which strand it aligns against and in
+what direction) are used to to compare the reads against one another. If two (or
+more) reads have the same values then the one with the highest base qualities is
+held to be the original and the others are the duplicates.
+
+It should be noted that \fBsamtools markdup\fR looks for duplication first and
+then classifies the type of duplication afterwards. If your process does not
+care whether duplication is PCR or optical then it is faster if you do not use
+the optical duplicate option.
+
+Duplicates are marked by setting the alignment's DUP flag.
+
+For more details please see:
+
+<http://www.htslib.org/algorithms/duplicate.html>
 
 .SH OPTIONS
 .TP 11
@@ -119,7 +136,8 @@ Clear previous duplicate settings and tags.
 Mark duplicates with the name of the original in a \fBdo\fR tag.
 .TP
 .B --duplicate-count
-Record the original primary read duplication count(include itself) in a \fBdc\fR tag.
+Record the original primary read duplication count (including itself) in a
+\fBdc\fR tag.
 .TP
 .BI "-m, --mode " TYPE
 Duplicate decision method for paired reads.  Values are \fBt\fR or \fBs\fR.

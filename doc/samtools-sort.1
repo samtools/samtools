@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-sort 1 "24 January 2024" "samtools-1.19.2" "Bioinformatics tools"
+.TH samtools-sort 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
 .SH NAME
 samtools sort \- sorts SAM/BAM/CRAM files
 .\"
@@ -266,8 +266,10 @@ attempt any numeric comparisons and may be more appropriate for some
 data sets.  Note care must be taken when using \fBsamtools merge\fP to
 ensure all files are using the same collation order.
 Records with the same name will be ordered according to the values of
-the READ1 and READ2 flags (see
-.BR flags ).
+the READ1 and READ2 flags (see \fBsamtools flags\fR). When that flag
+is also equal, ties are resolved with primary alignments first, then
+SUPPLEMENTARY, SECONDARY, and finally SUPPLEMENTARY plus SECONDARY.
+Any remaining ties are reported in the same order as the input data.
 
 When the 
 .B --template-coordinate

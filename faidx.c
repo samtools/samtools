@@ -353,7 +353,7 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
         if (fai_name)
             fprintf(stderr, "[faidx] Could not load fai index %s", fai_name);
         else
-            fprintf(stderr, "[faidx] Could not build fai index %s.fai", argv[optind]);
+            fprintf(stderr, "[faidx] Could not load fai index %s.fai", argv[optind]);
 
         if (gzi_name)
             fprintf(stderr, " or compressed index %s\n", gzi_name);
