@@ -997,6 +997,12 @@ block compression.
 CRAM output only; defaults to 0 (off).  Permits use of lzma in CRAM
 block compression.
 .TP
+.BI use_arith= 0|1
+CRAM \(>= 3.1 output only; enables use of arithmetic entropy coding in
+CRAM block compression.  This is off by default, but enabled for
+archive mode.  This is significantly slower but sometimes smaller than
+the standard rANS entropy encoder.
+.TP
 .BI use_fqz= 0|1
 CRAM \(>= 3.1 output only; enables and disables the fqzcomp quality
 compression method.  This is on by default for version 3.1 and above
