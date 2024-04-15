@@ -73,6 +73,9 @@ Bug Fixes:
   regions at the end of each reference.
   (PR #2019, fixes #2018.  Reported by Joe Georgeson)
 
+* Fixed a samtools view usage crash on MinGW when given invalid options.
+  (PR #2030, fixes #2029.  Reported by Divon Lan)
+
 Non user-visible changes and build improvements:
 
 * Added tests to ensure that CRAM compression is working properly.

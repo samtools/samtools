@@ -883,6 +883,7 @@ int main_samview(int argc, char *argv[])
         {"use-index", no_argument, NULL, 'M'},
         {"with-header", no_argument, NULL, 'h'},
         {"sanitize", required_argument, NULL, 'z'},
+        {NULL, 0, NULL, 0}
     };
 
     /* parse command-line options */
