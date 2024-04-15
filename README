@@ -9,7 +9,7 @@ Building samtools
 The typical simple case of building Samtools using the HTSlib bundled within
 this Samtools release tarball is done as follows:
 
-    cd .../samtools-1.19.2 # Within the unpacked release directory
+    cd .../samtools-1.20 # Within the unpacked release directory
     ./configure
     make
 
@@ -21,7 +21,7 @@ install samtools etc properly into a directory of your choosing.  Building for
 installation using the HTSlib bundled within this Samtools release tarball,
 and building the various HTSlib utilities such as bgzip is done as follows:
 
-    cd .../samtools-1.19.2 # Within the unpacked release directory
+    cd .../samtools-1.20 # Within the unpacked release directory
     ./configure --prefix=/path/to/location
     make all all-htslib
     make install install-htslib
@@ -48,7 +48,7 @@ There are two advantages to this:
 To build with plug-ins, you need to use the --enable-plugins configure option
 as follows:
 
-    cd .../samtools-1.19.2 # Within the unpacked release directory
+    cd .../samtools-1.20 # Within the unpacked release directory
     ./configure --enable-plugins --prefix=/path/to/location
     make all all-htslib
     make install install-htslib
@@ -66,8 +66,8 @@ Setting --with-plugin-path is useful if you want to run directly from
 the source distribution instead of installing the package.  In that case
 you can use:
 
-    cd .../samtools-1.19.2 # Within the unpacked release directory
-    ./configure --enable-plugins --with-plugin-path=$PWD/htslib-1.19.1
+    cd .../samtools-1.20 # Within the unpacked release directory
+    ./configure --enable-plugins --with-plugin-path=$PWD/htslib-1.20
     make all all-htslib
 
 It is possible to override the built-in search path using the HTS_PATH

@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.20 (15th April 2024)
+------------------------------
+
 * Added a `--max-depth` option to `bedcov`, for more control over the depth
   limit used when calculating the pileup.  Previously this limit was set
   at 64000; now it is set to over 2 billion, so effectively all bases will
