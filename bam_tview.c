@@ -364,16 +364,11 @@ int base_draw_aln(tview_t *tv, int tid, hts_pos_t pos)
     tv->ccol = 0;
     // print ref and consensus
     if (tv->fai) {
-        char *str;
         if (tv->ref) free(tv->ref);
         assert(tv->curr_tid>=0);
 
         const char *ref_name = sam_hdr_tid2name(tv->header, tv->curr_tid);
-        str = (char*)calloc(strlen(ref_name) + 30, 1);
-        assert(str!=NULL);
-        sprintf(str, "%s:%"PRIhts_pos"-%"PRIhts_pos, ref_name, tv->left_pos + 1, tv->left_pos + tv->mcol);
-        tv->ref = fai_fetch64(tv->fai, str, &tv->l_ref);
-        free(str);
+        tv->ref = faidx_fetch_seq64(tv->fai, ref_name, tv->left_pos, tv->left_pos + tv->mcol - 1, &tv->l_ref);
         if ( !tv->ref )
         {
             fprintf(stderr,"Could not read the reference sequence. Is it seekable (plain text or compressed + .gzi indexed with bgzip)?\n");
@@ -398,7 +393,7 @@ int base_draw_aln(tview_t *tv, int tid, hts_pos_t pos)
         hts_pos_t pos = tv->last_pos + 1;
         int interval = pos < TEN_DIGITS ? 10 : 20;
         if (pos%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, pos+1);
-        tv->my_mvaddch(tv,1, tv->ccol++, (tv->ref && pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N');
+        tv->my_mvaddch(tv,1, tv->ccol++, (tv->ref && pos - tv->left_pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N');
         ++tv->last_pos;
     }
     return 0;
