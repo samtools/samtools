@@ -356,12 +356,20 @@ New work and changes:
   the reference coordinates.
   (PR #1746)
 
+* Consensus min depth now works on the overall depth of the data, in line with
+  the documentation.  Added a --min-BQ (minimum base quality) filtering option.
+  (PR #1704, fixes #1700 reported by Thiseas C. Lamnidis)
+
 * Make faidx/fqidx output line length default to the input line length.
   (PR #1738, fixes #1734. Reported by John Marshall)
 
 * Speed up optical duplicate checking where data has a lot of duplicates
   compared to non-duplicates.
   (PR #1779, fixes #1771. Reported by Poshi)
+
+* Added option to add read group matching to the duplicate criteria.  Change
+  stats to include read groups and add an optional JSON format.
+  (PR #1699, implements #1143 requested by Jonathan Keats)
 
 * For collate use TMPDIR environment variable, when looking for a temporary
   folder.
