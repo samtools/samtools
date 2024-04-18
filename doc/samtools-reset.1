@@ -3,7 +3,7 @@
 .SH NAME
 samtools reset \- removes the alignment information added by aligners and updates flags accordingly
 .\"
-.\" Copyright (C) 2022, 2023 Genome Research Ltd.
+.\" Copyright (C) 2022 - 2024 Genome Research Ltd.
 .\"
 .\" Author: Vasudeva Sarma <vasudeva.sarma@sanger.ac.uk>
 .\"
@@ -60,7 +60,8 @@ Removes the alignment information added by the aligner. CIGAR and reference data
 If the alignment was in reverse direction, data and its quality values are reversed and complemented and the reverse flag is reset.
 Supplimentary and secondary alignment data are discarded.
 
-Aux tags that will be retained in output is controlled by keep-tag and remove-tag/x. These options take tags as comma separated lists.
+Aux tags that will be retained in output can be controlled by keep-tag and remove-tag/x. These options take tags as comma separated lists.
+Aux tags AS, CC, CG, CP, H1, H2, HI, H0, IH, MC, MD, MQ, NM, SA and TS are removed by default, this can be overridden using keep-tag.
 
 PG and RG tags from input are written on the output by default.
 CO lines are not retained after this operation.
@@ -118,25 +119,25 @@ If this option is not present, the format is identified from the output file nam
 .SH EXAMPLES
 Basic usage, to reset the data:
 
-.EX
+.EX 2
 samtools reset -o out.bam in.bam
 .EE
 
 To keep aux tags RG and BC in the output:
 
-.EX
+.EX 2
 samtools reset -o out.sam --keep-tag RG,BC in.bam
 .EE
 
 To discard PG entries from 'bwa_index' onwards,
 
-.EX
+.EX 2
 samtools reset -o out.sam --reject-PG=bwa_index
 .EE
 
 To set output format for use within a pipeline:
 
-.EX
+.EX 2
 samtools collate -O -u input.cram | \\
   samtools reset --output-fmt BAM,level=0 | \\
   myaligner -I bam -o out.bam

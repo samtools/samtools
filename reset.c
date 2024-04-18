@@ -1,7 +1,7 @@
 /*  reset.c --  removes aligner updates and reference data from input sam /
                 bam / cram file and makes read data raw for new processing
 
-    Copyright (C) 2022, 2023 Genome Research Ltd.
+    Copyright (C) 2022 - 2024 Genome Research Ltd.
 
     Author: Vasudeva Sarma <vasudeva.sarma@sanger.ac.uk>
 
@@ -68,6 +68,53 @@ static void usage(FILE *fp)
     return;
 }
 
+/// update_aux_conf - update the user given aux tag configuration with defaults
+/** @param config - pointer to conf_data
+returns nothing
+*/
+void update_aux_conf(conf_data *config)
+{
+    const char rg[] = "RG";
+    const char *default_tags[] = {"AS", "CC", "CG", "CP", "H1", "H2", "HI", "H0", "IH",
+                                    "MC", "MD", "MQ", "NM", "SA", "TS"};
+    khint_t iter = 0;
+    int ret = 0, i = 0;
+
+    if (!config)
+        return;
+
+    if (!config->aux_keep && !config->aux_remove) {
+        //none of aux tag filter in use, create remove filter
+        config->aux_remove = kh_init(aux_exists);
+    }
+    if (config->aux_keep) {
+        //keep set in use, remove RG if present
+        if (!config->keepRGs) {
+            iter = kh_get(aux_exists, config->aux_keep, TAGNUM(rg));
+            if (iter != kh_end(config->aux_keep)) {
+                kh_del(aux_exists, config->aux_keep, iter);
+            }
+        }
+    }
+    if (config->aux_remove) {
+        if (!config->keepRGs) {
+            //remove set in use, add RG if not present
+            iter = kh_get(aux_exists, config->aux_remove, TAGNUM(rg));
+            if (iter == kh_end(config->aux_remove)) {
+                kh_put(aux_exists, config->aux_remove, TAGNUM(rg), &ret);
+            }
+        }
+        //add the default tags if not present in remove set
+        //note, keep has priority and this may not be honoured
+        for (i = 0; i < sizeof(default_tags) / sizeof(default_tags[0]); ++i) {
+            iter = kh_get(aux_exists, config->aux_remove, TAGNUM(default_tags[i]));
+            if (iter == kh_end(config->aux_remove)) {
+                kh_put(aux_exists, config->aux_remove, TAGNUM(default_tags[i]), &ret);
+            }
+        }
+    }
+}
+
 /// removeauxtags - remove aux tags in bam data which are not present in acceptable tag set
 /** @param bamdata - pointer to the bamdata from which needs the filtering
  *  @param config - pointer to conf_data
@@ -76,35 +123,11 @@ returns nothing
 void removeauxtags(bam1_t *bamdata, conf_data *config)
 {
     uint8_t *auxdata = NULL;
-    const char *tag = NULL, rg[] = "RG";
+    const char *tag = NULL;
     khint_t iter = 0;
-    int ret = 0;
 
-    if (!bamdata || !config || (!config->aux_keep && !config->aux_remove && config->keepRGs))
+    if (!bamdata || !config)
         return;
-
-    //remove RG tags from bamdata if keepRG is false
-    if (!config->keepRGs) {
-        if (!config->aux_keep && !config->aux_remove) {
-            //none of aux tag filter in use, create remove filter
-            config->aux_remove = kh_init(aux_exists);
-        }
-
-        if (config->aux_keep) {
-            //keep set in use, remove RG if present
-            iter = kh_get(aux_exists, config->aux_keep, TAGNUM(rg));
-            if (iter != kh_end(config->aux_keep)) {
-                kh_del(aux_exists, config->aux_keep, iter);
-            }
-        }
-        if (config->aux_remove) {
-            //remove set in use, add RG if not present
-            iter = kh_get(aux_exists, config->aux_remove, TAGNUM(rg));
-            if (iter == kh_end(config->aux_remove)) {
-                kh_put(aux_exists, config->aux_remove, TAGNUM(rg), &ret);
-            }
-        }
-    }
 
     for (auxdata = bam_aux_first(bamdata); auxdata; ) {
         tag = bam_aux_tag(auxdata);
@@ -542,6 +565,8 @@ int main_reset(int argc, char *argv[])
         inname = "-";
     }
 
+    //update aux tag configuration
+    update_aux_conf(&resetconf);
     //set output file format based on name
     sam_open_mode(outmode + 1, outname, NULL);
 
