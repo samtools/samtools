@@ -30,7 +30,10 @@ DEALINGS IN THE SOFTWARE.  */
 typedef struct {
     int64_t left;
     int64_t right;
+    char *name;
+    char *score;
     int rev;
+    int64_t num_reads;
 } bed_entry_t;
 
 typedef struct {
