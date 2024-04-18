@@ -62,6 +62,7 @@ typedef struct {
     int unmap_len;
     char *arg_list;
     char *stats_file;
+    char *primer_counts_file;
     char *rejects_file;
 } cl_param_t;
 
@@ -72,49 +73,76 @@ static int bed_entry_sort(const void *av, const void *bv) {
     return a->right < b->right ? -1 : (a->right == b->right ? 0 : 1);
 }
 
-
 int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash_t(bed_list_hash) *bed_lists) {
     hFILE *fp;
-    int line_count = 0, ret;
+    int line_count = 0, num_columns = 0, ret;
+
+    //variables to store the bed file data for each record
+    char ref[1024] = "";
     int64_t left, right;
+    char name[1024] = "", score[1024] = "";
+    char strand;
+
+    //hash table to store clipping results and bed file data
     kstring_t line = KS_INITIALIZE;
     bed_entry_list_t *list;
     khiter_t bed_itr;
+
+    //scanf components to parse the bed file, depending on the number of columns in the bed file only some may be used
+    char *scanf_components[] = {
+        "%1023s",  // ref
+        "%"PRId64, // left
+        "%"PRId64, // right
+        "%1023s",  // name
+        "%1023s",  // score
+        "%c"       // strand
+    };
 
     if ((fp = hopen(infile, "r")) == NULL) {
         print_error_errno("amplicon", "unable to open file %s.", infile);
         return 1;
     }
 
-    char ref[1024];
 
     while (line.l = 0, kgetline(&line, (kgets_func *)hgets, fp) >= 0) {
         line_count++;
         int hret;
-        char strand;
 
         if (line.l == 0 || *line.s == '#') continue;
         if (strncmp(line.s, "track ", 6) == 0) continue;
         if (strncmp(line.s, "browser ", 8) == 0) continue;
+        num_columns = 0;
 
-        if (get_strand) {
-            if (sscanf(line.s, "%1023s %"SCNd64" %"SCNd64" %*s %*s %c",
-                       ref, &left, &right, &strand) != 4) {
-                fprintf(stderr, "[amplicon] error: bad bed file format in line %d of %s.\n"
-                                "(N.B. ref/chrom name limited to 1023 characters.)\n",
-                                    line_count, infile);
-                ret = 1;
-                goto error;
-            }
-        } else {
-            if (sscanf(line.s, "%1023s %"SCNd64" %"SCNd64,
-                       ref, &left, &right) != 3) {
-                fprintf(stderr, "[amplicon] error: bad bed file format in line %d of %s\n"
-                                "(N.B. ref/chrom name limited to 1023 characters.)\n",
-                                    line_count, infile);
-                ret = 1;
-                goto error;
-            }
+        // count the number of line columns in line.s, and use that to determine the number of sscanf arguments to use
+        for (char *c = line.s; (c = strchr(c, '\t')) != NULL; c++) {
+            num_columns++;
+        }
+        num_columns++; // Add one to account for the last column
+
+        // num columns must be less than or equal to the number of scanf components
+        if (num_columns > sizeof(scanf_components)) {
+            fprintf(stderr, "[amplicon] error: too many columns in line %d of %s.\n"
+                            "Found %d columns, but only up to %zu are expected.\n",
+                            line_count, infile, num_columns, sizeof(scanf_components) / sizeof(scanf_components[0]));
+            ret = 1;
+            goto error;
+        }
+
+        // construct a scanf string using the scanf_components array elements used to parse the line
+        char scanf_str[1024] = "";
+        for (int i = 0; i < num_columns; i++) {
+            snprintf(scanf_str + strlen(scanf_str), sizeof(scanf_str) - strlen(scanf_str) - 1, "%s ", scanf_components[i]);
+        }
+
+        int cols_parsed = 0;
+        // extract the data from the line into the variables. Variables corresponding to any missing columns will remain uninitialised
+        if ((cols_parsed = sscanf(line.s, scanf_str, ref, &left, &right, name, score, &strand)) != num_columns || cols_parsed < 3) {
+            fprintf(stderr, "[amplicon] error: invalid bed file format in line %d of %s.\n"
+                            "Found %d columns, parsed %d using %s on line:\n%s\n"
+                            "(N.B. ref/chrom name limited to 1023 characters.)\n",
+                            line_count, infile, num_columns, cols_parsed, scanf_str, line.s);
+            ret = 1;
+            goto error;
         }
 
         bed_itr = kh_get(bed_list_hash, bed_lists, ref);
@@ -147,6 +175,7 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
             list = &kh_val(bed_lists, bed_itr);
         }
 
+        // add the bed entry to the list, growing the list if necessary
         if (list->length == list->size) {
            bed_entry_t *tmp;
 
@@ -163,6 +192,24 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
 
         list->bp[list->length].left  = left;
         list->bp[list->length].right = right;
+        if (num_columns >= 4) {
+            list->bp[list->length].name = strdup(name);
+            if (list->bp[list->length].name == NULL) {
+                fprintf(stderr, "[amplicon] error: unable to allocate memory for name in line %d of %s: %s.\n", line_count, infile, line.s);
+                ret = 1;
+                goto error;
+            }
+        }
+        if (num_columns >= 5) {
+            list->bp[list->length].score = strdup(score);
+            if (list->bp[list->length].score == NULL) {
+                fprintf(stderr, "[amplicon] error: unable to allocate memory for score in line %d of %s: %s\n", line_count, infile, line.s);
+                ret = 1;
+                goto error;
+            }
+        }
+
+        list->bp[list->length].num_reads = 0;
 
         if (get_strand) {
             if (strand == '+') {
@@ -214,7 +261,12 @@ void destroy_bed_hash(khash_t(bed_list_hash) *hash) {
 
     for (itr = kh_begin(hash); itr != kh_end(hash); ++itr) {
        if (kh_exist(hash, itr)) {
-           free(kh_val(hash, itr).bp);
+           bed_entry_list_t list = kh_val(hash, itr);
+           for (int i = 0; i < list.length; i++) {
+               free(list.bp[i].name);
+               free(list.bp[i].score);
+           }
+           free(list.bp);
            free((char *)kh_key(hash, itr));
            kh_key(hash, itr) = NULL;
         }
@@ -227,7 +279,7 @@ void destroy_bed_hash(khash_t(bed_list_hash) *hash) {
 static int matching_clip_site(bed_entry_list_t *sites, hts_pos_t pos,
                               int is_rev, int use_strand, int64_t longest,
                               cl_param_t *param) {
-    int i, size;  // may need this to be variable
+    int i, size, used_i;
     int tol = param->tol;
     int l = 0, mid = sites->length / 2, r = sites->length;
     int pos_tol = is_rev ? (pos > tol ? pos - tol : 0) : pos;
@@ -242,6 +294,7 @@ static int matching_clip_site(bed_entry_list_t *sites, hts_pos_t pos,
     }
 
     size = 0;
+    used_i = -1;
 
     for (i = l; i < sites->length; i++) {
         hts_pos_t mod_left, mod_right;
@@ -268,15 +321,19 @@ static int matching_clip_site(bed_entry_list_t *sites, hts_pos_t pos,
             if (is_rev) {
                 if (size < pos - sites->bp[i].left) {
                     size = pos - sites->bp[i].left;
+                    used_i = i;
                 }
             } else {
                 if (size < sites->bp[i].right - pos) {
                     size = sites->bp[i].right - pos;
+                    used_i = i;
                 }
             }
         }
     }
-
+    if (used_i >= 0) {
+        sites->bp[used_i].num_reads++;
+    }
     return size;
 }
 
@@ -642,6 +699,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
     kstring_t seq = KS_INITIALIZE;
     bed_entry_list_t *sites;
     FILE *stats_fp = stderr;
+    FILE *bed_count_summary_fp = stderr;
     khash_t(bed_list_hash) *bed_hash = kh_init(bed_list_hash);
 
     if (load_bed_file_multi_ref(bedfile, param->use_strand, 1, bed_hash)) {
@@ -938,6 +996,32 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
 
     if (file_open) {
         fclose(stats_fp);
+        file_open = 0;
+    }
+
+    if (param->primer_counts_file) {
+        if ((bed_count_summary_fp = fopen(param->primer_counts_file, "w")) == NULL) {
+            fprintf(stderr, "[ampliconclip] warning: cannot write count summary to %s.\n", param->primer_counts_file);
+        } else {
+            file_open = 1;
+        }
+
+        //print out the number of reads for each bed entry, bedgraph format
+        fprintf(bed_count_summary_fp, "#CHR\tLEFT\tRIGHT\tNAME\tSCORE\tSTRAND\tNUM_CLIPPED\n");
+        khiter_t itr;
+        for (itr = kh_begin(bed_hash); itr != kh_end(bed_hash); ++itr) {
+            if (kh_exist(bed_hash, itr)) {
+                sites = &kh_val(bed_hash, itr);
+                for (int i = 0; i < sites->length; i++) {
+                    fprintf(bed_count_summary_fp, "%s\t%"PRId64"\t%"PRId64"\t%s\t%s\t%s\t%"PRId64"\n",
+                        kh_key(bed_hash, itr), sites->bp[i].left, sites->bp[i].right, sites->bp[i].name,
+                        sites->bp[i].score, (sites->bp[i].rev ? "-" : "+") , sites->bp[i].num_reads);
+                }
+            }
+        }
+        if (file_open) {
+            fclose(bed_count_summary_fp);
+        }
     }
 
     ret = 0;
@@ -956,25 +1040,26 @@ fail:
 static void usage(void) {
     fprintf(stderr, "Usage: samtools ampliconclip -b BED file <input.bam> -o <output.bam>\n\n");
     fprintf(stderr, "Option: \n");
-    fprintf(stderr, " -b  FILE            BED file of regions (eg amplicon primers) to be removed.\n");
-    fprintf(stderr, " -o  FILE            output file name (default stdout).\n");
-    fprintf(stderr, " -f  FILE            write stats to file name (default stderr)\n");
-    fprintf(stderr, " -u                  Output uncompressed data\n");
-    fprintf(stderr, " --soft-clip         soft clip amplicon primers from reads (default)\n");
-    fprintf(stderr, " --hard-clip         hard clip amplicon primers from reads.\n");
-    fprintf(stderr, " --both-ends         clip on both 5' and 3' ends.\n");
-    fprintf(stderr, " --strand            use strand data from BED file to match read direction.\n");
-    fprintf(stderr, " --clipped           only output clipped reads.\n");
-    fprintf(stderr, " --fail              mark unclipped, mapped reads as QCFAIL.\n");
-    fprintf(stderr, " --filter-len INT    do not output reads INT size or shorter.\n");
-    fprintf(stderr, " --fail-len   INT    mark as QCFAIL reads INT size or shorter.\n");
-    fprintf(stderr, " --unmap-len  INT    unmap reads INT size or shorter, default 0.\n");
-    fprintf(stderr, " --no-excluded       do not write excluded reads (unmapped or QCFAIL).\n");
-    fprintf(stderr, " --rejects-file FILE file to write filtered reads.\n");
-    fprintf(stderr, " --original          for clipped entries add an OA tag with original data.\n");
-    fprintf(stderr, " --keep-tag          for clipped entries keep the old NM and MD tags.\n");
-    fprintf(stderr, " --tolerance         match region within this number of bases, default 5.\n");
-    fprintf(stderr, " --no-PG             do not add an @PG line.\n");
+    fprintf(stderr, " -b  FILE             BED file of regions (eg amplicon primers) to be removed.\n");
+    fprintf(stderr, " -o  FILE             output file name (default: stdout).\n");
+    fprintf(stderr, " -f  FILE             write stats to file name (default: stderr)\n");
+    fprintf(stderr, " -u                   Output uncompressed data\n");
+    fprintf(stderr, " --soft-clip          soft clip amplicon primers from reads (default)\n");
+    fprintf(stderr, " --hard-clip          hard clip amplicon primers from reads.\n");
+    fprintf(stderr, " --both-ends          clip on both 5' and 3' ends.\n");
+    fprintf(stderr, " --strand             use strand data from BED file to match read direction.\n");
+    fprintf(stderr, " --clipped            only output clipped reads.\n");
+    fprintf(stderr, " --fail               mark unclipped, mapped reads as QCFAIL.\n");
+    fprintf(stderr, " --filter-len INT     do not output reads INT size or shorter.\n");
+    fprintf(stderr, " --fail-len   INT     mark as QCFAIL reads INT size or shorter.\n");
+    fprintf(stderr, " --unmap-len  INT     unmap reads INT size or shorter, default 0.\n");
+    fprintf(stderr, " --no-excluded        do not write excluded reads (unmapped or QCFAIL).\n");
+    fprintf(stderr, " --rejects-file FILE  file to write filtered reads.\n");
+    fprintf(stderr, " --primer-counts FILE file to write read counts per bed entry (bedgraph format).\n");
+    fprintf(stderr, " --original           for clipped entries add an OA tag with original data.\n");
+    fprintf(stderr, " --keep-tag           for clipped entries keep the old NM and MD tags.\n");
+    fprintf(stderr, " --tolerance          match region within this number of bases, default 5.\n");
+    fprintf(stderr, " --no-PG              do not add an @PG line.\n");
     sam_global_opt_help(stderr, "-.O..@-.");
     fprintf(stderr, "\nAbout: Soft clips read alignments where they match BED file defined regions.\n"
                     "Default clipping is only on the 5' end.\n\n");
@@ -1004,10 +1089,11 @@ int amplicon_clip_main(int argc, char **argv) {
         {"fail-len", required_argument, NULL, 1010},
         {"no-excluded", no_argument, NULL, 1011},
         {"rejects-file", required_argument, NULL, 1012},
-        {"original", no_argument, NULL, 1013},
-        {"keep-tag", no_argument, NULL, 1014},
-        {"tolerance", required_argument, NULL, 1015},
-        {"unmap-len", required_argument, NULL, 1016},
+        {"primer-counts", required_argument, NULL, 1013},
+        {"original", no_argument, NULL, 1014},
+        {"keep-tag", no_argument, NULL, 1015},
+        {"tolerance", required_argument, NULL, 1016},
+        {"unmap-len", required_argument, NULL, 1017},
         {NULL, 0, NULL, 0}
     };
 
@@ -1028,10 +1114,11 @@ int amplicon_clip_main(int argc, char **argv) {
             case 1010: param.fail_len = atoi(optarg); break;
             case 1011: param.unmapped = 1; break;
             case 1012: param.rejects_file = optarg; break;
-            case 1013: param.oa_tag = 1; break;
-            case 1014: param.del_tag = 0; break;
-            case 1015: param.tol = atoi(optarg); break;
-            case 1016: param.unmap_len = atoi(optarg); break;
+            case 1013: param.primer_counts_file = optarg; break;
+            case 1014: param.oa_tag = 1; break;
+            case 1015: param.del_tag = 0; break;
+            case 1016: param.tol = atoi(optarg); break;
+            case 1017: param.unmap_len = atoi(optarg); break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage(); exit(1);
