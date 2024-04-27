@@ -64,6 +64,7 @@ sub error
         "   -r, --ref-stats <file.fa.gc>        Optional reference stats file with expected GC content (created with -s).\n",
         "   -s, --do-ref-stats <file.fa>        Calculate reference sequence GC for later use with -r\n",
         "   -t, --targets <file.tab>            Restrict -s to the listed regions (tab-delimited chr,from,to. 1-based, inclusive)\n",
+        "   -q, --alt-qual-avg-method           Calculate average base quality using average base error probabilities rather than average quality scores.\n",
         "   -h, -?, --help                      This help message.\n",
         "\n";
 }
@@ -212,6 +213,7 @@ sub parse_params
         if ( $arg eq '-s' || $arg eq '--do-ref-stats' ) { $$opts{do_ref_stats}=shift(@ARGV); next; }
         if ( $arg eq '-t' || $arg eq '--targets' ) { $$opts{targets}=shift(@ARGV); next; }
         if ( $arg eq '-p' || $arg eq '--prefix' ) { $$opts{prefix}=shift(@ARGV); next; }
+	if ( $arg eq '-q' || $arg eq '--alt-qual-avg-method' ) { $$opts{alt_qual_avg_method}=1; next; }
         if ( $arg eq '-?' || $arg eq '-h' || $arg eq '--help' ) { error(); }
         if ( $arg eq '-'  || -e $arg ) { push @{$$opts{bamcheck}},$arg; next; }
         error("Unknown parameter or non-existent file \"$arg\". Run -h for help.\n");
@@ -644,7 +646,12 @@ sub plot_qualities
         my $sum=0; my $n=0;
         for (my $iqual=1; $iqual<@$cycle; $iqual++)
         {
-            $sum += $$cycle[$iqual]*$iqual;
+            if ( exists($$opts{alt_qual_avg_method }) ) {
+                my $prob_base_error = 10 ** (-$iqual/10);
+                $sum += $$cycle[$iqual]*$prob_base_error;
+            } else {
+                $sum += $$cycle[$iqual]*$iqual;
+            }
             $n += $$cycle[$iqual];
             if ( !defined $fmax or $fmax<$$cycle[$iqual] ) { $fmax=$$cycle[$iqual]; $fmax_qual=$iqual; $fmax_cycle=$$cycle[0]; }
         }
@@ -654,7 +661,13 @@ sub plot_qualities
         if ( !$n ) { next; }
         push @fp75, "$$cycle[0]\t$p25\t$p75\n";
         push @fp50, "$$cycle[0]\t$p50\n";
-        push @fmean, sprintf "%d\t%.2f\n", $$cycle[0],$sum/$n;
+        if ( exists($$opts{alt_qual_avg_method }) ) {
+            my $mean_prob_base_error = $sum/$n;
+            my $mean_error_quality_score = -10 * ( log($mean_prob_base_error) / log(10) );
+            push @fmean, sprintf "%d\t%.2f\n", $$cycle[0],$mean_error_quality_score;
+        } else {
+            push @fmean, sprintf "%d\t%.2f\n", $$cycle[0],$sum/$n;
+        }
         printf $fh $fmean[-1];
     }
     print $fh "end\n";
