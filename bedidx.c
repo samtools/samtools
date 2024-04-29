@@ -539,12 +539,12 @@ void *bed_hash_regions(void *reg_hash, char **regs, int first, int last, int *op
 
         //if op==1 insert reg to the bed hash table
         if (*op && !(bed_insert(h, reg, beg, end))) {
-            fprintf(stderr, "Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], h);
+            fprintf(stderr, "Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], (void *)h);
         }
         //if op==0, first insert the regions in the temporary hash table,
         //then filter the bed hash table using it
         if (!(*op) && !(bed_insert(t, reg, beg, end))) {
-            fprintf(stderr, "Error when inserting region='%s' in the temporary hash table at address=%p!\n", regs[i], t);
+            fprintf(stderr, "Error when inserting region='%s' in the temporary hash table at address=%p!\n", regs[i], (void *)t);
         }
     }
 

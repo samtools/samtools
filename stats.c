@@ -2252,7 +2252,7 @@ int init_stat_info_fname(stats_info_t* info, const char* bam_fname, const htsFor
     return 0;
 }
 
-stats_t* stats_init()
+stats_t* stats_init(void)
 {
     stats_t *stats = calloc(1,sizeof(stats_t));
     if (!stats)

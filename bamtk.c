@@ -75,7 +75,7 @@ int main_reference(int argc, char *argv[]);
 int main_reset(int argc, char *argv[]);
 int main_cram_size(int argc, char *argv[]);
 
-const char *samtools_version()
+const char *samtools_version(void)
 {
     return SAMTOOLS_VERSION;
 }
