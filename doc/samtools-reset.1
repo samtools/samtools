@@ -50,7 +50,10 @@ samtools reset
 .IR STR "]"
 .RB [ --reject-PG
 .IR pgid ]
-.RB "["--no-RG "] [" --no-PG "] [...]"
+.RB "["--no-RG "] [" --no-PG "]
+.RB [ --excl-flag
+.IR STR|INT ]
+.RB "[...]"
 
 
 .SH DESCRIPTION
@@ -58,7 +61,7 @@ samtools reset
 
 Removes the alignment information added by the aligner. CIGAR and reference data are removed. Flags are updated as unmapped and as not a proper pair.
 If the alignment was in reverse direction, data and its quality values are reversed and complemented and the reverse flag is reset.
-Supplimentary and secondary alignment data are discarded.
+Supplementary, duplicate and secondary alignment data are discarded by default and this can be controlled using option.
 
 Aux tags that will be retained in output can be controlled by keep-tag and remove-tag/x. These options take tags as comma separated lists.
 Aux tags AS, CC, CG, CP, H1, H2, HI, H0, IH, MC, MD, MQ, NM, SA and TS are removed by default, this can be overridden using keep-tag.
@@ -92,20 +95,26 @@ all tags.  If both \fB--keep-tag\fR and \fB--remove-tag\fR are
 specified then \fB--keep-tag\fR has precedence.
 
 .TP 8
-.BI --reject-PG\  pgid
+.BI "--reject-PG " pgid
 The PG line which has the ID matching \fIpgid\fR and all subsequent PG lines will be removed. If the option itself is absent, the default,
 all PG entries will be in output.
 
 .TP 8
-.BI --no-RG
+.BI "--no-RG"
 RG lines in input will be discarded with this option. By default, RG lines will be present in output.
 
 With this option, RG aux tags will also be discarded.
 
 .TP 8
-.BI --no-PG
+.BI "--no-PG"
 Do not add a @PG line to the header of the output file listing the \fBreset\fR command.
 By default the PG entry for reset will be present in the output.
+
+.TP 8
+.BI "--excl-flag " STR|INT
+Exclude alignments with given flags from processing and output. Value can be ',' separated strings or a decimal/octa/hexa number.
+
+By default it is 0xD00 - Secondary, Duplicate and Supplementary.
 
 .TP
 .BI -@,--thread\  N
@@ -141,6 +150,12 @@ To set output format for use within a pipeline:
 samtools collate -O -u input.cram | \\
   samtools reset --output-fmt BAM,level=0 | \\
   myaligner -I bam -o out.bam
+.EE
+
+To avoid processing of QCFAIL along with the defaults,
+
+.EX 2
+samtools reset --excl-flag=SECONDARY,QCFAIL,DUP,SUPPLEMENTARY
 .EE
 
 .SH AUTHOR
