@@ -42,6 +42,7 @@ typedef struct conf_data
 {
     int keepRGs;                    //RG line handling
     int noPGentry;                  //PG line for reset op or not
+    int exclFlags;                  //exclude flags
     auxhash_t aux_keep;             //SET that holds the aux tags to be retained
     auxhash_t aux_remove;           //SET that holds the aux tags to be removed
     char *pgid;                     //PG id onwards which to be removed
@@ -62,7 +63,9 @@ static void usage(FILE *fp)
       --reject-PG ID\n\
                Removes PG line with ID matching to input and succeeding PG lines\n\
       --no-RG  To have RG lines or not\n\
-      --no-PG  To have PG entry or not for reset operation\n");
+      --no-PG  To have PG entry or not for reset operation\n\
+      --excl-flag STR|INT\n\
+               Alignments with given flags will be excluded.\n");
 
     sam_global_opt_help(fp, "--O--@--");
     return;
@@ -342,10 +345,9 @@ int reset(samFile *infile, samFile *outfile, conf_data *config, char *args)
         bamquery = NULL; bamqual = NULL;
 
         // read data
-        if (bamdata->core.flag & BAM_FSECONDARY || bamdata->core.flag & BAM_FSUPPLEMENTARY) {
-            continue;
+        if (bamdata->core.flag & config->exclFlags) {
+            continue;                       //discard if any exclude flag is set
         }
-
         //update flags
         uint16_t flags = bamdata->core.flag & ~BAM_FPROPER_PAIR;    //reset pair info
         flags |= BAM_FUNMAP;                                        //mark as unmapped
@@ -462,6 +464,7 @@ int main_reset(int argc, char *argv[])
         //reject PG lines from input, default is to keep them (i.e. option not given); without optional filename, all PGs removed and those given in file are filtered when optional filename is given
         {"reject-PG", required_argument, NULL, 'p'},                //reject entries from this PG onwards
         {"no-PG", no_argument, NULL, 2},                            //do not add PG entry for reset operation, default is to add it
+        {"excl-flags", required_argument, NULL, 'G'},               //flags to exclude reads from processing
         {NULL, 0, NULL, 0}
     };
     samFile *infile = NULL, *outfile = NULL;
@@ -470,8 +473,7 @@ int main_reset(int argc, char *argv[])
     const char *inname = NULL, *outname = NULL;
     int c = 0, ret = EXIT_FAILURE;
     char outmode[4] = "w", *args = NULL;
-    conf_data resetconf = {1, 0, NULL, NULL, NULL};                //keep RGs and PGs by default
-
+    conf_data resetconf = {1, 0, -1, NULL, NULL, NULL};         //keep RGs and PGs by default, flags = -1
 
     //samtools reset -o outfile -x/--remove-tag ... --keep-tag ... --threads=n --output-fmt=fmt --no-RG --reject-PG pgid --no-PG [<infile>]
     while ((c = getopt_long(argc, argv, "o:@:x:O:", lopts, NULL)) >= 0)
@@ -521,11 +523,18 @@ int main_reset(int argc, char *argv[])
                 }
             }
             break;
-        case LONG_OPT('x'):                  //keep aux tags
+        case LONG_OPT('x'):                 //keep aux tags
             if (parse_aux_list(&resetconf.aux_keep, optarg, "main_reset")) {
                 usage(stderr);
                 goto exit;
             }
+            break;
+        case 'G':                           //exclude flag
+            if (resetconf.exclFlags != -1) {    //already given!
+                usage(stderr);
+                goto exit;
+            }
+            resetconf.exclFlags = bam_str2flag(optarg);
             break;
         // handle standard samtool options like thread count, verbosity...
         default:
@@ -563,6 +572,10 @@ int main_reset(int argc, char *argv[])
     }
     else {
         inname = "-";
+    }
+
+    if (resetconf.exclFlags == -1) {
+        resetconf.exclFlags = BAM_FSECONDARY | BAM_FDUP | BAM_FSUPPLEMENTARY;   //default exclude flags
     }
 
     //update aux tag configuration
