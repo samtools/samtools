@@ -40,7 +40,7 @@ typedef struct {
     int size;
 } bed_entry_list_t;
 
-KHASH_MAP_INIT_STR(bed_list_hash, bed_entry_list_t);
+KHASH_MAP_INIT_STR(bed_list_hash, bed_entry_list_t)
 
 #define BED_LIST_INIT {NULL, 0, 0, 0, {0}}
 

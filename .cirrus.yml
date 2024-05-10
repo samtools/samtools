@@ -70,6 +70,8 @@ gcc_task:
     CIRRUS_CLONE_DEPTH: 1
     HTSDIR: ./hidden-htslib
     DO_MAINTAINER_CHECKS: yes
+    CFLAGS:  -std=c99 -D_XOPEN_SOURCE=600 -pedantic -fsanitize=address
+    LDFLAGS: -fsanitize=address
 
   << : *COMPILE
   << : *TEST
@@ -94,8 +96,8 @@ ubuntu_task:
     - environment:
        CFLAGS: -std=gnu99 -O0
     - environment:
-       CFLAGS: -g -Wall -O3 -fsanitize=address
-       LDFLAGS: -fsanitize=address -Wl,-rpath,`pwd`/inst/lib
+       CFLAGS: -g -Wall -O3
+       LDFLAGS: -Wl,-rpath,`pwd`/inst/lib
 
   # NB: we could consider building a docker image with these
   # preinstalled and specifying that instead, to speed up testing.

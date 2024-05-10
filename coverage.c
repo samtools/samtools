@@ -105,7 +105,7 @@ static const char *const BLOCK_CHARS2[2] = {".", ":"};
 // in bam_plcmd.c
 int read_file_list(const char *file_list, int *n, char **argv[]);
 
-static int usage() {
+static int usage(void) {
     fprintf(stdout, "Usage: samtools coverage [options] in1.bam [in2.bam [...]]\n\n"
             "Input options:\n"
             "  -b, --bam-list FILE     list of input BAM filenames, one per line\n"
