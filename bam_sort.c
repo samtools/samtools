@@ -1481,7 +1481,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     bed_destroy(hreg);
     free(RG); free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
     if (sam_close(fpout) < 0) {
-        print_error(cmd, "error closing output file");
+        print_error_errno(cmd, "error closing output file \"%s\"", out);
         return -1;
     }
     return 0;
@@ -1934,7 +1934,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
     }
 
     if (sam_close(fpout) < 0) {
-        print_error(cmd, "error closing output file");
+        print_error_errno(cmd, "error closing output file \"%s\"", fn[i]);
         return -1;
     }
     return 0;
