@@ -1013,9 +1013,10 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
             if (kh_exist(bed_hash, itr)) {
                 sites = &kh_val(bed_hash, itr);
                 for (int i = 0; i < sites->length; i++) {
+                    char* strand_out = param->use_strand ? (sites->bp[i].rev ? "-" : "+") : ".";
                     fprintf(bed_count_summary_fp, "%s\t%"PRId64"\t%"PRId64"\t%s\t%s\t%s\t%"PRId64"\n",
                         kh_key(bed_hash, itr), sites->bp[i].left, sites->bp[i].right, sites->bp[i].name,
-                        sites->bp[i].score, (sites->bp[i].rev ? "-" : "+") , sites->bp[i].num_reads);
+                        sites->bp[i].score, strand_out, sites->bp[i].num_reads);
                 }
             }
         }

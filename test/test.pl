@@ -3629,7 +3629,12 @@ sub test_ampliconclip
              },
              cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --keep-tag --primer-counts $$opts{path}/ampliconclip/primer_counts.tsv --output-fmt=sam -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
     test_cmd($opts, out=>'ampliconclip/1_hard_clipped.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --keep-tag --output-fmt=sam --hard-clip -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
-    test_cmd($opts, out=>'ampliconclip/1_soft_clipped_strand.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --keep-tag --output-fmt=sam --strand -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
+    test_cmd($opts,
+             out=>'ampliconclip/1_soft_clipped_strand.expected.sam',
+             out_map => {
+                 'ampliconclip/primer_counts.tsv' => 'ampliconclip/1_soft_clipped_strand_primer_counts.expected.tsv',
+             },
+             cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --keep-tag --output-fmt=sam --strand --primer-counts $$opts{path}/ampliconclip/primer_counts.tsv -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
     test_cmd($opts, out=>'ampliconclip/1_filter.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --keep-tag --output-fmt=sam --strand --filter-len 185 -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
     test_cmd($opts, out=>'ampliconclip/1_fail.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --keep-tag --output-fmt=sam --strand --fail-len 185 -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
     test_cmd($opts, out=>'ampliconclip/1_original_tag.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG  --keep-tag --output-fmt=sam --original -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
