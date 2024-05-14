@@ -680,7 +680,12 @@ sub plot_qualities
             my $sum=0; my $n=0;
             for (my $iqual=1; $iqual<@$cycle; $iqual++)
             {
-                $sum += $$cycle[$iqual]*$iqual;
+		if ( exists($$opts{alt_qual_avg_method }) ) {
+		    my $prob_base_error = 10 ** (-$iqual/10);
+		    $sum += $$cycle[$iqual]*$prob_base_error;
+		} else {
+		    $sum += $$cycle[$iqual]*$iqual;
+		}
                 $n += $$cycle[$iqual];
                 if ( !defined $lmax or $lmax<$$cycle[$iqual] ) { $lmax=$$cycle[$iqual]; $lmax_qual=$iqual; $lmax_cycle=$$cycle[0]; }
             }
@@ -690,7 +695,13 @@ sub plot_qualities
             if ( !$n ) { next; }
             push @lp75, "$$cycle[0]\t$p25\t$p75\n";
             push @lp50, "$$cycle[0]\t$p50\n";
-            push @lmean, sprintf "%d\t%.2f\n", $$cycle[0],$sum/$n;
+	    if ( exists($$opts{alt_qual_avg_method }) ) {
+		my $mean_prob_base_error = $sum/$n;
+		my $mean_error_quality_score = -10 * ( log($mean_prob_base_error) / log(10) );
+		push @lmean, sprintf "%d\t%.2f\n", $$cycle[0],$mean_error_quality_score;
+	    } else {
+		push @lmean, sprintf "%d\t%.2f\n", $$cycle[0],$sum/$n;
+	    }
             printf $fh $lmean[-1];
         }
         print $fh "end\n";
