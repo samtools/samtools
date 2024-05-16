@@ -1,7 +1,7 @@
 /*  bam_ampliconclip.c -- loads amplicon primers from a BED file and cuts reads
                           from the 5' end.
 
-    Copyright (C) 2020-2023 Genome Research Ltd.
+    Copyright (C) 2020-2024 Genome Research Ltd.
 
     Authors: Andrew Whitwham <aw7@sanger.ac.uk>
              Rob Davies <rmd+git@sanger.ac.uk>
@@ -468,7 +468,7 @@ static int bam_trim_left(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     }
 
     // Copy remaining QUAL
-    memmove(new_qual, orig_qual, rec->core.l_qseq - qry_removed);
+    memmove(new_qual, orig_qual + qry_removed, rec->core.l_qseq - qry_removed);
 
     // Set new l_qseq
     rec_out->core.l_qseq -= qry_removed;
