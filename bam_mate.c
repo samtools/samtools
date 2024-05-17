@@ -91,7 +91,7 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
  * single Reads:
  * -if pos == 0 (1 based), tid == -1, or UNMAPPED then set UNMAPPED, pos = 0,
  *  tid = -1
- * -clear bad flags (PAIRED, MREVERSE, PROPER_PAIR)
+ * -clear bad flags (MREVERSE, PROPER_PAIR)
  * -set mpos = 0 (1 based), mtid = -1 and isize = 0
  * -write to output
  * Paired Reads:
@@ -1063,10 +1063,10 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads,
             if (remove_reads) {
                 if (pre->core.flag&BAM_FUNMAP)
                     cur->core.flag &=
-                        ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
+                        ~(BAM_FMREVERSE|BAM_FPROPER_PAIR);
                 if (cur->core.flag&BAM_FUNMAP)
                     pre->core.flag &=
-                        ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
+                        ~(BAM_FMREVERSE|BAM_FPROPER_PAIR);
             }
         }
 
@@ -1075,7 +1075,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads,
             pre->core.mtid = -1;
             pre->core.mpos = -1;
             pre->core.isize = 0;
-            pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
+            pre->core.flag &= ~(BAM_FMREVERSE|BAM_FPROPER_PAIR);
         }
 
         // Now process secondary and supplementary alignments
