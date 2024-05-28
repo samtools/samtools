@@ -1328,7 +1328,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     // Make sure that there's enough memory for template coordinate keys, one per file to read
     if (sam_order == TemplateCoordinate) {
         if ((keys = malloc(sizeof(template_coordinate_keys_t))) == NULL) {
-            print_error("sort", "could not allocate memory for the top-level keys");
+            print_error(cmd, "could not allocate memory for the top-level keys");
             goto mem_fail;
         }
         keys->n = 0;
