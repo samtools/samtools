@@ -1364,8 +1364,8 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
                 h->entry.u.tag = bam_aux_get(h->entry.bam_record, g_sort_tag);
             } else if (g_sam_order == TemplateCoordinate) {
                 template_coordinate_key_t *key = template_coordinate_keys_get(keys, i); // get the next key to use
-                h->entry.u.key = template_coordinate_key(heap->entry.bam_record, key, hout, lib_lookup); // update the key
-                if (heap->entry.u.key == NULL) goto mem_fail; // key could not be created, error out
+                h->entry.u.key = template_coordinate_key(h->entry.bam_record, key, hout, lib_lookup); // update the key
+                if (h->entry.u.key == NULL) goto mem_fail; // key could not be created, error out
             } else {
                 h->entry.u.tag = NULL;
             }
