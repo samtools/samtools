@@ -1484,6 +1484,14 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         print_error(cmd, "error closing output file");
         return -1;
     }
+    if (keys != NULL) {
+        for (i = 0; i < keys->m; ++i) {
+            free(keys->buffers[i]);
+        }
+        free(keys->buffers);
+        free(keys);
+    }
+    lib_lookup_destroy(lib_lookup);
     return 0;
 
  mem_fail:
