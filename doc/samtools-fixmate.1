@@ -57,7 +57,9 @@ name-sorted or name-collated alignment.
 .SH OPTIONS
 .TP 11
 .B -r
-Remove secondary and unmapped reads.
+Remove secondary and unmapped reads.  If one of a pair is removed, the PAIRED
+flag will not be unset on the remaining read.  This is a change from the older
+behaviour in samtools versions up to 1.20.
 .TP
 .B -p
 Disable FR proper pair check.
