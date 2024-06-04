@@ -1365,7 +1365,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             } else if (g_sam_order == TemplateCoordinate) {
                 template_coordinate_key_t *key = template_coordinate_keys_get(keys, i); // get the next key to use
                 h->entry.u.key = template_coordinate_key(h->entry.bam_record, key, hout, lib_lookup); // update the key
-                if (h->entry.u.key == NULL) goto mem_fail; // key could not be created, error out
+                if (h->entry.u.key == NULL) goto fail; // key could not be created, error out
             } else {
                 h->entry.u.tag = NULL;
             }
@@ -1439,7 +1439,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             } else if (g_sam_order == TemplateCoordinate) {
                 template_coordinate_key_t *key = template_coordinate_keys_get(keys, heap->i); // get the next key to use
                 heap->entry.u.key = template_coordinate_key(heap->entry.bam_record, key, hout, lib_lookup); // update the key
-                if (heap->entry.u.key == NULL) goto mem_fail; // key could not be created, error out
+                if (heap->entry.u.key == NULL) goto fail; // key could not be created, error out
             } else {
                 heap->entry.u.tag = NULL;
             }
