@@ -3201,6 +3201,9 @@ sub test_merge
     # -r (RG from filename) option with no initial RG header
     test_cmd($opts, out=>'merge/rg_from_r_mode.expected.sam', cmd => "$$opts{bin}/samtools merge${threads} --no-PG -r -O SAM - $$opts{path}/merge/test_no_pg_rg_co.sam");
 
+    # Check merge works for TemplateCoordinate
+    test_cmd($opts, out=>'merge/test_template_coordinate.expected.sam', cmd => "$$opts{bin}/samtools merge${threads} --no-PG -O SAM --template-coordinate - $$opts{path}/merge/test_template_coordinate.1.sam $$opts{path}/merge/test_template_coordinate.2.sam");
+
 }
 
 sub test_sort
