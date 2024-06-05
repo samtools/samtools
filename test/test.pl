@@ -37,8 +37,8 @@ my $opts = parse_params();
 test_reference($opts);
 test_reference($opts, threads=>2);
 test_bgzip($opts);
-test_faidx($opts);
-test_fqidx($opts);
+test_faidx($opts, threads=>2);
+test_fqidx($opts, threads=>2);
 test_dict($opts);
 test_index($opts);
 test_index($opts, threads=>2);
@@ -577,6 +577,7 @@ sub faidx_wrap
 sub test_faidx
 {
     my ($opts,%args) = @_;
+    my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
 
     # Create test data: The fake sequence consists of sequence offsets coded
     # into A,C,G,T and separated with Ns. The offsets are 1-based.
@@ -606,7 +607,16 @@ sub test_faidx
 
     # Write to file
     cmd("$$opts{bin}/samtools faidx --length 5 $$opts{tmp}/faidx.fa 1:1-104 > $$opts{tmp}/output_faidx_base.fa");
+    cmd("$$opts{bin}/samtools faidx --length 5 $$opts{tmp}/faidx.fa 1 > $$opts{tmp}/output_faidx_base.1.fa");
     cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa $$opts{tmp}/faidx.fa 1:1-104 && $$opts{diff} $$opts{tmp}/output_faidx.fa $$opts{tmp}/output_faidx_base.fa");
+    # Write to bgzip file
+    cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa.1.gz $$opts{tmp}/faidx.fa 1:1-104 && $$opts{bgzip} -df $$opts{tmp}/output_faidx.fa.1.gz && $$opts{diff} $$opts{tmp}/output_faidx.fa.1 $$opts{tmp}/output_faidx_base.fa");
+    cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa.2.bgz $$opts{tmp}/faidx.fa 1:1-104 && $$opts{bgzip} -df $$opts{tmp}/output_faidx.fa.2.bgz && $$opts{diff} $$opts{tmp}/output_faidx.fa.2 $$opts{tmp}/output_faidx_base.fa");
+    cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa.3.bgzf $$opts{tmp}/faidx.fa 1:1-104 && $$opts{bgzip} -df $$opts{tmp}/output_faidx.fa.3.bgzf && $$opts{diff} $$opts{tmp}/output_faidx.fa.3 $$opts{tmp}/output_faidx_base.fa");
+    # Write to bgzip file with compression level
+    cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa.4.gz $$opts{tmp}/faidx.fa 1 --output-fmt-opt=\"level=4\" && $$opts{bgzip} -df $$opts{tmp}/output_faidx.fa.4.gz && $$opts{diff} $$opts{tmp}/output_faidx.fa.4 $$opts{tmp}/output_faidx_base.1.fa");
+    # Write to bgzip file with thread
+    cmd("$$opts{bin}/samtools faidx ${threads} --length 5 --output $$opts{tmp}/output_faidx.fa.5.gz $$opts{tmp}/faidx.fa 1 && $$opts{bgzip} -df $$opts{tmp}/output_faidx.fa.5.gz && $$opts{diff} $$opts{tmp}/output_faidx.fa.5 $$opts{tmp}/output_faidx_base.1.fa");
 
     # Write indices to a file
     cmd("$$opts{bin}/samtools faidx --fai-idx $$opts{tmp}/fa_test.fai --gzi-idx $$opts{tmp}/fa_test.gzi $$opts{tmp}/faidx.fa.gz");
@@ -703,6 +713,7 @@ sub fqidx_qual_to_num
 sub test_fqidx
 {
     my ($opts,%args) = @_;
+    my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
 
     # Create test data: The fake sequence consists of sequence offsets coded
     # into A,C,G,T and separated with Ns. The offsets are 1-based.
@@ -748,6 +759,15 @@ sub test_fqidx
     # Write to file
     cmd("$$opts{bin}/samtools fqidx --length 5 $$opts{tmp}/fqidx.fq 1:1-104 > $$opts{tmp}/output_fqidx_base.fq");
     cmd("$$opts{bin}/samtools fqidx --length 5 --output $$opts{tmp}/output_fqidx.fq $$opts{tmp}/fqidx.fq 1:1-104 && $$opts{diff} $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
+    cmd("$$opts{bin}/samtools fqidx --length 5 $$opts{tmp}/fqidx.fq 1 > $$opts{tmp}/output_fqidx_base.1.fq");
+    # Write to bgzip file
+    cmd("$$opts{bin}/samtools fqidx --length 5 --output $$opts{tmp}/output_fqidx.fq.1.gz $$opts{tmp}/fqidx.fq 1:1-104 && $$opts{bgzip} -df $$opts{tmp}/output_fqidx.fq.1.gz && $$opts{diff} $$opts{tmp}/output_fqidx.fq.1 $$opts{tmp}/output_fqidx_base.fq");
+    cmd("$$opts{bin}/samtools fqidx --length 5 --output $$opts{tmp}/output_fqidx.fq.2.bgz $$opts{tmp}/fqidx.fq 1:1-104 && $$opts{bgzip} -df $$opts{tmp}/output_fqidx.fq.2.bgz && $$opts{diff} $$opts{tmp}/output_fqidx.fq.2 $$opts{tmp}/output_fqidx_base.fq");
+    cmd("$$opts{bin}/samtools fqidx --length 5 --output $$opts{tmp}/output_fqidx.fq.3.bgzf $$opts{tmp}/fqidx.fq 1:1-104 && $$opts{bgzip} -df $$opts{tmp}/output_fqidx.fq.3.bgzf && $$opts{diff} $$opts{tmp}/output_fqidx.fq.3 $$opts{tmp}/output_fqidx_base.fq");
+    # Write to bgzip file with compression level
+    cmd("$$opts{bin}/samtools fqidx --length 5 --output $$opts{tmp}/output_fqidx.fq.4.gz $$opts{tmp}/fqidx.fq 1 --output-fmt-opt=\"level=4\" && $$opts{bgzip} -df $$opts{tmp}/output_fqidx.fq.4.gz && $$opts{diff} $$opts{tmp}/output_fqidx.fq.4 $$opts{tmp}/output_fqidx_base.1.fq");
+    # Write to bgzip file with thread
+    cmd("$$opts{bin}/samtools fqidx ${threads} --length 5 --output $$opts{tmp}/output_fqidx.fq.5.gz $$opts{tmp}/fqidx.fq 1 && $$opts{bgzip} -df $$opts{tmp}/output_fqidx.fq.5.gz && $$opts{diff} $$opts{tmp}/output_fqidx.fq.5 $$opts{tmp}/output_fqidx_base.1.fq");
 
     # Write indices to a file
     cmd("$$opts{bin}/samtools fqidx --fai-idx $$opts{tmp}/fq_test.fai --gzi-idx $$opts{tmp}/fq_test.gzi $$opts{tmp}/fqidx.fq.gz");

@@ -1,6 +1,6 @@
 /*  faidx.c -- faidx subcommand.
 
-    Copyright (C) 2008, 2009, 2013, 2016, 2018-2020, 2022 Genome Research Ltd.
+    Copyright (C) 2008, 2009, 2013, 2016, 2018-2020, 2022, 2024 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -44,6 +44,9 @@ History:
 #include <htslib/hts.h>
 #include <htslib/hfile.h>
 #include <htslib/kstring.h>
+#include <htslib/bgzf.h>
+#include <htslib/thread_pool.h>
+#include "sam_opts.h"
 #include "samtools.h"
 
 // Negative indicates the same as input data
@@ -52,6 +55,15 @@ History:
 #ifndef ABS
 #   define ABS(x) ((x)>=0?(x):-(x))
 #endif
+
+//new params required for output creation
+typedef struct output {
+    int isbgzip;                //is bgzip or uncompressed file
+    FILE *fp;                   //uncompressed file pointer
+    BGZF *bgzf_fp;              //bgzf file pointer
+    sam_global_args *gopt;      //options
+    kstring_t buffer;
+} output;
 
 static unsigned char comp_base[256] = {
   0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  15,
@@ -98,8 +110,19 @@ static void reverse(char *str, const hts_pos_t len) {
     }
 }
 
+/// wrappedwrite  - wraps the fwrite and bgzf_write
+/** @param out    - pointer to data required to write output
+*   @param buffer - data to write
+*   @param length - data length
+* returns error or length written on success
+*/
+static inline size_t wrappedwrite(output *out, const char *buffer, size_t length)
+{
+    return out->isbgzip ? bgzf_write(out->bgzf_fp, buffer, length) :
+        fwrite(buffer, 1, length, out->fp);
+}
 
-static int write_line(faidx_t *faid, FILE *file, const char *line, const char *name,
+static int write_line(faidx_t *faid, output *out, const char *line, const char *name,
                       const int ignore, const hts_pos_t length, const hts_pos_t seq_len) {
     int id;
     hts_pos_t beg, end;
@@ -124,8 +147,8 @@ static int write_line(faidx_t *faid, FILE *file, const char *line, const char *n
     for (i = 0; i < seq_sz; i += length)
     {
         hts_pos_t len = i + length < seq_sz ? length : seq_sz - i;
-        if (fwrite(line + i, 1, len, file) < len ||
-            fputc('\n', file) == EOF) {
+        if (wrappedwrite(out, line + i, len) < len ||
+              wrappedwrite(out, "\n", 1) < 1) {
             print_error_errno("faidx", "failed to write output");
             return EXIT_FAILURE;
         }
@@ -135,58 +158,66 @@ static int write_line(faidx_t *faid, FILE *file, const char *line, const char *n
 }
 
 
-static int write_output(faidx_t *faid, FILE *file, const char *name, const int ignore,
+static int write_output(faidx_t *faid, output *out, const char *name, const int ignore,
                         const hts_pos_t length, const int rev,
                         const char *pos_strand_name, const char *neg_strand_name,
                         enum fai_format_options format) {
-    hts_pos_t seq_len, wrap_len = length;
+    hts_pos_t seq_len, wrap_len = length, len = 0;
+    char *seq =  NULL, *qual = NULL;
+    int ret = EXIT_FAILURE;
+
     if (wrap_len < 0)
         wrap_len = fai_line_length(faid, name);
     if (wrap_len <= 0)
         wrap_len = HTS_POS_MAX;
-    char *seq = fai_fetch64(faid, name, &seq_len);
 
-    if (format == FAI_FASTA) {
-        fprintf(file, ">%s%s\n", name, rev ? neg_strand_name : pos_strand_name);
-    } else {
-        fprintf(file, "@%s%s\n", name, rev ? neg_strand_name : pos_strand_name);
-    }
-
+    seq = fai_fetch64(faid, name, &seq_len);
     if (rev && seq_len > 0) {
         reverse_complement(seq, seq_len);
     }
-
-    if (write_line(faid, file, seq, name, ignore, wrap_len, seq_len)
-        == EXIT_FAILURE) {
-        free(seq);
-        return EXIT_FAILURE;
+    //write the name
+    len = ksprintf(&out->buffer, "%c%s%s\n", format == FAI_FASTA ? '>' : '@', name, rev ? neg_strand_name : pos_strand_name);
+    if (wrappedwrite(out, out->buffer.s, out->buffer.l) < len) {
+        fprintf(stderr,"[faidx] Failed to write buffer\n");
+        goto exit;
+    }
+    ks_clear(&out->buffer);
+    //write bases
+    if ((ret = write_line(faid, out, seq, name, ignore, wrap_len, seq_len) == EXIT_FAILURE)) {
+        goto exit;
     }
 
-    free(seq);
-
     if (format == FAI_FASTQ) {
-        fprintf(file, "+\n");
-
-        char *qual = fai_fetchqual64(faid, name, &seq_len);
-
+        //write quality
+        qual = fai_fetchqual64(faid, name, &seq_len);
         if (rev && seq_len > 0) {
             reverse(qual, seq_len);
         }
 
-        if (write_line(faid, file, qual, name, ignore, wrap_len, seq_len)
-            == EXIT_FAILURE) {
-            free(qual);
-            return EXIT_FAILURE;
+        len = ksprintf(&out->buffer, "+\n");
+        if (wrappedwrite(out, out->buffer.s, out->buffer.l) < len) {
+            fprintf(stderr,"[faidx] Failed to write buffer\n");
+            goto exit;
         }
+        ks_clear(&out->buffer);
+        if ((ret = write_line(faid, out, qual, name, ignore, wrap_len, seq_len) == EXIT_FAILURE)) {
+            goto exit;
+        }
+    }
+    ret = EXIT_SUCCESS;
 
+exit:
+    if (seq) {
+        free(seq);
+    }
+    if (qual) {
         free(qual);
     }
-
-    return EXIT_SUCCESS;
+    return ret;
 }
 
 
-static int read_regions_from_file(faidx_t *faid, hFILE *in_file, FILE *file, const int ignore,
+static int read_regions_from_file(faidx_t *faid, hFILE *in_file, output *out, const int ignore,
                                   const hts_pos_t length, const int rev,
                                   const char *pos_strand_name,
                                   const char *neg_strand_name,
@@ -195,7 +226,7 @@ static int read_regions_from_file(faidx_t *faid, hFILE *in_file, FILE *file, con
     int ret = EXIT_FAILURE;
 
     while (line.l = 0, kgetline(&line, (kgets_func *)hgets, in_file) >= 0) {
-        if ((ret = write_output(faid, file, line.s, ignore, length, rev, pos_strand_name, neg_strand_name, format)) == EXIT_FAILURE) {
+        if ((ret = write_output(faid, out, line.s, ignore, length, rev, pos_strand_name, neg_strand_name, format)) == EXIT_FAILURE) {
             break;
         }
     }
@@ -221,26 +252,27 @@ static int usage(FILE *fp, enum fai_format_options format, int exit_status)
 
     fprintf(fp, "Usage: samtools %s [<reg> [...]]\n", tool);
     fprintf(fp, "Option: \n"
-                " -o, --output FILE        Write %s to file.\n"
-                " -n, --length INT         Length of %s sequence line. [60]\n"
-                " -c, --continue           Continue after trying to retrieve missing region.\n"
-                " -r, --region-file FILE   File of regions.  Format is chr:from-to. One per line.\n"
-                " -i, --reverse-complement Reverse complement sequences.\n"
-                "     --mark-strand TYPE   Add strand indicator to sequence name\n"
-                "                          TYPE = rc   for /rc on negative strand (default)\n"
-                "                                 no   for no strand indicator\n"
-                "                                 sign for (+) / (-)\n"
-                "                                 custom,<pos>,<neg> for custom indicator\n"
-                "     --fai-idx      FILE  name of the index file (default %s.fai).\n"
-                "     --gzi-idx      FILE  name of compressed file index (default %s.gz.gzi).\n",
+                "  -o, --output FILE        Write %s to file.\n"
+                "  -n, --length INT         Length of %s sequence line. [60]\n"
+                "  -c, --continue           Continue after trying to retrieve missing region.\n"
+                "  -r, --region-file FILE   File of regions.  Format is chr:from-to. One per line.\n"
+                "  -i, --reverse-complement Reverse complement sequences.\n"
+                "      --mark-strand TYPE   Add strand indicator to sequence name\n"
+                "                           TYPE = rc   for /rc on negative strand (default)\n"
+                "                                  no   for no strand indicator\n"
+                "                                  sign for (+) / (-)\n"
+                "                                  custom,<pos>,<neg> for custom indicator\n"
+                "      --fai-idx      FILE  name of the index file (default %s.fai).\n"
+                "      --gzi-idx      FILE  name of compressed file index (default %s.gz.gzi).\n",
                 file_type, file_type, index_name, index_name);
 
 
     if (format == FAI_FASTA) {
-       fprintf(fp, " -f, --fastq              File and index in FASTQ format.\n");
+       fprintf(fp, "  -f, --fastq              File and index in FASTQ format.\n");
     }
 
-    fprintf(fp, " -h, --help               This message.\n");
+    fprintf(fp, "  -h, --help               This message.\n");
+    sam_global_opt_help(fp, "---.-@--");
 
     return exit_status;
 }
@@ -256,9 +288,14 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
     char *strand_names = NULL; // Used for custom strand annotation
     char *fai_name = NULL; // specified index name
     char *gzi_name = NULL; // specified compressed index name
-    FILE* file_out = stdout;/* output stream */
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    int exit_status = EXIT_FAILURE, flushed = 0;
+    struct output out = { 0, stdout, NULL, &ga, KS_INITIALIZE}; //data required for output writing
+    faidx_t *fai = NULL;
+    hts_tpool *pool = NULL;
 
     static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', '-', '-', 0, '-', '@'),     //output format opt and thread count - long options
         { "output", required_argument,       NULL, 'o' },
         { "help",   no_argument,             NULL, 'h' },
         { "length", required_argument,       NULL, 'n' },
@@ -272,9 +309,20 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "ho:n:cr:fi", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "ho:n:cr:fi@:", lopts, NULL)) >= 0) {
         switch (c) {
-            case 'o': output_file = optarg; break;
+            case 'o':
+                {
+                    output_file = optarg;
+                    char *ext = strrchr(output_file, '.');
+                    if (!ext) {
+                        break;
+                    }
+                    if (!strcmp(ext, ".gz") || !strcmp(ext, ".bgz") || !strcmp(ext, ".bgzf")) {
+                        out.isbgzip = 1;        //bgzip output
+                    }
+                    break;
+                }
             case 'n': line_len = strtol(optarg, NULL, 10);
                       if (line_len < 0) {
                         fprintf(stderr,"[faidx] bad line length '%s', using default:%d\n",optarg,ABS(DEFAULT_FASTA_LINE_LEN));
@@ -285,8 +333,14 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
             case 'r': region_file = optarg; break;
             case 'f': format = FAI_FASTQ; break;
             case 'i': rev = 1; break;
-            case '?': return usage(stderr, format, EXIT_FAILURE);
-            case 'h': return usage(stdout, format, EXIT_SUCCESS);
+            case '?':
+                exit_status = usage(stderr, format, EXIT_FAILURE);
+                goto exit2;
+                break;
+            case 'h':
+                exit_status = usage(stdout, format, EXIT_SUCCESS);
+                goto exit2;
+                break;
             case 1000:
                 if (strcmp(optarg, "no") == 0) {
                     pos_strand_name = neg_strand_name = "";
@@ -303,7 +357,7 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
                     strand_names = pos_strand_name = malloc(len + 2);
                     if (!strand_names) {
                         fprintf(stderr, "[faidx] Out of memory\n");
-                        return EXIT_FAILURE;
+                        goto exit2;
                     }
                     neg_strand_name = pos_strand_name + comma + 1;
                     memcpy(pos_strand_name, optarg + 7, comma);
@@ -314,17 +368,26 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
                     neg_strand_name[len - comma] = '\0';
                 } else {
                     fprintf(stderr, "[faidx] Unknown --mark-strand option \"%s\"\n", optarg);
-                    return usage(stderr, format, EXIT_FAILURE);
+                    exit_status = usage(stderr, format, EXIT_FAILURE);
+                    goto exit2;
                 }
                 break;
             case 1001: fai_name = optarg; break;
             case 1002: gzi_name = optarg; break;
-            default:  break;
+            // handle standard samtools options like thread count, compression level...
+            default:
+                if (parse_sam_global_opt(c, optarg, lopts, &ga)) {
+                    fprintf(stderr, "[faidx] Invalid option \"%s\"\n", optarg);
+                    goto exit2;
+                }
+                break;
         }
     }
 
-    if ( argc==optind )
-        return usage(stdout, format, EXIT_SUCCESS);
+    if ( argc==optind ) {
+        exit_status = usage(stdout, format, EXIT_SUCCESS);
+        goto exit2;
+    }
 
     if (optind+1 == argc && !region_file) {
         if (output_file && !fai_name)
@@ -341,13 +404,19 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
             else
                 fprintf(stderr, "\n");
 
-            return EXIT_FAILURE;
+            goto exit2;
         }
-
-        return 0;
+        exit_status = EXIT_SUCCESS;
+        goto exit2;
     }
 
-    faidx_t *fai = fai_load3_format(argv[optind], fai_name, gzi_name, FAI_CREATE, format);
+    if (out.gopt->nthreads > 0) {       //setup thread pool
+        if (!(pool = hts_tpool_init(out.gopt->nthreads))) {
+            fprintf(stderr, "Failed to setup thread pool\n");
+        }
+    }
+
+    fai = fai_load3_format(argv[optind], fai_name, gzi_name, FAI_CREATE, format);
 
     if (!fai) {
         if (fai_name)
@@ -360,54 +429,102 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
         else
             fprintf(stderr, "\n");
 
-        return EXIT_FAILURE;
+        goto exit2;
+    }
+
+    if (pool) {                         //use thread pool if set
+        if (fai_thread_pool(fai, pool, 0)) {
+            fprintf(stderr, "Failed to set thread pool for reading\n");
+        }
     }
 
     /** output file provided by user */
     if( output_file != NULL ) {
         if( strcmp( output_file, argv[optind] ) == 0 ) {
             fprintf(stderr,"[faidx] Same input/output : %s\n", output_file);
-            return EXIT_FAILURE;
+            goto exit2;
+        }
+        if (!out.isbgzip) {
+            out.fp = fopen( output_file, "w" );
+        } else {
+            hts_opt *opts = (hts_opt *)(out.gopt->out.specific);
+            char mode[13] = "w";
+            int level = 4;                                      //default compression level
+            while (opts) {
+                if (opts->opt == HTS_OPT_COMPRESSION_LEVEL) {   //compression level
+                    level = opts->val.i;
+                    break;
+                }
+                opts = opts->next;
+            }
+            if (level >= 0) {
+                snprintf(mode, sizeof(mode), "w%d", level);     //pass compression with mode
+            }
+            out.bgzf_fp = bgzf_open(output_file, mode);
         }
 
-        file_out = fopen( output_file, "w" );
-
-        if( file_out == NULL) {
+        if( (!out.isbgzip && out.fp == NULL) || (out.isbgzip && out.bgzf_fp == NULL)) {
             fprintf(stderr,"[faidx] Cannot open \"%s\" for writing :%s.\n", output_file, strerror(errno) );
-            return EXIT_FAILURE;
+            goto exit2;
+        }
+        if (out.isbgzip && pool) {                              //use thread pool if set
+            if (bgzf_thread_pool(out.bgzf_fp, pool, 0)) {
+                fprintf(stderr, "Failed to set thread pool for writing\n");
+            }
         }
     }
-
-    int exit_status = EXIT_SUCCESS;
 
     if (region_file) {
         hFILE *rf;
 
         if ((rf = hopen(region_file, "r"))) {
-            exit_status = read_regions_from_file(fai, rf, file_out, ignore_error, line_len, rev, pos_strand_name, neg_strand_name, format);
+            exit_status = read_regions_from_file(fai, rf, &out, ignore_error, line_len, rev, pos_strand_name, neg_strand_name, format);
 
             if (hclose(rf) != 0) {
                 fprintf(stderr, "[faidx] Warning: failed to close %s", region_file);
             }
+            if (exit_status == EXIT_FAILURE) {
+                goto exit1;
+            }
         } else {
             fprintf(stderr, "[faidx] Failed to open \"%s\" for reading.\n", region_file);
+            goto exit1;
+        }
+    }
+
+    exit_status = EXIT_SUCCESS;
+    while ( ++optind<argc && exit_status == EXIT_SUCCESS) {
+        exit_status = write_output(fai, &out, argv[optind], ignore_error, line_len, rev, pos_strand_name, neg_strand_name, format);
+    }
+
+    flushed = out.isbgzip ? bgzf_flush(out.bgzf_fp) : fflush(out.fp);
+    if (flushed == EOF) {
+        print_error_errno("faidx", "Failed to flush output\n");
+        exit_status = EXIT_FAILURE;
+    }
+
+exit1:
+    if( output_file != NULL && !out.isbgzip) {
+        fclose(out.fp);     //no need to check result as already flushed
+    } else if( output_file != NULL && out.isbgzip) {
+        if (bgzf_close(out.bgzf_fp) < 0) {
+            print_error_errno("faidx", "Failed to close output\n");
             exit_status = EXIT_FAILURE;
         }
     }
 
-    while ( ++optind<argc && exit_status == EXIT_SUCCESS) {
-        exit_status = write_output(fai, file_out, argv[optind], ignore_error, line_len, rev, pos_strand_name, neg_strand_name, format);
+exit2:
+    if (strand_names) {
+        free(strand_names);
     }
-
-    fai_destroy(fai);
-
-    if (fflush(file_out) == EOF) {
-        print_error_errno("faidx", "failed to flush output");
-        exit_status = EXIT_FAILURE;
+    if (fai) {
+        fai_destroy(fai);
     }
-
-    if( output_file != NULL) fclose(file_out);
-    free(strand_names);
+    if (pool) {
+        hts_tpool_destroy(pool);
+    }
+    sam_global_args_free(&ga);
+    ks_free(&out.buffer);
 
     return exit_status;
 }
