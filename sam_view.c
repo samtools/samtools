@@ -639,8 +639,9 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
             }
         }
 
-        if ( rec->core.mtid < 0 || (rec->core.flag & BAM_FMUNMAP) ) nunmap = 1;
-        if ( rec->core.mtid >= 0 ) {
+        if ( rec->core.mtid < 0 ) {
+            nunmap = 1;
+        } else {
             if (_reglist_push(&conf->reglist, &conf->nreglist, rec->core.mtid, rec->core.mpos,rec->core.mpos+1) != 0)
                 goto out;
         }
