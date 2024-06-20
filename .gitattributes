@@ -13,3 +13,11 @@ README.md       export-ignore
 
 # Correct language misidentifications.
 test/**/*.[1-9] linguist-language=none
+
+# Prevent Windows cr-lf endings
+test/**    -text
+test/**.c   text
+test/**.h   text
+test/**.pl  text
+test/**.sh  text
+test/**.reg text
