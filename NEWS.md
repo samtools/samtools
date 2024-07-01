@@ -326,6 +326,11 @@ New work and changes:
   aligners.
   (PR #1698)
 
+* Made better use of threading during the merge stage of samtools sort.
+  It also not limits the number of temporary files present by making
+  intermediate merges if the count gets too high.
+  (PR #1706)
+
 * Permit 1 thread with samtools view.  All other subcommands already allow this
   and it does provide a modest speed increase.
   (PR #1755, fixes #1743. Reported by Goran Vinterhalter)
