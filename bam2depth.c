@@ -158,6 +158,42 @@ hts_pos_t qlen_used(bam1_t *b) {
 
 }
 
+// Without HTS_OPT3 gcc11 and earlier don't vectorize this, nor even
+// unroll it.  By adding HTS_OPT3 we can force a better level of optimization.
+// On an Illumina BAM with gcc11 -O2, with HTS_OPT3 is 9% quicker for the
+// entire process (ie decompress, iterator, aggregate & report)
+static void inline HTS_OPT3 incr_hist(int *hist, int oplen) {
+    const int N = 16;
+    int k;
+    for (k = 0; k < (oplen & ~(N-1)); k+=N) {
+        for (int i = 0; i < N; i++)
+            hist[k+i]++;
+    }
+    for (; k < oplen; k++)
+        hist[k]++;
+}
+
+static void inline HTS_OPT3
+incr_hist_qual(int *hist, uint8_t *qual, int min_qual, int oplen) {
+    if (!min_qual) {
+        incr_hist(hist, oplen);
+        return;
+    }
+
+    int k;
+    for (k = 0; k < (oplen & ~31); k+=32) {
+        int pass[32];
+        // Two separate loops helps clang to vectorize
+        for (int i = 0; i < 32; i++)
+            pass[i]=qual[k+i]>=min_qual;
+
+        for (int i = 0; i < 32; i++)
+            hist[k+i]+=pass[i];
+    }
+    for (; k < oplen; k++)
+        hist[k]+=qual[k]>=min_qual;
+}
+
 // Adds the depth for a single read to a depth_hist struct.
 // For just one file, this is easy.  We just have a circular buffer
 // where we increment values for bits that overlap existing data
@@ -379,7 +415,6 @@ static int add_depth(depth_opt *opt, depth_hist *dh, sam_hdr_t *h, bam1_t *b,
                 // We've explicitly asked to include them, and the quality
                 // is wrong anyway (it's the neighbouring base).  We do this
                 // for now for compatibility with the old depth command.
-
                 if (spos < b->core.l_qseq)
                     for (; k < oplen; k++, i++)
                         hist[i & hmask]+=qual[spos]>=min_qual;
@@ -391,80 +426,30 @@ static int add_depth(depth_opt *opt, depth_hist *dh, sam_hdr_t *h, bam1_t *b,
 
         case BAM_CMATCH:
         case BAM_CEQUAL:
-        case BAM_CDIFF:
-            if ((i & hmask) < ((i+oplen) & hmask)) {
-                // Optimisation when not wrapping around
-
-                // Unrolling doesn't help clang, but helps gcc,
-                // especially when not using -O3.
-                int *hist = &dh->hist[file][i & hmask];
-                if (min_qual || overlap_clip) {
-                    k = 0;
-                    if (overlap_clip) {
-                        if (i+oplen < overlap_clip) {
-                            i += oplen;
-                            spos += oplen;
-                            break;
-                        } else if (i < overlap_clip) {
-                            oplen -= overlap_clip - i;
-                            spos += overlap_clip - i;
-                            hist += overlap_clip - i;
-                            i = overlap_clip;
-                        }
-                    }
-
-                    // approx 50% of this func cpu time in this loop
-                    for (; k < (oplen & ~7); k+=8) {
-                        hist[k+0]+=qual[spos+0]>=min_qual;
-                        hist[k+1]+=qual[spos+1]>=min_qual;
-                        hist[k+2]+=qual[spos+2]>=min_qual;
-                        hist[k+3]+=qual[spos+3]>=min_qual;
-                        hist[k+4]+=qual[spos+4]>=min_qual;
-                        hist[k+5]+=qual[spos+5]>=min_qual;
-                        hist[k+6]+=qual[spos+6]>=min_qual;
-                        hist[k+7]+=qual[spos+7]>=min_qual;
-                        spos += 8;
-                    }
-                } else {
-                    // easier to vectorize when no min_qual
-                    for (k = 0; k < (oplen & ~7); k+=8) {
-                        hist[k+0]++;
-                        hist[k+1]++;
-                        hist[k+2]++;
-                        hist[k+3]++;
-                        hist[k+4]++;
-                        hist[k+5]++;
-                        hist[k+6]++;
-                        hist[k+7]++;
-                    }
-                    spos += k;
+        case BAM_CDIFF: {
+            int *hist = dh->hist[file];
+            k = 0;
+            if (overlap_clip) {
+                if (i+oplen < overlap_clip) {
+                    i += oplen;
+                    break;
+                } else if (i < overlap_clip) {
+                    oplen -= overlap_clip - i;
+                    spos += overlap_clip - i;
+                    i = overlap_clip;
                 }
-                for (; k < oplen && spos < b->core.l_qseq; k++, spos++)
-                    hist[k]+=qual[spos]>=min_qual;
-                for (; k < oplen; k++, spos++)
-                    hist[k]++;
-                i += oplen;
-            } else {
-                // Simple to understand case, but slower.
-                // We use this only for reads with wrap-around.
-                int *hist = dh->hist[file];
-                k = 0;
-                if (overlap_clip) {
-                    if (i+oplen < overlap_clip) {
-                        i += oplen;
-                        break;
-                    } else if (i < overlap_clip) {
-                        oplen -= overlap_clip - i;
-                        spos += overlap_clip - i;
-                        i = overlap_clip;
-                    }
-                }
-                for (; k < oplen && spos < b->core.l_qseq; k++, i++, spos++)
-                    hist[i & hmask]+=qual[spos]>=min_qual;
-                for (; k < oplen; k++, i++, spos++)
-                    hist[i & hmask]++;
             }
+
+            int len = (i & hmask) < ((i+oplen) & hmask)
+                ? oplen                  // doesn't wrap around
+                : dh->size - (i&hmask);  // does wrap around
+            incr_hist_qual(&hist[i & hmask], &qual[spos], min_qual, len);
+            if (oplen > len)
+                incr_hist_qual(hist, &qual[spos+len], min_qual, oplen-len);
+            spos += oplen;
+            i += oplen;
             break;
+        }
 
         case BAM_CINS:
         case BAM_CSOFT_CLIP:
