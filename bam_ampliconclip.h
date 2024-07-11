@@ -49,7 +49,8 @@ KHASH_MAP_INIT_STR(bed_list_hash, bed_entry_list_t)
 
 
 int load_bed_file_multi_ref(char *infile, int get_strand,
-                        int sort_by_pos, khash_t(bed_list_hash) *bed_lists);
+                            int sort_by_pos, khash_t(bed_list_hash) *bed_lists,
+                            char ***ref_list, size_t *num_refs);
 
 void destroy_bed_hash(khash_t(bed_list_hash) *hash);
 

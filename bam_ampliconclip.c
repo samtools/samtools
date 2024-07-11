@@ -73,7 +73,7 @@ static int bed_entry_sort(const void *av, const void *bv) {
     return a->right < b->right ? -1 : (a->right == b->right ? 0 : 1);
 }
 
-int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash_t(bed_list_hash) *bed_lists) {
+int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash_t(bed_list_hash) *bed_lists, char ***ref_list, size_t *num_refs_out) {
     hFILE *fp;
     int line_count = 0, num_columns = 0, ret;
 
@@ -88,6 +88,10 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
     bed_entry_list_t *list;
     khiter_t bed_itr;
 
+    //ordered ref names list
+    size_t ref_list_sz = 0;
+    size_t num_refs = 0;
+
     //scanf components to parse the bed file, depending on the number of columns in the bed file only some may be used
     char *scanf_components[] = {
         "%1023s",  // ref
@@ -97,6 +101,12 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
         "%1023s",  // score
         "%c"       // strand
     };
+
+    if (ref_list)
+        *ref_list = NULL;
+
+    if (num_refs_out)
+        *num_refs_out = 0;
 
     if ((fp = hopen(infile, "r")) == NULL) {
         print_error_errno("amplicon", "unable to open file %s.", infile);
@@ -156,6 +166,14 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
                 goto error;
             }
 
+            if (ref_list) {
+                if (hts_resize(char **, num_refs + 1, &ref_list_sz, ref_list, 0) < 0) {
+                    fprintf(stderr, "[amplicon] error: unable to allocate memory for ref name list.\n");
+                    ret = 1;
+                    goto error;
+                }
+                (*ref_list)[num_refs++] = ref_name;
+            }
             bed_itr = kh_put(bed_list_hash, bed_lists, ref_name, &hret);
 
             if (hret > 0) {
@@ -244,6 +262,9 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
     } else {
         ret = 1;
     }
+
+    if (num_refs_out)
+        *num_refs_out = num_refs;
 
 error:
     ks_free(&line);
@@ -701,8 +722,11 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
     FILE *stats_fp = stderr;
     FILE *bed_count_summary_fp = stderr;
     khash_t(bed_list_hash) *bed_hash = kh_init(bed_list_hash);
+    char **bed_ref_list = NULL;
+    size_t num_bed_refs = 0;
 
-    if (load_bed_file_multi_ref(bedfile, param->use_strand, 1, bed_hash)) {
+    if (load_bed_file_multi_ref(bedfile, param->use_strand, 1, bed_hash,
+                                &bed_ref_list, &num_bed_refs)) {
         fprintf(stderr, "[ampliconclip] error: unable to load bed file.\n");
         goto fail;
     }
@@ -1008,16 +1032,20 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
 
         //print out the number of reads for each bed entry, bedgraph format
         fprintf(bed_count_summary_fp, "#CHR\tLEFT\tRIGHT\tNAME\tSCORE\tSTRAND\tNUM_CLIPPED\n");
-        khiter_t itr;
-        for (itr = kh_begin(bed_hash); itr != kh_end(bed_hash); ++itr) {
-            if (kh_exist(bed_hash, itr)) {
-                sites = &kh_val(bed_hash, itr);
-                for (int i = 0; i < sites->length; i++) {
-                    char* strand_out = param->use_strand ? (sites->bp[i].rev ? "-" : "+") : ".";
-                    fprintf(bed_count_summary_fp, "%s\t%"PRId64"\t%"PRId64"\t%s\t%s\t%s\t%"PRId64"\n",
+        size_t refidx;
+        for (refidx = 0; refidx < num_bed_refs; refidx++) {
+            khiter_t itr = kh_get(bed_list_hash, bed_hash, bed_ref_list[refidx]);
+            if (itr >= kh_end(bed_hash)) {
+                fprintf(stderr, "[ampliconclip] error: %s has gone missing from the hash table\n", bed_ref_list[refidx]);
+                goto fail;
+            }
+            sites = &kh_val(bed_hash, itr);
+            int i;
+            for (i = 0; i < sites->length; i++) {
+                char* strand_out = param->use_strand ? (sites->bp[i].rev ? "-" : "+") : ".";
+                fprintf(bed_count_summary_fp, "%s\t%"PRId64"\t%"PRId64"\t%s\t%s\t%s\t%"PRId64"\n",
                         kh_key(bed_hash, itr), sites->bp[i].left, sites->bp[i].right, sites->bp[i].name,
                         sites->bp[i].score, strand_out, sites->bp[i].num_reads);
-                }
             }
         }
         if (file_open) {
@@ -1028,6 +1056,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
     ret = 0;
 
 fail:
+    free(bed_ref_list);
     destroy_bed_hash(bed_hash);
     ks_free(&oat);
     ks_free(&seq);
