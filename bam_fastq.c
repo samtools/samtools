@@ -848,8 +848,13 @@ int output_index(bam1_t *b1, bam1_t *b2, bam2fq_state_t *state,
         }
 
         char *bc_end = bc, *qt_end = qt;
-        while (len ? *bc_end && rem-- : isalpha(*bc_end))
-            bc_end++, qt_end += qt != NULL;
+        if (qt) {
+            while (len ? *bc_end && rem-- : isalpha(*bc_end))
+                bc_end++, qt_end++;
+        } else {
+            while (len ? *bc_end && rem-- : isalpha(*bc_end))
+                bc_end++;
+        }
 
         switch (fc) {
         case 'n':
