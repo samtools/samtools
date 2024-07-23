@@ -405,7 +405,7 @@ static int gen_unique_id(char *prefix, khash_t(cset) *existing_ids,
 
     do {
         dest->l = 0;
-        ksprintf(dest, "%s-%0lX", prefix, lrand48());
+        ksprintf(dest, "%s-%08lX", prefix, lrand48());
         iter = kh_get(cset, existing_ids, ks_str(dest));
     } while (iter != kh_end(existing_ids));
 
