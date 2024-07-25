@@ -327,7 +327,7 @@ New work and changes:
   (PR #1698)
 
 * Made better use of threading during the merge stage of samtools sort.
-  It also not limits the number of temporary files present by making
+  It also now limits the number of temporary files present by making
   intermediate merges if the count gets too high.
   (PR #1706)
 
