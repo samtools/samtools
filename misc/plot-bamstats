@@ -25,7 +25,7 @@
 use strict;
 use warnings;
 use Carp;
-use POSIX qw/floor/;
+use POSIX qw/floor ceil/;
 use List::Util qw(max);
 
 my $opts = parse_params();
@@ -1235,37 +1235,20 @@ sub plot_indel_cycles
 sub nice_num
 {
     my ($num) = @_;
+    my $ret;
 
-    my $expon_num = floor(log($num)/log(10));
-    my $fract_num = ($num / (10.0 ** $expon_num));
-
-    my $nf;
-
-    if ($fract_num <= 1.0) {
-        $nf = 1.0;
-    } elsif ($fract_num <= 2.0) {
-        $nf = 2.0;
-    } elsif ($fract_num <= 3.0) {
-        $nf = 3.0;
-    } elsif ($fract_num <= 4.0) {
-        $nf = 4.0;
-    } elsif ($fract_num <= 5.0) {
-        $nf = 5.0;
-    } elsif ($fract_num <= 6.0) {
-        $nf = 6.0;
-    } elsif ($fract_num <= 7.0) {
-        $nf = 7.0;
-    } elsif ($fract_num <= 8.0) {
-        $nf = 8.0;
-    } elsif ($fract_num <= 9.0) {
-        $nf = 9.0;
+    if ($num < 1) {
+        $ret = 1;
     } else {
-        $nf = 10.0;
+        my $expon_num = floor(log($num)/log(10));
+        my $fract_num = ($num / (10.0 ** $expon_num));
+
+        my $nf = ceil($fract_num);
+
+        $ret = ($nf * (10.0 ** $expon_num));
     }
 
-    my $tmp = ($nf * (10.0 ** $expon_num));
-
-    return $tmp;
+    return $ret;
 }
 
 
@@ -1279,7 +1262,7 @@ sub plot_read_len_hist
     # TODO: Add modified version for paired end reads.
     # my $is_paired = get_value($opts,'SN','reads paired:');
 
-    my $args = get_defaults($opts,"$$opts{prefix}read_length.png");
+    my $args = get_defaults($opts,"$$opts{prefix}read-length.png");
     my $fh = $$args{fh};
 
     # anonymous subroutines for code readibility
@@ -1605,9 +1588,10 @@ sub create_html
         'indel-cycles'   => 'Indels per cycle',
         'indel-dist'     => 'Indel lengths',
         'gc-depth'       => 'Mapped depth vs GC',
+        'read-length'    => 'Read lengths',
 # I think this may be broken: 'coverage'       => '',
     );
-    my @imgs = (qw(insert-size gc-content acgt-cycles mism-per-cycle quals quals2 quals3 quals-hm indel-cycles indel-dist gc-depth));
+    my @imgs = (qw(insert-size gc-content acgt-cycles mism-per-cycle quals quals2 quals3 quals-hm indel-cycles indel-dist gc-depth read-length));
     for (my $i=0; $i<@imgs; $i++)
     {
         if ( $i % 3 == 0 )
