@@ -47,6 +47,7 @@ Copyright (c) 2009,2018 The Broad Institute.  MIT license.
 #include "htslib/kstring.h"
 #include "tmp_file.h"
 #include "bam.h"
+#include "api.h"
 
 
 typedef struct {
@@ -2302,6 +2303,25 @@ static int markdup_usage(void) {
 
 
 int bam_markdup(int argc, char **argv) {
+    
+    void* reader = get_gbam_reader("/home/nickr/projects/gbam/test_data/little.gbam");
+    sam_hdr_t* hdr = get_header(reader);
+
+    bam1_t buf = get_empty_bam1_t();
+    for(int i = 0; i < get_records_num(reader); i++){
+        kstring_t s = {0,0,NULL};
+        refill_bam_record(reader, i, &buf);
+        int res = sam_format1(hdr, &buf, &s);
+  
+        printf("%s\n", s.s);
+
+        free(s.s);
+    }
+    free_bam_record(buf);
+    free_header(hdr);
+
+
+
     int c, ret, bc_name = 0;
     char wmode[4] = {'w', 0, 0, 0};
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
