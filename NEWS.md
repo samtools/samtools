@@ -1,6 +1,83 @@
 Release a.b
 -----------
 
+New work and changes:
+
+* `samtools reset` now removes a set of predefined auxtags.  These tags are no
+  longer valid after the reset operation.  This behaviour can be overridden if
+  desired.
+  (PR #2034, fixes #2011.  Reported by Felix Lenner)
+
+* `samtools reset` now also removes duplicate flags.
+  (PR #2047.  Reported by Kevin Lewis)
+
+* Region and section/part filtering added to CRAM `samtools cat`.  Region
+  filtering permits `samtools cat` to produce new CRAMs that only cover a
+  specified region.
+  (PR #2035)
+
+* Added a report of the number of alignments for each primer to
+  `samtools ampliconclip`.
+  (PR #2039, fixes #2033.  Thanks to Brad Langhorst)
+
+* `samtools fixmate` no longer removes the PAIRED flag from reads that have no
+  mate.  This is done on the understanding that the PAIRED flag is a sequencing
+  technology indicator not a feature of alignment.  This is a change to
+  previous `fixmate` behaviour.
+  (PR #2056, fixes #2052.  Reported by John Wiedenhoeft)
+
+* Added bgzf compressed FASTA output to `samtools faidx`.
+  (PR #2067, fixes #2055. Requested by Filipe G Vieira)
+
+* Optimise `samtools depth` histogram incrementing code.
+  (PR #2078)
+
+* Make `ampliconclip` primer counts output deterministic.
+  (PR #2081)
+
+* In `samtools merge` zero pad unique suffix IDs.
+  (PR #2087, fixes #2086.  Thanks to Chris Wright).
+
+Bug fixes:
+
+* Avoid `tview` buffer overflow for positions with >= 14 digits.
+  (PR #2032.  Thanks to John Marshall. Reported on
+  bioconda/bioconda-recipes#47137 by jmunoz94)
+
+* Added file name and error message to 'error closing output file'
+  error in `samtools sort`.
+  (PR #2050, fixes #2049.  Thanks to Joshua C Randall).
+
+* Fixed hard clip trimming issue in `ampliconclip` where right-hand side
+  qualities were being removed from left-hand side trims.
+  (PR #2053, fixes #2048.  Reported by Duda5)
+
+* Fixed a bug in `samtools merge --template-coordinate` where the wrong heap
+  was being tested.
+  (PR #2062.  Thanks to Nils Homer.  Reported on ng-core/fastquorum#52 by
+  David Mas-Ponte)
+
+* Do not look at chr "*" for unmapped-placed reads with
+  `samtools view --fetch-pairs`.  This was causing a significant slowdown when
+  `--fetch-pairs` was being used.
+  (PR #2070, fixes #2059.  Reported by acorvelo)
+
+* Enable `samtools coverage` to handle alignments that do not have quality score
+  data.  This was causing memory access problems.
+  (PR #2083, fixes #2076.  Reported by Matthew Colpus)
+
+* Fix undefined behaviour in `samtools fastq` with empty QUAL.
+  (PR #2084)
+
+* In `plot-bamstats` fixed read-length plot for data with limited variations in
+  length. Lack of data was causing gnuplot problems.
+  (PR #2085, fixes #2068.  Reported by mariyeta)
+
+Non user-visible changes and build improvements:
+
+* Fix some Ubuntu Clang address sanitizer issues.
+  (PR #2043)
+
 Release 1.20 (15th April 2024)
 ------------------------------
 
