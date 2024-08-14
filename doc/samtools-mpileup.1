@@ -208,11 +208,69 @@ See
 below.
 .TP
 .BI -C,\ --adjust-MQ \ INT
+.RS
 Coefficient for downgrading mapping quality for reads containing
-excessive mismatches. Given a read with a phred-scaled probability q of
-being generated from the mapped position, the new mapping quality is
-about sqrt((INT-q)/INT)*INT. A zero value disables this
-functionality; if enabled, the recommended value for BWA is 50. [0]
+excessive mismatches.  Mismatches are counted as a proportion of the
+number of aligned bases ("M", "X" or "=" CIGAR operations), along with
+their quality, to derive an upper-bound of the mapping quality.
+Original mapping qualities lower than this are left intact, while
+higher ones are capped at the new adjusted score.
+
+The exact formula is complex and likely tuned to specific instruments
+and specific alignment tools, so this option is disabled by default
+(indicated as having a zero value).  Variables in the formulae and
+their meaning are defined below.
+
+.TS
+lb lb
+- -
+lb l .
+Variable	Meaning / formula
+M	T{
+The number of matching CIGAR bases (operation "M", "X" or "=").
+T}
+X	The number of substitutions with quality >= 13.
+SubQ	T{
+The summed quality of substitution bases included in X, capped at a maximum of quality 33 per mismatching base.
+T}
+ClipQ	T{
+The summed quality of soft-clipped or hard-clipped bases. This has no minimum or maximum quality threshold per base.  For hard-clipped bases the per-base quality is taken as 13.
+T}
+
+T	SubQ - 10 * log10(M^X / X!) + ClipQ/5
+Cap	MAX(0, INT * sqrt((INT - T) / INT))
+.TE
+
+Some notes on the impact of this.
+
+.IP \(ci 2
+As the number of mismatches increases, the mapping quality cap
+reduces, eventually resulting in discarded alignments.
+
+.IP \(ci 2
+High quality mismatches reduces the cap faster than low quality
+mismatches.
+
+.IP \(ci 2
+The starting INT value also acts as a hard cap on mapping quality,
+even when zero mismatches are observed.
+
+.IP \(ci 2
+Indels have no impact on the mapping quality.
+.PP
+The intent of this option is to work around aligners that compute a
+mapping quality using a local alignment without having any regard to
+the degree of clipping required or consideration of potential
+contamination or large scale insertions with respect to the reference.
+A record may align uniquely and have no close second match, but having
+a high number of mismatches may still imply that the reference is not
+the correct site.
+
+However we do not recommend use of this parameter unless you fully
+understand the impact of it and have determined that it is appropriate
+for your sequencing technology.
+.RE
+
 .TP
 .BI -d,\ --max-depth \ INT
 At a position, read maximally
