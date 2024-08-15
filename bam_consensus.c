@@ -1917,8 +1917,8 @@ static int calculate_consensus_simple(const pileup_t *plp,
     // Ignore ambiguous bases in seq for now, so we don't treat R, Y, etc
     // as part of one base and part another.  Based on BAM seqi values.
     // We also use freq[16] as "*" for gap.
-    int freq[17] = {0};  // base frequency, aka depth
-    int score[17] = {0}; // summation of base qualities
+    int      freq[17]  = {0}; // base frequency, aka depth
+    uint64_t score[17] = {0}; // summation of base qualities
 
     // Accumulate
     for (; plp; plp = plp->next) {
@@ -1959,13 +1959,13 @@ static int calculate_consensus_simple(const pileup_t *plp,
     }
 
     // Total usable depth
-    int tscore = 0;
+    uint64_t tscore = 0;
     for (i = 0; i < 5; i++)
         tscore += score[1<<i];
 
     // Best and second best potential calls
-    int call1  = 15, call2 = 15;
-    int score1 = 0,  score2 = 0;
+    int      call1  = 15, call2  = 15;
+    uint64_t score1 = 0,  score2 = 0;
     for (i = 0; i < 5; i++) {
         int c = 1<<i; // A C G T *
         if (score1 < score[c]) {
@@ -1980,8 +1980,8 @@ static int calculate_consensus_simple(const pileup_t *plp,
     }
 
     // Work out which best and second best are usable as a call
-    int used_score = score1;
-    int used_base  = call1;
+    uint64_t used_score = score1;
+    int      used_base  = call1;
     if (score2 >= opts->het_fract * score1 && opts->ambig) {
         used_base  |= call2;
         used_score += score2;
