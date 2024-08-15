@@ -3,7 +3,7 @@
 .SH NAME
 samtools idxstats \- reports alignment summary statistics
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018, 2024 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -60,6 +60,15 @@ The output is TAB-delimited with each line consisting of reference sequence
 name, sequence length, # mapped read-segments and # unmapped
 read-segments. It is written to stdout.  Note this may count reads
 multiple times if they are mapped more than once or in multiple fragments.
+
+.SH OPTIONS
+.TP 11
+.B -X
+This option will allow the user to specify a customised index file
+location. e.g.
+
+.B samtools idxstat [options] -X /data_folder/data.bam /index_folder/index.bai
+
 
 .SH AUTHOR
 .PP
