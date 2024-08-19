@@ -78,7 +78,8 @@ static void curses_destroy(tview_t* base) {
     int (*my_colorpair)(struct AbstractTview*,int);
 */
 
-static void curses_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fmt,...) {
+static HTS_FORMAT(HTS_PRINTF_FMT, 4, 5)
+void curses_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fmt,...) {
     va_list argptr;
     va_start(argptr, fmt);
     if (wmove(stdscr, y, x) != ERR)

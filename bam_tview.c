@@ -402,7 +402,7 @@ int base_draw_aln(tview_t *tv, int tid, hts_pos_t pos)
 
 
 
-static void error(const char *format, ...)
+static void HTS_FORMAT(HTS_PRINTF_FMT, 1, 2) error(const char *format, ...)
 {
     if ( !format )
     {
