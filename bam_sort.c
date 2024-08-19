@@ -3079,7 +3079,7 @@ static void *worker(void *data)
             break;
         case MinHash:
             worker_minhash(w);
-            // no break, go to merge sort
+            // fall-through
         default:
             ks_mergesort(sort, w->buf_len, w->buf, 0);
     }
