@@ -2089,7 +2089,8 @@ static void init_group_id(stats_t *stats, stats_info_t *info, const char *id)
 }
 
 
-static void HTS_NORETURN error(const char *format, ...)
+static void  HTS_FORMAT(HTS_PRINTF_FMT, 1, 2) HTS_NORETURN
+error(const char *format, ...)
 {
     if ( !format )
     {
