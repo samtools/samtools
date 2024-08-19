@@ -75,7 +75,7 @@ static int bed_entry_sort(const void *av, const void *bv) {
 
 int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash_t(bed_list_hash) *bed_lists, char ***ref_list, size_t *num_refs_out) {
     hFILE *fp;
-    int line_count = 0, num_columns = 0, ret;
+    int line_count = 0, ret;
 
     //variables to store the bed file data for each record
     char ref[1024] = "";
@@ -91,16 +91,6 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
     //ordered ref names list
     size_t ref_list_sz = 0;
     size_t num_refs = 0;
-
-    //scanf components to parse the bed file, depending on the number of columns in the bed file only some may be used
-    char *scanf_components[] = {
-        "%1023s",  // ref
-        "%"PRId64, // left
-        "%"PRId64, // right
-        "%1023s",  // name
-        "%1023s",  // score
-        "%c"       // strand
-    };
 
     if (ref_list)
         *ref_list = NULL;
@@ -121,36 +111,23 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
         if (line.l == 0 || *line.s == '#') continue;
         if (strncmp(line.s, "track ", 6) == 0) continue;
         if (strncmp(line.s, "browser ", 8) == 0) continue;
-        num_columns = 0;
 
-        // count the number of line columns in line.s, and use that to determine the number of sscanf arguments to use
-        for (char *c = line.s; (c = strchr(c, '\t')) != NULL; c++) {
-            num_columns++;
-        }
-        num_columns++; // Add one to account for the last column
+        // A list of the maximal number of columns we may want to parse.
+        // There may be more, but we don't use the ones beyond these.
+        const char *const scanf_str =
+            "%1023s %"SCNd64" %"SCNd64" %1023s %1023s %c";
 
-        // num columns must be less than or equal to the number of scanf components
-        if (num_columns > sizeof(scanf_components)) {
-            fprintf(stderr, "[amplicon] error: too many columns in line %d of %s.\n"
-                            "Found %d columns, but only up to %zu are expected.\n",
-                            line_count, infile, num_columns, sizeof(scanf_components) / sizeof(scanf_components[0]));
-            ret = 1;
-            goto error;
-        }
-
-        // construct a scanf string using the scanf_components array elements used to parse the line
-        char scanf_str[1024] = "";
-        for (int i = 0; i < num_columns; i++) {
-            snprintf(scanf_str + strlen(scanf_str), sizeof(scanf_str) - strlen(scanf_str) - 1, "%s ", scanf_components[i]);
-        }
-
-        int cols_parsed = 0;
-        // extract the data from the line into the variables. Variables corresponding to any missing columns will remain uninitialised
-        if ((cols_parsed = sscanf(line.s, scanf_str, ref, &left, &right, name, score, &strand)) != num_columns || cols_parsed < 3) {
+        // Extract the data from the line into the variables.
+        // Variables corresponding to any missing columns will remain
+        // uninitialised.  We asked for all columns, but cols_parsed will
+        // return how many we found which can be validated against num_columns.
+        int cols_parsed = sscanf(line.s, scanf_str, ref,
+                                 &left, &right, name, score, &strand);
+        if (cols_parsed < (get_strand ? 6 : 3)) {
             fprintf(stderr, "[amplicon] error: invalid bed file format in line %d of %s.\n"
-                            "Found %d columns, parsed %d using %s on line:\n%s\n"
-                            "(N.B. ref/chrom name limited to 1023 characters.)\n",
-                            line_count, infile, num_columns, cols_parsed, scanf_str, line.s);
+                    "Parsed %d columns, but need at least %d\n"
+                    "(N.B. ref/chrom name limited to 1023 characters.)\n",
+                    line_count, infile, cols_parsed, get_strand ? 6 : 3);
             ret = 1;
             goto error;
         }
@@ -210,7 +187,9 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
 
         list->bp[list->length].left  = left;
         list->bp[list->length].right = right;
-        if (num_columns >= 4) {
+        list->bp[list->length].name  = NULL;
+        list->bp[list->length].score = NULL;
+        if (cols_parsed >= 4) {
             list->bp[list->length].name = strdup(name);
             if (list->bp[list->length].name == NULL) {
                 fprintf(stderr, "[amplicon] error: unable to allocate memory for name in line %d of %s: %s.\n", line_count, infile, line.s);
@@ -218,7 +197,7 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
                 goto error;
             }
         }
-        if (num_columns >= 5) {
+        if (cols_parsed >= 5) {
             list->bp[list->length].score = strdup(score);
             if (list->bp[list->length].score == NULL) {
                 fprintf(stderr, "[amplicon] error: unable to allocate memory for score in line %d of %s: %s\n", line_count, infile, line.s);
