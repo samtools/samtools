@@ -124,6 +124,7 @@ rocky_task:
     LC_ALL: C
     CIRRUS_CLONE_DEPTH: 1
     HTSDIR: ./hidden-htslib
+    CFLAGS: -Wextra -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-parameter -Wno-error=old-style-declaration
 
   # NB: we could consider building a docker image with these
   # preinstalled and specifying that instead, to speed up testing.
