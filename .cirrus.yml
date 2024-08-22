@@ -29,7 +29,8 @@ htslib_compile_template: &HTSLIB_COMPILE
   htslib_compile_script: |
     cd $HTSDIR
     autoreconf -i
-    ./configure --prefix=`pwd`/../inst || (cat config.log; /bin/false)
+    if test "x$WERROR" != "xno"; then CONFIG_OPTS="--enable-werror"; fi
+    eval ./configure $CONFIG_OPTS --prefix=`pwd`/../inst CFLAGS=\"$CFLAGS\" || (cat config.log; /bin/false)
     make -j3 -e install
 
 #--------------------------------------------------
@@ -40,8 +41,10 @@ compile_template: &COMPILE
 
   compile_script: |
     autoreconf -i
-    ./configure --enable-werror --with-htslib=`pwd`/inst  \
-        LDFLAGS="$LDFLAGS -Wl,-rpath,`pwd`/inst/lib" || \
+    if test "x$WERROR" != "xno"; then CONFIG_OPTS="--enable-werror"; fi
+    eval ./configure $CONFIG_OPTS --with-htslib=`pwd`/inst  \
+        LDFLAGS=\"$LDFLAGS -Wl,-rpath,`pwd`/inst/lib\" \
+        CFLAGS=\"$CFLAGS\"|| \
         (cat config.log; /bin/false)
     make -j3
 
@@ -70,7 +73,8 @@ gcc_task:
     CIRRUS_CLONE_DEPTH: 1
     HTSDIR: ./hidden-htslib
     DO_MAINTAINER_CHECKS: yes
-    CFLAGS:  -std=c99 -D_XOPEN_SOURCE=600 -pedantic -fsanitize=address,undefined
+    WERROR: no
+    CFLAGS: -g -O3 -std=c99 -D_XOPEN_SOURCE=600 -pedantic -fsanitize=address,undefined
     LDFLAGS: -fsanitize=address,undefined
 
   << : *COMPILE
@@ -124,7 +128,7 @@ rocky_task:
     LC_ALL: C
     CIRRUS_CLONE_DEPTH: 1
     HTSDIR: ./hidden-htslib
-    CFLAGS: -Wextra -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-parameter -Wno-error=old-style-declaration
+    CFLAGS: -O2 -Wextra -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-parameter -Wno-error=old-style-declaration -Wno-empty-body
 
   # NB: we could consider building a docker image with these
   # preinstalled and specifying that instead, to speed up testing.
@@ -150,6 +154,7 @@ macosx_task:
     LC_ALL: C
     CIRRUS_CLONE_DEPTH: 1
     HTSDIR: ./hidden-htslib
+    CFLAGS: -g -Wall -O2
 
   package_install_script:
     - HOMEBREW_NO_AUTO_UPDATE=1 brew install autoconf automake libtool xz
