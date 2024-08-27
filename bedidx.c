@@ -110,6 +110,8 @@ static int bed_index_core(bed_reglist_t *regions)
         hts_pos_t beg = a[i].beg >= 0 ? a[i].beg >> LIDX_SHIFT : 0;
         hts_pos_t end = a[i].end >= 0 ? a[i].end >> LIDX_SHIFT : 0;
         hts_pos_t j;
+        if (end < last_end)
+            continue;  // Can happen for a containment
         if (end + 1 >= SIZE_MAX / sizeof(*idx)) { // Ensure no overflow
             errno = ENOMEM;
             free(idx);
