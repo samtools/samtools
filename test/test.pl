@@ -2368,6 +2368,15 @@ sub test_view
         }
     }
 
+    # -L option with nested regions
+    run_view_test($opts,
+                  msg => "$test: -L with nested regions",
+                  args => ['-h', '-L', "$$opts{path}/dat/nested.bed", '--no-PG',
+                           "$$opts{path}/dat/large_chrom.sam"],
+                  out => sprintf("%s.test%03d.sam", $out, $test),
+                  compare => "$$opts{path}/dat/nested.expected.sam");
+    $test++;
+
     # -T / -t options
     my $sam_no_sq = "$$opts{tmp}/view.001.no_sq.sam";
     filter_sam($sam_no_ur, $sam_no_sq, {no_sq => 1});
