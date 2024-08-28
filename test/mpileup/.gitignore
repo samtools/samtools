@@ -1,6 +1,8 @@
 FAIL-*.out*
 PASS-*.out*
 
+*.fa.fai
+
 anomalous.[bc]*am
 indels.[bc]*am
 mpileup.*.[cs]*am
