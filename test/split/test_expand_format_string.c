@@ -107,9 +107,9 @@ int main(int argc, char**argv)
 {
     // test state
     TestState state = { NULL, KS_INITIALIZE, 0, 0, 0, 0};
-    const static htsFormat sam_fmt  = { sequence_data, sam  };
-    const static htsFormat bam_fmt  = { sequence_data, bam  };
-    const static htsFormat cram_fmt = { sequence_data, cram };
+    static const htsFormat sam_fmt  = { sequence_data, sam  };
+    static const htsFormat bam_fmt  = { sequence_data, bam  };
+    static const htsFormat cram_fmt = { sequence_data, cram };
 
     int getopt_char;
     while ((getopt_char = getopt(argc, argv, "v")) != -1) {

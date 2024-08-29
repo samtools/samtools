@@ -162,7 +162,7 @@ hts_pos_t qlen_used(bam1_t *b) {
 // unroll it.  By adding HTS_OPT3 we can force a better level of optimization.
 // On an Illumina BAM with gcc11 -O2, with HTS_OPT3 is 9% quicker for the
 // entire process (ie decompress, iterator, aggregate & report)
-static void inline HTS_OPT3 incr_hist(int *hist, int oplen) {
+static inline void HTS_OPT3 incr_hist(int *hist, int oplen) {
     const int N = 16;
     int k;
     for (k = 0; k < (oplen & ~(N-1)); k+=N) {
@@ -173,7 +173,7 @@ static void inline HTS_OPT3 incr_hist(int *hist, int oplen) {
         hist[k]++;
 }
 
-static void inline HTS_OPT3
+static inline void HTS_OPT3
 incr_hist_qual(int *hist, uint8_t *qual, int min_qual, int oplen) {
     if (!min_qual) {
         incr_hist(hist, oplen);
