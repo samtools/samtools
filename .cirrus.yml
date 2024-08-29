@@ -30,8 +30,10 @@ htslib_compile_template: &HTSLIB_COMPILE
     cd $HTSDIR
     autoreconf -i
     if test "x$WERROR" != "xno"; then CONFIG_OPTS="--enable-werror"; fi
-    eval ./configure $CONFIG_OPTS --prefix=`pwd`/../inst CFLAGS=\"$CFLAGS\" || (cat config.log; /bin/false)
-    make -j3 -e install
+    eval ./configure $CONFIG_OPTS --prefix=`pwd`/../inst \
+        CFLAGS=\"$CFLAGS\" CPPFLAGS=\"$CPPFLAGS\" LDFLAGS=\"$LDFLAGS\" \
+        || (cat config.log; /bin/false)
+    make -j3 install
 
 #--------------------------------------------------
 # Template: samtools compile and test
@@ -44,17 +46,17 @@ compile_template: &COMPILE
     if test "x$WERROR" != "xno"; then CONFIG_OPTS="--enable-werror"; fi
     eval ./configure $CONFIG_OPTS --with-htslib=`pwd`/inst  \
         LDFLAGS=\"$LDFLAGS -Wl,-rpath,`pwd`/inst/lib\" \
-        CFLAGS=\"$CFLAGS\"|| \
+        CFLAGS=\"$CFLAGS\" CPPFLAGS=\"$CPPFLAGS\" || \
         (cat config.log; /bin/false)
     make -j3
 
 test_template: &TEST
   test_script: |
     if test "x$DO_MAINTAINER_CHECKS" = "xyes" ; then
-        make -e maintainer-check
+        make maintainer-check
     fi
-    make -e
-    make -e test BGZIP=inst/bin/bgzip
+    make
+    make test BGZIP=inst/bin/bgzip
 
 
 #--------------------------------------------------
@@ -73,8 +75,10 @@ gcc_task:
     CIRRUS_CLONE_DEPTH: 1
     HTSDIR: ./hidden-htslib
     DO_MAINTAINER_CHECKS: yes
-    WERROR: no
-    CFLAGS: -g -O3 -std=c99 -D_XOPEN_SOURCE=600 -pedantic -fsanitize=address,undefined
+    # gcc ubsan is incompatible with some -Wformat options, but they're checked
+    # in other tests.  See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=87884
+    CFLAGS: -g -O3 -std=c99 -D_XOPEN_SOURCE=600 -pedantic -fsanitize=address,undefined -Wno-format-truncation -Wno-format-overflow
+    CPPFLAGS: -DHTS_ALLOW_UNALIGNED=0
     LDFLAGS: -fsanitize=address,undefined
 
   << : *COMPILE
@@ -128,7 +132,7 @@ rocky_task:
     LC_ALL: C
     CIRRUS_CLONE_DEPTH: 1
     HTSDIR: ./hidden-htslib
-    CFLAGS: -O2 -Wextra -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-parameter -Wno-error=old-style-declaration -Wno-empty-body
+    CFLAGS: -O2 -Wextra -Wformat -Wformat=2 -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-parameter
 
   # NB: we could consider building a docker image with these
   # preinstalled and specifying that instead, to speed up testing.
