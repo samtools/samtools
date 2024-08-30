@@ -116,11 +116,21 @@ static void count1(int l, const uint8_t *seq, int *cnt)
 static int **count_all(int l, int vpos, nseq_t *hash)
 {
     khint_t k;
-    int i, j, **cnt;
-    uint8_t *seq;
+    int i, j, **cnt = NULL;
+    uint8_t *seq = NULL;
+    size_t cnt_sz = ((size_t)1) << l;
+    if (cnt_sz > SSIZE_MAX / sizeof(int) / vpos) {
+        errno = ENOMEM;
+        goto fail;
+    }
     seq = calloc(l, 1);
+    if (!seq) goto fail;
     cnt = calloc(vpos, sizeof(int*));
-    for (i = 0; i < vpos; ++i) cnt[i] = calloc(1<<l, sizeof(int));
+    if (!cnt) goto fail;
+    for (i = 0; i < vpos; ++i) {
+        cnt[i] = calloc(cnt_sz, sizeof(int));
+        if (!cnt[i]) goto fail;
+    }
     for (k = 0; k < kh_end(hash); ++k) {
         if (kh_exist(hash, k)) {
             frag_t *f = &kh_val(hash, k);
@@ -138,6 +148,15 @@ static int **count_all(int l, int vpos, nseq_t *hash)
     }
     free(seq);
     return cnt;
+ fail:
+    free(seq);
+    if (cnt) {
+        for (i = 0; i < vpos; i++)
+            free(cnt[i]);
+        free(cnt);
+    }
+    print_error_errno("phase", "Couldn't allocate memory for counts");
+    return NULL;
 }
 
 // phasing
@@ -413,6 +432,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
         printf("PS\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
         sitemask = calloc(vpos, 1);
         cnt = count_all(g->k, vpos, hash);
+        if (!cnt) return -1;
         path = dynaprog(g->k, vpos, cnt);
         for (i = 0; i < vpos; ++i) free(cnt[i]);
         free(cnt);
