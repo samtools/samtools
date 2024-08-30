@@ -160,7 +160,7 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
     if (argc == 1)
         opts->fn[FQ_SINGLE] = argv[0];
     else
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < 2; i++)
             if (argc > i)
                 opts->fn[FQ_R1+i] = argv[i];
 
