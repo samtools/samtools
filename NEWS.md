@@ -108,6 +108,9 @@ Non user-visible changes and build improvements:
   Fix warnings from the new clang compiler.
   (PR #2043)
 
+* Windows based CI has been migrated from AppVeyor to GitHub Actions.
+  (PR #2072)
+
 * Turn on more warning options in Cirrus-CI builds, ensure everything builds
   with `-Werror`, and add undefined behaviour checks to the address sanitizer
   test.
