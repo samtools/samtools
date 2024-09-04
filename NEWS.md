@@ -1,6 +1,13 @@
 Release a.b
 -----------
 
+Notice:
+
+* This is the last SAMtools / HTSlib release where CRAM 3.0 will be
+  the default CRAM version.  From the next we will change to CRAM 3.1
+  unless the version is explicitly specified, for example using
+  "samtools view -O cram,version=3.0".
+
 New work and changes:
 
 * `samtools reset` now removes a set of predefined auxtags, as these tags are no
