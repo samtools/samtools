@@ -310,7 +310,7 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
 
 
     // Interleave / combine from n files (ids[0..n-1]).
-    int res;
+    int res = 0;
     int eof = 0;
     do {
         idx_seq.l = idx_qual.l = 0;

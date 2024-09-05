@@ -558,12 +558,8 @@ int cram_cat(samFile * const firstfile, int nfn, char * const *fn,
                 cram_transcode_rg(in_c, out_c, c, 1, &zero, &new_rg);
             } else {
                 int32_t num_slices;
-                int refid;
-                hts_pos_t start, span, end;
 
                 if (reg) {
-                    cram_container_get_coords(c, &refid, &start, &span);
-                    end = start+span;
                     if (before_hdr > cend) {
                         cram_free_container(c);
                         break;
@@ -572,6 +568,12 @@ int cram_cat(samFile * const firstfile, int nfn, char * const *fn,
 
                 // For chr:start-end regions, do we need to filter or skip?
                 if (iter && reg) {
+                    int refid;
+                    hts_pos_t start, span, end;
+
+                    cram_container_get_coords(c, &refid, &start, &span);
+                    end = start+span;
+
                     // Make refid -1 ("*") come after other chromosomes
                     if (refid == -1)
                         refid = INT_MAX;
