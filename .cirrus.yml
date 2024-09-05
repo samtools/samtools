@@ -77,7 +77,7 @@ gcc_task:
     DO_MAINTAINER_CHECKS: yes
     # gcc ubsan is incompatible with some -Wformat options, but they're checked
     # in other tests.  See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=87884
-    CFLAGS: -g -O3 -std=c99 -D_XOPEN_SOURCE=600 -pedantic -fsanitize=address,undefined -Wno-format-truncation -Wno-format-overflow
+    CFLAGS: -g -Og -std=c99 -D_XOPEN_SOURCE=600 -pedantic -fsanitize=address,undefined -Wno-format-truncation -Wno-format-overflow
     CPPFLAGS: -DHTS_ALLOW_UNALIGNED=0
     LDFLAGS: -fsanitize=address,undefined
 
