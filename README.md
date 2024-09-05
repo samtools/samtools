@@ -1,8 +1,8 @@
 samtools
 ========
 
-[![Build Status](https://api.cirrus-ci.com/github/samtools/samtools.svg?branch=develop)](https://api.cirrus-ci.com/github/samtools/samtools)
-[![Build status](https://ci.appveyor.com/api/projects/status/enujqi06jlqw493t/branch/develop?svg=true)](https://ci.appveyor.com/project/samtools/samtools/branch/develop)
+[![Build Status](https://api.cirrus-ci.com/github/samtools/samtools.svg?branch=develop)](https://cirrus-ci.com/github/samtools/samtools)
+[![Build status](https://github.com/samtools/samtools/actions/workflows/windows-build.yml/badge.svg)](https://github.com/samtools/samtools/actions/workflows/windows-build.yml?query=branch%3Adevelop)
 [![Github All Releases](https://img.shields.io/github/downloads/samtools/samtools/total.svg)](https://github.com/samtools/samtools/releases/latest)
 
 This is the official development repository for samtools.
