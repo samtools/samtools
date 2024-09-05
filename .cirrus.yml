@@ -80,6 +80,7 @@ gcc_task:
     CFLAGS: -g -Og -std=c99 -D_XOPEN_SOURCE=600 -pedantic -fsanitize=address,undefined -Wno-format-truncation -Wno-format-overflow
     CPPFLAGS: -DHTS_ALLOW_UNALIGNED=0
     LDFLAGS: -fsanitize=address,undefined
+    UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
 
   << : *COMPILE
   << : *TEST
