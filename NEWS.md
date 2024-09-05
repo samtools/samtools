@@ -109,12 +109,12 @@ Non user-visible changes and build improvements:
   (PR #2043)
 
 * Windows based CI has been migrated from AppVeyor to GitHub Actions.
-  (PR #2072)
+  (PR #2072, PR #2108)
 
 * Turn on more warning options in Cirrus-CI builds, ensure everything builds
   with `-Werror`, and add undefined behaviour checks to the address sanitizer
   test.
-  (PR #2101, PR #2103)
+  (PR #2101, PR #2103, PR #2109)
 
 * Tidy up Makefile dependencies and untracked test files.
   (PR #2106.  Thanks to John Marshall)
