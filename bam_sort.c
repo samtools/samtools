@@ -3205,7 +3205,7 @@ static khash_t(const_c2c) * lookup_libraries(sam_hdr_t *header)
  * Returns 0 on success
  *        -1 on failure
  */
-static int set_sort_order(sam_hdr_t *h) {
+static int set_sort_order(sam_hdr_t *h, int mapped) {
     const char *new_so = NULL;
     const char *new_go = NULL;
     const char *new_ss = NULL;
@@ -3221,8 +3221,12 @@ static int set_sort_order(sam_hdr_t *h) {
                 : "queryname:lexicographical";
             break;
         case MinHash:
-            new_so = "coordinate";
-            new_ss = "coordinate:minhash";
+            new_so = mapped
+                ? "coordinate"
+                : "unsorted";
+            new_ss = mapped
+                ? "coordinate:minhash"
+                : "unsorted:minhash";
             break;
         case TagQueryName:
         case TagCoordinate:
@@ -3416,8 +3420,11 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     // write sub files
     k = max_k = bam_mem_offset = 0;
     size_t name_len = strlen(prefix) + 30;
+    int placed = 0;
     while ((res = sam_read1(fp, header, b)) >= 0) {
         int mem_full = 0;
+
+        placed |= b->core.tid >= 0;
 
         if (k == max_k) {
             bam1_tag *new_buf;
@@ -3554,9 +3561,8 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         num_in_mem = 0;
     }
 
-    // Set the order here as we need to know mapped vs unmapped status which
-    // we've gleaned only after processing all the input.
-    if (set_sort_order(header) < 0)
+    // Set the order here as we need to know if entirely unmapped.
+    if (set_sort_order(header, placed) < 0)
         goto err;
 
     // write the final output
@@ -3780,7 +3786,7 @@ int bam_sort(int argc, char *argv[])
         goto sort_end;
     }
 
-    if (ga.write_index && sam_order != Coordinate) {
+    if (ga.write_index && sam_order != Coordinate && sam_order != MinHash) {
         fprintf(stderr, "[W::bam_sort] Ignoring --write-index as it only works for position sorted files.\n");
         ga.write_index = 0;
     }

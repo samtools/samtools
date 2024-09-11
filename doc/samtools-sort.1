@@ -75,16 +75,15 @@ instead if you need name collated data without a full lexicographical sort.
 Note that if the sorted output file is to be indexed with
 .BR "samtools index" ,
 the default coordinate sort must be used.
-Thus the \fB-n\fR, \fB-N\fR, \fB-t\fR and \fB-M\fR options are
-incompatible with
+Thus the \fB-n\fR, \fB-N\fR and \fB-t\fR options are incompatible with
 .BR "samtools index" .
 
-When sorting by minimisier (\fB-M\fR), the sort order is defined by
-the whole-read minimiser value and the offset into the read that this
-minimiser was observed.  This produces small clusters (contig-like,
-but unaligned) and helps to improve compression with LZ algorithms.
-This can be improved by supplying a known reference to build a
-minimiser index (\fB-I\fR and \fB-w\fR options).
+When sorting by minimiser (\fB-M\fR), the sort order for unplaced
+data is defined by the whole-read minimiser value and the offset into
+the read that this minimiser was observed.  This produces small
+clusters (contig-like, but unaligned) and helps to improve compression
+with LZ algorithms.  This can be improved by supplying a known
+reference to build a minimiser index (\fB-I\fR and \fB-w\fR options).
 
 .SH OPTIONS
 
@@ -148,6 +147,11 @@ option.  Note data compressed in this manner may need to be name
 collated prior to conversion back to fastq.
 .IP
 Mapped sequences are sorted by chromosome and position.
+.IP
+Files with at least one aligned record (being placed at a position on
+a chromosome) use the sort order "coordinate" with a sub-sort of
+"coordinate:minhash".  Files entirely consisting of unaligned data
+use sort order "unsorted" with sub-sort "unsorted:minhash".
 .TP
 .B "-R "
 Do not use reverse strand with minimiser sort (only compatible with -M).
