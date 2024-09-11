@@ -3191,6 +3191,100 @@ static khash_t(const_c2c) * lookup_libraries(sam_hdr_t *header)
     return NULL;
 }
 
+// Updates header fields, adding the header if absent.
+// Done as a macro instead of a function as we don't have va_list versions of
+// these functions.
+#define sam_hdr_update_sort(h, ...) (                                       \
+    (-1 == sam_hdr_update_line((h), "HD", NULL, NULL, __VA_ARGS__, NULL) && \
+     -1 == sam_hdr_add_line((h), "HD", "VN", SAM_FORMAT_VERSION,            \
+                            __VA_ARGS__, NULL))                             \
+    ? -1 : 0)
+
+/*
+ * Sets the header sort order, group order and sub sort fields.
+ * Returns 0 on success
+ *        -1 on failure
+ */
+static int set_sort_order(sam_hdr_t *h) {
+    const char *new_so = NULL;
+    const char *new_go = NULL;
+    const char *new_ss = NULL;
+
+    switch (g_sam_order) {
+        case Coordinate:
+            new_so = "coordinate";
+            break;
+        case QueryName:
+            new_so = "queryname";
+            new_ss = natural_sort
+                ? "queryname:natural"
+                : "queryname:lexicographical";
+            break;
+        case MinHash:
+            new_so = "coordinate";
+            new_ss = "coordinate:minhash";
+            break;
+        case TagQueryName:
+        case TagCoordinate:
+            new_so = "unknown";
+            break;
+        case TemplateCoordinate:
+            new_so = "unsorted";
+            new_go = "query";
+            new_ss = "unsorted:template-coordinate";
+            break;
+        default:
+            new_so = "unknown";
+            break;
+    }
+
+    // Add or update HD
+    if (!new_ss && !new_go) {
+        // SO only
+        if (sam_hdr_update_sort(h, "SO", new_so) == -1) {
+            print_error("sort", "failed to change sort order header to "
+                        "'SO:%s'\n", new_so);
+            return -1;
+        }
+    } else if (new_ss && !new_go) {
+        // SO and SS
+        if (sam_hdr_update_sort(h, "SO", new_so, "SS", new_ss) == -1) {
+            print_error("sort", "failed to change sort order header to "
+                        "'SO:%s SS:%s'\n", new_so, new_ss);
+            return -1;
+        }
+    } else if (!new_ss && new_go) {
+        // SO and GO
+        if (sam_hdr_update_sort(h, "SO", new_so, "GO", new_go) == -1) {
+            print_error("sort", "failed to change sort order header to "
+                        "'SO:%s GO:%s'\n", new_so, new_go);
+            return -1;
+        }
+    } else {
+        // SO, GO and SS
+        if (sam_hdr_update_sort(h, "SO", new_so, "GO", new_go,
+                                "SS", new_ss) == -1) {
+            print_error("sort", "failed to change sort order header to "
+                        "'SO:%s GO:%s SS:%s'\n", new_so, new_go, new_ss);
+            return -1;
+        }
+    }
+
+    // Remove old HD entries
+    if (!new_go && sam_hdr_remove_tag_hd(h, "GO") == -1) {
+        print_error("sort", "failed to delete group order in header\n");
+        return -1;
+    }
+
+    if (!new_ss && sam_hdr_remove_tag_hd(h, "SS") == -1) {
+        print_error("sort", "failed to delete sub sort in header\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+
 /*!
   @abstract Sort an unsorted BAM file based on the provided sort order
 
@@ -3231,9 +3325,6 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     uint8_t *bam_mem = NULL;
     char **fns = NULL;
     size_t fns_size = 0;
-    const char *new_so = NULL;
-    const char *new_go = NULL;
-    const char *new_ss = NULL;
     buf_region *in_mem = NULL;
     khash_t(const_c2c) *lib_lookup = NULL;
     htsThreadPool htspool = { NULL, 0 };
@@ -3303,83 +3394,6 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         lib_lookup = lookup_libraries(header);
         if (!lib_lookup)
             goto err;
-    }
-
-    switch (g_sam_order) {
-        case Coordinate:
-            new_so = "coordinate";
-            break;
-        case QueryName:
-            new_so = "queryname";
-            new_ss = natural_sort
-                ? "queryname:natural"
-                : "queryname:lexicographical";
-            break;
-        case MinHash:
-            new_so = "coordinate";
-            new_ss = "coordinate:minhash";
-            break;
-        case TagQueryName:
-        case TagCoordinate:
-            new_so = "unknown";
-            break;
-        case TemplateCoordinate:
-            new_so = "unsorted";
-            new_go = "query";
-            new_ss = "unsorted:template-coordinate";
-            break;
-        default:
-            new_so = "unknown";
-            break;
-    }
-
-    if (new_ss == NULL && new_go == NULL) { // just SO
-        if ((-1 == sam_hdr_update_hd(header, "SO", new_so))
-            && (-1 == sam_hdr_add_line(header, "HD", "VN", SAM_FORMAT_VERSION, "SO", new_so, NULL))
-            ) {
-            print_error("sort", "failed to change sort order header to 'SO:%s'\n", new_so);
-            goto err;
-        }
-    } else if (new_ss != NULL && new_go == NULL) { // update SO and SS, but not GO
-        if ((-1 == sam_hdr_update_hd(header, "SO", new_so, "SS", new_ss))
-            && (-1 == sam_hdr_add_line(header, "HD", "VN", SAM_FORMAT_VERSION,
-                                       "SO", new_so, "SS", new_ss, NULL))
-            ) {
-            print_error("sort", "failed to change sort order header to 'SO:%s SS:%s'\n",
-                        new_so, new_ss);
-            goto err;
-        }
-    } else if (new_ss == NULL && new_go != NULL) { // update SO and GO, but not SS
-        if ((-1 == sam_hdr_update_hd(header, "SO", new_so, "GO", new_go))
-            && (-1 == sam_hdr_add_line(header, "HD", "VN", SAM_FORMAT_VERSION,
-                                       "SO", new_so, "GO", new_go, NULL))
-            ) {
-            print_error("sort", "failed to change sort order header to 'SO:%s GO:%s'\n",
-                        new_so, new_go);
-            goto err;
-        }
-    } else { // update SO, GO, and SS
-        if ((-1 == sam_hdr_update_hd(header, "SO", new_so, "GO", new_go, "SS", new_ss))
-            && (-1 == sam_hdr_add_line(header, "HD", "VN", SAM_FORMAT_VERSION,
-                                       "SO", new_so, "GO", new_go, "SS", new_ss, NULL))
-            ) {
-            print_error("sort", "failed to change sort order header to 'SO:%s GO:%s SS:%s'\n",
-                        new_so, new_go, new_ss);
-            goto err;
-        }
-    }
-
-    if (new_go == NULL) {
-        if (-1 == sam_hdr_remove_tag_hd(header, "GO")) {
-            print_error("sort", "failed to delete group order in header\n");
-            goto err;
-        }
-    }
-    if (new_ss == NULL) {
-        if (-1 == sam_hdr_remove_tag_hd(header, "SS")) {
-            print_error("sort", "failed to delete sub sort in header\n");
-            goto err;
-        }
     }
 
     if (n_threads > 1) {
@@ -3539,6 +3553,11 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     } else {
         num_in_mem = 0;
     }
+
+    // Set the order here as we need to know mapped vs unmapped status which
+    // we've gleaned only after processing all the input.
+    if (set_sort_order(header) < 0)
+        goto err;
 
     // write the final output
     if (n_files == 0 && num_in_mem < 2) { // a single block
