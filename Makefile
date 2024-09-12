@@ -1,6 +1,6 @@
 # Makefile for samtools, utilities for the Sequence Alignment/Map format.
 #
-#    Copyright (C) 2008-2022 Genome Research Ltd.
+#    Copyright (C) 2008-2022, 2024 Genome Research Ltd.
 #    Portions copyright (C) 2010-2012 Broad Institute.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -171,9 +171,9 @@ bam2depth.o: bam2depth.c config.h $(htslib_sam_h) $(samtools_h) $(bedidx_h) $(sa
 coverage.o: coverage.c config.h $(htslib_sam_h) $(htslib_hts_h) $(samtools_h) $(sam_opts_h)
 bam_addrprg.o: bam_addrprg.c config.h $(htslib_sam_h) $(htslib_kstring_h) $(samtools_h) $(htslib_thread_pool_h) $(sam_opts_h)
 bam_aux.o: bam_aux.c config.h $(htslib_sam_h)
-bam_cat.o: bam_cat.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(htslib_kstring_h) $(samtools_h) $(sam_opts_h)
+bam_cat.o: bam_cat.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(htslib_kstring_h) $(htslib_hfile_h) $(samtools_h) $(sam_opts_h)
 bam_color.o: bam_color.c config.h $(htslib_sam_h)
-bam_fastq.o: bam_fastq.c config.h $(htslib_sam_h) $(htslib_klist_h) $(htslib_kstring_h) $(htslib_bgzf_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h)
+bam_fastq.o: bam_fastq.c config.h $(htslib_sam_h) $(htslib_klist_h) $(htslib_kstring_h) $(htslib_bgzf_h) $(htslib_thread_pool_h) $(htslib_khash_h) $(samtools_h) $(sam_opts_h)
 bam_import.o: bam_import.c config.h $(htslib_sam_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h)
 bam_index.o: bam_index.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_khash_h) $(samtools_h) $(sam_opts_h)
 bam_lpileup.o: bam_lpileup.c config.h $(bam_plbuf_h) $(bam_lpileup_h) splaysort.h
@@ -201,7 +201,7 @@ consensus_pileup.o: consensus_pileup.c config.h $(htslib_sam_h) $(consensus_pile
 cram_size.o: cram_size.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(htslib_kstring_h) $(htslib_khash_h) $(samtools_h) $(sam_opts_h) $(htslib_hfile_h)
 cut_target.o: cut_target.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(samtools_h) $(sam_opts_h)
 dict.o: dict.c config.h $(htslib_khash_h) $(htslib_kseq_h) $(htslib_hts_h) $(samtools_h)
-faidx.o: faidx.c config.h $(htslib_faidx_h) $(htslib_hts_h) $(htslib_hfile_h) $(htslib_kstring_h) $(samtools_h)
+faidx.o: faidx.c config.h $(htslib_faidx_h) $(htslib_hts_h) $(htslib_hfile_h) $(htslib_kstring_h) $(htslib_bgzf_h) $(htslib_thread_pool_h) $(sam_opts_h) $(samtools_h)
 padding.o: padding.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_faidx_h) $(sam_opts_h) $(samtools_h)
 phase.o: phase.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_kstring_h) $(sam_opts_h) $(samtools_h) $(htslib_hts_os_h) $(htslib_kseq_h) $(htslib_khash_h) $(htslib_ksort_h)
 reference.o: reference.c config.h $(htslib_sam_h) $(htslib_cram_h) $(samtools_h) $(sam_opts_h)
@@ -332,7 +332,7 @@ install: $(PROGRAMS) $(MISC_PROGRAMS)
 testclean:
 	-rm -f test/*.new test/*.tmp test/*/*.new test/*/*.tmp test/*/*.tmp.*
 	-cd test/dat && rm -f test_input_*.bam.bai view.*.bam.bai
-	-cd test/mpileup && rm -f FAIL-*.out* PASS-*.out* anomalous.[bc]*am indels.[bc]*am mpileup.*.[cs]*am mpileup.*.crai overlap50.[bc]*am expected/1.out xx#depth*.bam*
+	-cd test/mpileup && rm -f FAIL-*.out* PASS-*.out* *.fa.fai anomalous.[bc]*am indels.[bc]*am mpileup.*.[cs]*am mpileup.*.crai overlap50.[bc]*am expected/1.out xx#depth*.bam*
 	-cd test/reference && rm -f mpileup.*.fai
 
 mostlyclean: testclean

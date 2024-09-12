@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-cat 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
+.TH samtools-cat 1 "12 September 2024" "samtools-1.21" "Bioinformatics tools"
 .SH NAME
 samtools cat \- concatenate files together
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018, 2024 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -75,6 +75,49 @@ from the first file to be concatenated.
 .BI "-o " FILE
 Write the concatenated output to \fIFILE\fR.  By default this is sent
 to stdout.
+.TP 8
+.B -q
+[CRAM only] Query the number of containers in the CRAM file.  The
+output is the filename, the number of containers, and the first and
+last container number as an inclusive range, with one file per line.
+
+Note this works in conjunction with the \fB-r \fIRANGE\fR option, in
+which case the 3rd and 4th columns become useful for identifying which
+containers span the requested range.
+.TP
+.BI "-r " RANGE
+[CRAM only] Filter the CRAM file to a specific \fIRANGE\fR.  This can
+be the usual chromosome:start-end syntax, or "*" for unmapped records
+at the end of alignments.
+
+If the range is of the form "#:start-end" then the start and end
+coordinates are interpreted as inclusive CRAM container numbers,
+starting at 0 and ending 1 less than the number of containers reported
+by \fB-q\fR.  For example \fB-r "#:0-9"\fR is the first 10 CRAM
+containers of data.
+
+All range types filter data in as fast a manner as possible, using
+operating system read/write loops where appropriate.
+
+.TP
+.BI "-p " A/B
+[CRAM only] Filter the CRAM file using a specific fraction.  The file
+is split into B approximately equal parts and returns element A where A
+is between 1 and B inclusive. If there are more parts specified than
+CRAM containers then some of the output will be empty CRAMs.
+
+This can also be combined with the range option above to operate of
+parts of that range.  For example \fB-r chr2 -p 1/10\fR returns the
+first 1/10th of data aligned against chromosome 2.
+
+.TP
+.B -f
+[CRAM only] Enable fast mode.  When filtering by chromosome range with
+\fB-r\fR we normally do careful recoding of any containers that
+overlap the start and end of the range so the record count precisely
+matches that returned by a \fBsamtools view\fR equivalent.  Fast mode
+does no filtering, so may return additional alignments in the same
+container but outside of the requested region.
 .TP
 .BI --no-PG
 Do not add a @PG line to the header of the output file.
@@ -82,9 +125,46 @@ Do not add a @PG line to the header of the output file.
 .BI "-@, --threads " INT
 Number of input/output compression threads to use in addition to main thread [0].
 
+.SH EXAMPLES
+.IP o 2
+Extract a specific chromosome from a CRAM file, outputting to a new
+CRAM.
+.EX 2
+samtools cat -o chr10.cram -r chr10 in.cram
+.EE
+
+.IP o 2
+Split a CRAM file up into separate files, each containing at most 123
+containers.
+.EX 2
+set -- $(samtools cat -q in.cram); nc=$2; s=0
+while [ $s -lt $nc ]
+do
+    e=`expr $s + 123`
+    if [ $e -ge $nc ]
+    then
+        e=$nc
+    fi
+    r="$s-`expr $e - 1`"; echo $r
+    fn=/tmp/_part-`printf "%08d" $s`.cram
+    samtools cat -o $fn in.cram -r "#:$r"
+    s=$e
+done
+.EE
+
+.IP o 2
+Split any unaligned data from a (potentially aligned) CRAM file into
+10 approximately equal sized pieces.
+.EX 2
+for i in `seq 1 10`
+do
+   samtools cat in.cram -r "*" -p $i/10 -o part-`printf "%02d" $i`.cram
+done
+
 .SH AUTHOR
 .PP
 Written by Heng Li from the Sanger Institute.
+Updated for CRAM by James Bonfield (also Sanger Institute).
 
 .SH SEE ALSO
 .IR samtools (1)

@@ -328,7 +328,7 @@ static void refs_destroy(ref_cache *cache) {
     }
 }
 
-int calmd_usage() {
+int calmd_usage(void) {
     fprintf(stderr,
 "Usage: samtools calmd [-eubrAESQ] <aln.bam> <ref.fasta>\n"
 "Options:\n"

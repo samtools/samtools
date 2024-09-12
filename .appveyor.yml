@@ -8,6 +8,7 @@ branches:
     # Blacklist
     except:
       - gh-pages
+      - /.*/ # Appveyor builds are currently disabled.
 
 # Do not build on tags (GitHub and BitBucket)
 skip_tags: true

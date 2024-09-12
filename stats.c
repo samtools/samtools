@@ -2089,7 +2089,8 @@ static void init_group_id(stats_t *stats, stats_info_t *info, const char *id)
 }
 
 
-static void HTS_NORETURN error(const char *format, ...)
+static void  HTS_FORMAT(HTS_PRINTF_FMT, 1, 2) HTS_NORETURN
+error(const char *format, ...)
 {
     if ( !format )
     {
@@ -2252,7 +2253,7 @@ int init_stat_info_fname(stats_info_t* info, const char* bam_fname, const htsFor
     return 0;
 }
 
-stats_t* stats_init()
+stats_t* stats_init(void)
 {
     stats_t *stats = calloc(1,sizeof(stats_t));
     if (!stats)

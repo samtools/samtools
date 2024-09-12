@@ -6,21 +6,12 @@
 @RG	ID:fish	PG:donkey
 @RG	ID:cow	PU:13_&^&&*(:332
 @RG	PU:*9u8jkjjkjd:	ID:colt
-@RG	ID:fish-55424A4	PG:llama
+@RG	ID:fish-055424A4	PG:llama
 @RG	ID:cow-3A2CCEF5	PU:13_&^&&*(:332	PG:donkey-4861F4EF
 @RG	PU:*9u8jkjjkjd:	ID:colt-6ADB4A65
-@RG	ID:fish-39E5EF
+@RG	ID:fish-0039E5EF
 @RG	ID:cow-1802EEEC	PU:13_&^&&*(:332
 @RG	PU:*9u8jkjjkjd:	ID:colt-7EC68B3F
-@PG	ID:bull	PP:donkey
-@PG	ID:donkey
-@PG	ID:moose
-@PG	PP:moose	ID:cow
-@PG	ID:llama
-@PG	ID:bull-2B019719	PP:donkey-4861F4EF
-@PG	ID:donkey-4861F4EF
-@PG	ID:bull-60104A41	PP:donkey-2EE20DF8
-@PG	ID:donkey-2EE20DF8
 @CO	
 @CO	Do you know?
 @CO	Do you know?

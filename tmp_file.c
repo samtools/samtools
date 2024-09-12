@@ -43,7 +43,8 @@ DEALINGS IN THE SOFTWARE
 #include "htslib/sam.h"
 
 
-static void tmp_print_error(tmp_file_t *tmp, const char *fmt, ...) {
+static void HTS_FORMAT(HTS_PRINTF_FMT, 2, 3)
+tmp_print_error(tmp_file_t *tmp, const char *fmt, ...) {
     va_list argp;
 
     if (tmp->verbose) {
@@ -253,8 +254,8 @@ int tmp_file_write(tmp_file_t *tmp, bam1_t *inbam) {
         int ret;
 
         if ((ret = tmp_file_grow_ring_buffer(tmp, (tmp->offset + tmp->input_size + sizeof(bam1_t) + inbam->l_data) * 2))) {
-            tmp_print_error(tmp, "[tmp_file] Error: input line too big. (%ld).\n",
-                (tmp->input_size + inbam->l_data));
+            tmp_print_error(tmp, "[tmp_file] Error: input line too big. (%zu).\n",
+                            (tmp->input_size + inbam->l_data));
 
             return ret;
         }
@@ -405,7 +406,7 @@ int tmp_file_read(tmp_file_t *tmp, bam1_t *inbam) {
     tmp->entry_number++;
 
     if (tmp->read_size > tmp->output_size) {
-        tmp_print_error(tmp, "[tmp_file] Error: wrong size of data returned RS:%ld OS:%ld EN:%ld GS:%ld.\n",
+        tmp_print_error(tmp, "[tmp_file] Error: wrong size of data returned RS:%zu OS:%zu EN:%zu GS:%zu.\n",
             tmp->read_size, tmp->output_size, tmp->entry_number, tmp->group_size);
         return TMP_SAM_LZ4_ERROR;
     }

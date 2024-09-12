@@ -639,8 +639,9 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
             }
         }
 
-        if ( rec->core.mtid < 0 || (rec->core.flag & BAM_FMUNMAP) ) nunmap = 1;
-        if ( rec->core.mtid >= 0 ) {
+        if ( rec->core.mtid < 0 ) {
+            nunmap = 1;
+        } else {
             if (_reglist_push(&conf->reglist, &conf->nreglist, rec->core.mtid, rec->core.mpos,rec->core.mpos+1) != 0)
                 goto out;
         }
@@ -1715,7 +1716,7 @@ int main_head(int argc, char *argv[])
     if (nrecords > 0) {
         b = bam_init1();
         uint64_t n;
-        int r;
+        int r = 0;
         for (n = 0; n < nrecords && (r = sam_read1(fp, hdr, b)) >= 0; n++) {
             if (sam_format1(hdr, b, &str) < 0) {
                 print_error_errno("head", "couldn't format record");

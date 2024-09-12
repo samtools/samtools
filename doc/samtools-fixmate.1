@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-fixmate 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
+.TH samtools-fixmate 1 "12 September 2024" "samtools-1.21" "Bioinformatics tools"
 .SH NAME
 samtools fixmate \- fills in mate coordinates and insert size fields.
 .\"
@@ -57,7 +57,9 @@ name-sorted or name-collated alignment.
 .SH OPTIONS
 .TP 11
 .B -r
-Remove secondary and unmapped reads.
+Remove secondary and unmapped reads.  If one of a pair is removed, the PAIRED
+flag will not be unset on the remaining read.  This is a change from the older
+behaviour in samtools versions up to 1.20.
 .TP
 .B -p
 Disable FR proper pair check.

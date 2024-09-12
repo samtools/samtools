@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2012-2014,2018, 2023 Genome Research Ltd.
+#    Copyright (C) 2012-2014,2018, 2024 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -25,7 +25,7 @@
 use strict;
 use warnings;
 use Carp;
-use POSIX qw/floor/;
+use POSIX qw/floor ceil/;
 use List::Util qw(max);
 
 my $opts = parse_params();
@@ -64,6 +64,7 @@ sub error
         "   -r, --ref-stats <file.fa.gc>        Optional reference stats file with expected GC content (created with -s).\n",
         "   -s, --do-ref-stats <file.fa>        Calculate reference sequence GC for later use with -r\n",
         "   -t, --targets <file.tab>            Restrict -s to the listed regions (tab-delimited chr,from,to. 1-based, inclusive)\n",
+        "   -q, --alt-qual-avg-method           Calculate average base quality using average base error probabilities rather than average quality scores.\n",
         "   -h, -?, --help                      This help message.\n",
         "\n";
 }
@@ -212,6 +213,7 @@ sub parse_params
         if ( $arg eq '-s' || $arg eq '--do-ref-stats' ) { $$opts{do_ref_stats}=shift(@ARGV); next; }
         if ( $arg eq '-t' || $arg eq '--targets' ) { $$opts{targets}=shift(@ARGV); next; }
         if ( $arg eq '-p' || $arg eq '--prefix' ) { $$opts{prefix}=shift(@ARGV); next; }
+	if ( $arg eq '-q' || $arg eq '--alt-qual-avg-method' ) { $$opts{alt_qual_avg_method}=1; next; }
         if ( $arg eq '-?' || $arg eq '-h' || $arg eq '--help' ) { error(); }
         if ( $arg eq '-'  || -e $arg ) { push @{$$opts{bamcheck}},$arg; next; }
         error("Unknown parameter or non-existent file \"$arg\". Run -h for help.\n");
@@ -644,7 +646,12 @@ sub plot_qualities
         my $sum=0; my $n=0;
         for (my $iqual=1; $iqual<@$cycle; $iqual++)
         {
-            $sum += $$cycle[$iqual]*$iqual;
+            if ( exists($$opts{alt_qual_avg_method }) ) {
+                my $prob_base_error = 10 ** (-$iqual/10);
+                $sum += $$cycle[$iqual]*$prob_base_error;
+            } else {
+                $sum += $$cycle[$iqual]*$iqual;
+            }
             $n += $$cycle[$iqual];
             if ( !defined $fmax or $fmax<$$cycle[$iqual] ) { $fmax=$$cycle[$iqual]; $fmax_qual=$iqual; $fmax_cycle=$$cycle[0]; }
         }
@@ -654,7 +661,13 @@ sub plot_qualities
         if ( !$n ) { next; }
         push @fp75, "$$cycle[0]\t$p25\t$p75\n";
         push @fp50, "$$cycle[0]\t$p50\n";
-        push @fmean, sprintf "%d\t%.2f\n", $$cycle[0],$sum/$n;
+        if ( exists($$opts{alt_qual_avg_method }) ) {
+            my $mean_prob_base_error = $sum/$n;
+            my $mean_error_quality_score = -10 * ( log($mean_prob_base_error) / log(10) );
+            push @fmean, sprintf "%d\t%.2f\n", $$cycle[0],$mean_error_quality_score;
+        } else {
+            push @fmean, sprintf "%d\t%.2f\n", $$cycle[0],$sum/$n;
+        }
         printf $fh $fmean[-1];
     }
     print $fh "end\n";
@@ -667,7 +680,12 @@ sub plot_qualities
             my $sum=0; my $n=0;
             for (my $iqual=1; $iqual<@$cycle; $iqual++)
             {
-                $sum += $$cycle[$iqual]*$iqual;
+		if ( exists($$opts{alt_qual_avg_method }) ) {
+		    my $prob_base_error = 10 ** (-$iqual/10);
+		    $sum += $$cycle[$iqual]*$prob_base_error;
+		} else {
+		    $sum += $$cycle[$iqual]*$iqual;
+		}
                 $n += $$cycle[$iqual];
                 if ( !defined $lmax or $lmax<$$cycle[$iqual] ) { $lmax=$$cycle[$iqual]; $lmax_qual=$iqual; $lmax_cycle=$$cycle[0]; }
             }
@@ -677,7 +695,13 @@ sub plot_qualities
             if ( !$n ) { next; }
             push @lp75, "$$cycle[0]\t$p25\t$p75\n";
             push @lp50, "$$cycle[0]\t$p50\n";
-            push @lmean, sprintf "%d\t%.2f\n", $$cycle[0],$sum/$n;
+	    if ( exists($$opts{alt_qual_avg_method }) ) {
+		my $mean_prob_base_error = $sum/$n;
+		my $mean_error_quality_score = -10 * ( log($mean_prob_base_error) / log(10) );
+		push @lmean, sprintf "%d\t%.2f\n", $$cycle[0],$mean_error_quality_score;
+	    } else {
+		push @lmean, sprintf "%d\t%.2f\n", $$cycle[0],$sum/$n;
+	    }
             printf $fh $lmean[-1];
         }
         print $fh "end\n";
@@ -1207,6 +1231,27 @@ sub plot_indel_cycles
     plot($$args{gp});
 }
 
+
+sub nice_num
+{
+    my ($num) = @_;
+    my $ret;
+
+    if ($num < 1) {
+        $ret = 1;
+    } else {
+        my $expon_num = floor(log($num)/log(10));
+        my $fract_num = ($num / (10.0 ** $expon_num));
+
+        my $nf = ceil($fract_num);
+
+        $ret = ($nf * (10.0 ** $expon_num));
+    }
+
+    return $ret;
+}
+
+
 sub plot_read_len_hist
 {
     my ($opts) = @_;
@@ -1217,7 +1262,7 @@ sub plot_read_len_hist
     # TODO: Add modified version for paired end reads.
     # my $is_paired = get_value($opts,'SN','reads paired:');
 
-    my $args = get_defaults($opts,"$$opts{prefix}read_length.png");
+    my $args = get_defaults($opts,"$$opts{prefix}read-length.png");
     my $fh = $$args{fh};
 
     # anonymous subroutines for code readibility
@@ -1238,50 +1283,9 @@ sub plot_read_len_hist
     # Create gnuplot command file options
     my $min_x = $rl[0][0];
     my $max_x = $rl[-1][0];
+    my $min_y = $rl[0][1];
+    my $max_y = $min_y;
 
-    # Gnuplot commands for normalized binned data
-    # The normalized plot bins reads by read length with bin widths on a
-    # logarithmic scale (i.e. bins 10-11 bp, 12-14 bp, 15-18 bp, etc.), then
-    # bin height is normalized by the width of the bins.
-    # The end goal is to smooth the distribution of reads compared to plotting
-    # each length without binning.  Visualization of unbinned data is included
-    # in order to make single value spikes more visible, for example in the
-    # case that spike ins are used as a control.
-    print $fh qq[
-        set ytics nomirror
-        set y2tic nomirror
-        set terminal png size 800,1000 truecolor
-        set output "$$args{img}"
-        $$args{grid}
-        set grid noy2tics
-        set multiplot layout 2,1 columnsfirst scale 1,0.9
-        set autoscale y
-        set ylabel "Read Count"
-        set autoscale x
-        set logscale x
-        set xrange[$min_x: $max_x]
-        set xtics rotate by -45 out scale 1 nomirror
-        set xlabel "Read Length"
-        set boxwidth .8 relative
-        set title "$$args{title}" noenhanced
-        set title offset -15,-.5
-        set key at graph 1, 1.15
-        plot "$$opts{prefix}read_len_rawdata.txt" using 1:2 lt rgb "orange" with boxes fs solid .7 title 'unbinned', "$$opts{prefix}read_len_histdata.txt" using 4:3 lt rgb "blue" with boxes title 'normalized bins(count/bin width)' axis x1y2
-    ];
-    print $fh qq[];
-
-    # Gnuplot commands for non-normalized binned data
-    # The un-normalized plot has reads assigned to bins identically to the
-    # normalized plot, however, the bin height is not divided by bin width. The
-    # goal of this visualization is to more accurately reflect the distribution
-    # of reads by volume, and will generally collect around the mean read
-    # length.
-    # Inclusion of unbinned data is to give point of visual comparison to
-    # normalized histogram.
-    print $fh qq[
-        set boxwidth 1 relative
-        plot "$$opts{prefix}read_len_rawdata.txt" using 1:2 lt rgb "orange" with boxes fs solid .7 title 'unbinned', "$$opts{prefix}read_len_histdata.txt" using 4:2 lt rgb "blue" with boxes title 'unnormalized bins' axis x1y2
-    ];
 
     my @logscale_data = (0)x&$log_bin($max_x);
     my $log_x = 0;
@@ -1291,6 +1295,14 @@ sub plot_read_len_hist
         my @deref_line = @{$line};
         my $curr_x = $deref_line[0];
         my $curr_y = $deref_line[1];
+
+        if ($min_y > $curr_y) {
+            $min_y = $curr_y;
+        }
+
+        if ($max_y < $curr_y) {
+            $max_y = $curr_y;
+        }
 
         print $rd_fh "$curr_x $curr_y\n";
         $log_x = max(&$log_bin($curr_x), 5);
@@ -1320,13 +1332,94 @@ sub plot_read_len_hist
         }
     }
 
+    my $bin_min_x     = &$inv_log_bin($start_idx);
+    my $bin_max_x     = &$inv_log_bin($start_idx + 1);
+    my $log_scale_max = $logscale_data[$start_idx];
+    my $log_bin_max   = $logscale_data[$start_idx] / max(($bin_max_x - $bin_min_x), 1);
 
     for my $i ($start_idx..@logscale_data-1) {
         $start = &$inv_log_bin($i);
         $end = &$inv_log_bin($i+1);
+
+        if ($bin_max_x < $end) {
+            $bin_max_x = $end;
+        }
+
+        if ($log_scale_max < $logscale_data[$i]) {
+            $log_scale_max = $logscale_data[$i];
+        }
+
         $div_binw_val = $logscale_data[$i]/max(($end - $start), 1);
+
+        if ($log_bin_max < $div_binw_val) {
+            $log_bin_max = $div_binw_val;
+        }
+
         print $hd_fh "$i $logscale_data[$i] $div_binw_val $start $end\n";
     }
+
+    if ($max_x < $bin_max_x) {
+        $max_x = $bin_max_x;
+    }
+
+    if ($min_x > $bin_min_x) {
+        $min_x = $bin_min_x;
+    }
+
+    $max_y = nice_num($max_y);
+    $log_scale_max = nice_num($log_scale_max);
+    $log_bin_max = nice_num($log_bin_max);
+
+    my $logscale = "";
+
+    if (($max_x - $min_x) > 100) {
+        $logscale = "set logscale x\n";
+    }
+
+    # Gnuplot commands for normalized binned data
+    # The normalized plot bins reads by read length with bin widths on a
+    # logarithmic scale (i.e. bins 10-11 bp, 12-14 bp, 15-18 bp, etc.), then
+    # bin height is normalized by the width of the bins.
+    # The end goal is to smooth the distribution of reads compared to plotting
+    # each length without binning.  Visualization of unbinned data is included
+    # in order to make single value spikes more visible, for example in the
+    # case that spike ins are used as a control.
+    print $fh qq[
+        set ytics nomirror
+        set y2tic nomirror
+        set terminal png size 800,1000 truecolor
+        set output "$$args{img}"
+        $$args{grid}
+        set grid noy2tics
+        set multiplot layout 2,1 columnsfirst scale 1,0.9
+        set yrange[0: $max_y]
+        set ylabel "Read Count"
+        $logscale
+        set xrange[$min_x: $max_x]
+        set xtics rotate by -45 out scale 1 nomirror
+        set xlabel "Read Length"
+        set boxwidth .8 relative
+        set title "$$args{title}" noenhanced
+        set title offset -15,-.5
+        set key at graph 1, 1.15
+        set y2range[0:$log_bin_max]
+        plot "$$opts{prefix}read_len_rawdata.txt" using 1:2 lt rgb "orange" with boxes fs solid .7 title 'unbinned', "$$opts{prefix}read_len_histdata.txt" using 4:3 lt rgb "blue" with boxes title 'normalized bins(count/bin width)' axis x1y2
+    ];
+    print $fh qq[];
+
+    # Gnuplot commands for non-normalized binned data
+    # The un-normalized plot has reads assigned to bins identically to the
+    # normalized plot, however, the bin height is not divided by bin width. The
+    # goal of this visualization is to more accurately reflect the distribution
+    # of reads by volume, and will generally collect around the mean read
+    # length.
+    # Inclusion of unbinned data is to give point of visual comparison to
+    # normalized histogram.
+    print $fh qq[
+        set boxwidth 1 relative
+        set y2range[0:$log_scale_max]
+        plot "$$opts{prefix}read_len_rawdata.txt" using 1:2 lt rgb "orange" with boxes fs solid .7 title 'unbinned', "$$opts{prefix}read_len_histdata.txt" using 4:2 lt rgb "blue" with boxes title 'unnormalized bins' axis x1y2
+    ];
 
     # Close file buffers and clean up workspace
     close($fh);
@@ -1495,9 +1588,10 @@ sub create_html
         'indel-cycles'   => 'Indels per cycle',
         'indel-dist'     => 'Indel lengths',
         'gc-depth'       => 'Mapped depth vs GC',
+        'read-length'    => 'Read lengths',
 # I think this may be broken: 'coverage'       => '',
     );
-    my @imgs = (qw(insert-size gc-content acgt-cycles mism-per-cycle quals quals2 quals3 quals-hm indel-cycles indel-dist gc-depth));
+    my @imgs = (qw(insert-size gc-content acgt-cycles mism-per-cycle quals quals2 quals3 quals-hm indel-cycles indel-dist gc-depth read-length));
     for (my $i=0; $i<@imgs; $i++)
     {
         if ( $i % 3 == 0 )

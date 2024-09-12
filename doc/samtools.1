@@ -1,5 +1,5 @@
 '\" t
-.TH samtools 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
+.TH samtools 1 "12 September 2024" "samtools-1.21" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
@@ -95,7 +95,7 @@ samtools markdup in.algnsorted.bam out.bam
 .PP
 samtools merge out.bam in1.bam in2.bam in3.bam
 .PP
-samtools mpileup -C50 -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
+samtools mpileup -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools phase input.bam
 .PP

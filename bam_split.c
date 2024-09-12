@@ -171,10 +171,12 @@ static parsed_opts_t* parse_args(int argc, char** argv)
                 return NULL;
             }
             retval->zero_pad = (int) val;
+            break;
         }
         case 1:
             retval->no_pg = 1;
             break;
+
         default:
             if (parse_sam_global_opt(opt, optarg, lopts, &retval->ga) == 0) break;
             /* else fall-through */

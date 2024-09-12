@@ -1,7 +1,7 @@
 /* coverage.c -- samtools coverage subcommand
 
     Copyright (C) 2018,2019 Florian Breitwieser
-    Portions copyright (C) 2019-2021, 2023 Genome Research Ltd.
+    Portions copyright (C) 2019-2021, 2023-2024 Genome Research Ltd.
 
     Author: Florian P Breitwieser <florian.bw@gmail.com>
 
@@ -60,6 +60,7 @@ typedef struct {  // auxiliary data structure to hold stats on coverage
     unsigned long long summed_coverage;
     unsigned long long summed_baseQ;
     unsigned long long summed_mapQ;
+    unsigned long long quality_bases;
     unsigned int n_reads;
     unsigned int n_selected_reads;
     bool covered;
@@ -105,7 +106,7 @@ static const char *const BLOCK_CHARS2[2] = {".", ":"};
 // in bam_plcmd.c
 int read_file_list(const char *file_list, int *n, char **argv[]);
 
-static int usage() {
+static int usage(void) {
     fprintf(stdout, "Usage: samtools coverage [options] in1.bam [in2.bam [...]]\n\n"
             "Input options:\n"
             "  -b, --bam-list FILE     list of input BAM filenames, one per line\n"
@@ -204,7 +205,7 @@ void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *s
             stats[tid].n_covered_bases,
             100.0 * stats[tid].n_covered_bases / region_len,
             stats[tid].summed_coverage / region_len,
-            stats[tid].summed_coverage > 0? stats[tid].summed_baseQ/(double) stats[tid].summed_coverage : 0,
+            stats[tid].quality_bases > 0? stats[tid].summed_baseQ/(double) stats[tid].quality_bases : 0,
             stats[tid].n_selected_reads > 0? stats[tid].summed_mapQ/(double) stats[tid].n_selected_reads : 0
            );
 }
@@ -263,7 +264,7 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
             case 5: fprintf(file_out, "Mean coverage:   %.3gx",
                             stats[tid].summed_coverage / region_len); break;
             case 4: fprintf(file_out, "Mean baseQ:      %.3g",
-                            stats[tid].summed_baseQ/(double) stats[tid].summed_coverage); break;
+                            stats[tid].quality_bases > 0? stats[tid].summed_baseQ/(double) stats[tid].quality_bases : 0); break;
             case 3: fprintf(file_out, "Mean mapQ:       %.3g",
                             stats[tid].summed_mapQ/(double) stats[tid].n_selected_reads); break;
             case 1: fprintf(file_out, "Histo bin width: %sbp",
@@ -315,6 +316,7 @@ int main_coverage(int argc, char *argv[]) {
     char **fn = NULL;
     int fail_flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP); // Default fail flags
     int required_flags = 0;
+    int print_value_warning = 0;
 
     int *n_plp = NULL;
     sam_hdr_t *h = NULL; // BAM header of the 1st input
@@ -570,6 +572,7 @@ int main_coverage(int argc, char *argv[]) {
         status = EXIT_FAILURE;
         goto coverage_end;
     }
+
     while ((ret=bam_mplp_auto(mplp, &tid, &pos, n_plp, plp)) > 0) { // come to the next covered position
 
         if (tid != old_tid) { // Next target sequence
@@ -609,12 +612,20 @@ int main_coverage(int argc, char *argv[]) {
             for (j = 0; j < n_plp[i]; ++j) {
                 const bam_pileup1_t *p = plp[i] + j; // DON'T modify plp[][] unless you really know
 
-                if (p->is_del || p->is_refskip) --depth_at_pos; // having dels or refskips at tid:pos
-                else if (p->qpos < p->b->core.l_qseq &&
-                        bam_get_qual(p->b)[p->qpos] < opt_min_baseQ) --depth_at_pos; // low base quality
-                else
-                    stats[tid].summed_baseQ += bam_get_qual(p->b)[p->qpos];
+                if (p->is_del || p->is_refskip) {
+                    --depth_at_pos; // having dels or refskips at tid:pos
+                } else if (p->qpos < p->b->core.l_qseq) {
+                    if (bam_get_qual(p->b)[p->qpos] < opt_min_baseQ) {
+                        --depth_at_pos; // low base quality
+                    } else {
+                        stats[tid].summed_baseQ += bam_get_qual(p->b)[p->qpos];
+                        stats[tid].quality_bases++;
+                    }
+                } else {
+                    print_value_warning = 1; // no quality at position
+                }
             }
+
             if (depth_at_pos > 0) {
                 count_base = true;
                 stats[tid].summed_coverage += depth_at_pos;
@@ -622,7 +633,7 @@ int main_coverage(int argc, char *argv[]) {
 
             if(current_bin < n_bins && opt_plot_coverage) {
                 hist[current_bin] += depth_at_pos;
-                }
+            }
         }
         if (count_base) {
             stats[tid].n_covered_bases++;
@@ -651,6 +662,10 @@ int main_coverage(int argc, char *argv[]) {
                 print_tabular_line(file_out, h, stats, i);
             }
         }
+    }
+
+    if (print_value_warning) {
+        print_error("coverage", "Warning:  Missing quality values in alignments.  Mean base quality calculated only on available values.");
     }
 
     if (ret < 0) status = EXIT_FAILURE;

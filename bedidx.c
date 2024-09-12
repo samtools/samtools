@@ -110,6 +110,8 @@ static int bed_index_core(bed_reglist_t *regions)
         hts_pos_t beg = a[i].beg >= 0 ? a[i].beg >> LIDX_SHIFT : 0;
         hts_pos_t end = a[i].end >= 0 ? a[i].end >> LIDX_SHIFT : 0;
         hts_pos_t j;
+        if (end < last_end)
+            continue;  // Can happen for a containment
         if (end + 1 >= SIZE_MAX / sizeof(*idx)) { // Ensure no overflow
             errno = ENOMEM;
             free(idx);
@@ -539,12 +541,12 @@ void *bed_hash_regions(void *reg_hash, char **regs, int first, int last, int *op
 
         //if op==1 insert reg to the bed hash table
         if (*op && !(bed_insert(h, reg, beg, end))) {
-            fprintf(stderr, "Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], h);
+            fprintf(stderr, "Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], (void *)h);
         }
         //if op==0, first insert the regions in the temporary hash table,
         //then filter the bed hash table using it
         if (!(*op) && !(bed_insert(t, reg, beg, end))) {
-            fprintf(stderr, "Error when inserting region='%s' in the temporary hash table at address=%p!\n", regs[i], t);
+            fprintf(stderr, "Error when inserting region='%s' in the temporary hash table at address=%p!\n", regs[i], (void *)t);
         }
     }
 

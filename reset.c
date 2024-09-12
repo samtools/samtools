@@ -1,7 +1,7 @@
 /*  reset.c --  removes aligner updates and reference data from input sam /
                 bam / cram file and makes read data raw for new processing
 
-    Copyright (C) 2022, 2023 Genome Research Ltd.
+    Copyright (C) 2022 - 2024 Genome Research Ltd.
 
     Author: Vasudeva Sarma <vasudeva.sarma@sanger.ac.uk>
 
@@ -38,10 +38,13 @@ DEALINGS IN THE SOFTWARE
 #define TAGNUM(X) (((X)[0] << 8) | (X)[1])  //to create key for aux tags, like type key in htslib
 #define LONG_OPT(X) (128 + (X))             //to handle long and short options with same char
 
+#define RESET_KEEPDUPFLAG   1               //keep dup flag as such, as in initial implementation
+
 typedef struct conf_data
 {
     int keepRGs;                    //RG line handling
     int noPGentry;                  //PG line for reset op or not
+    int ctrlFlags;                  //control flags
     auxhash_t aux_keep;             //SET that holds the aux tags to be retained
     auxhash_t aux_remove;           //SET that holds the aux tags to be removed
     char *pgid;                     //PG id onwards which to be removed
@@ -62,10 +65,59 @@ static void usage(FILE *fp)
       --reject-PG ID\n\
                Removes PG line with ID matching to input and succeeding PG lines\n\
       --no-RG  To have RG lines or not\n\
-      --no-PG  To have PG entry or not for reset operation\n");
+      --no-PG  To have PG entry or not for reset operation\n\
+      --dupflag\n\
+               Keeps the duplicate flag as it is\n");
 
     sam_global_opt_help(fp, "--O--@--");
     return;
+}
+
+/// update_aux_conf - update the user given aux tag configuration with defaults
+/** @param config - pointer to conf_data
+returns nothing
+*/
+void update_aux_conf(conf_data *config)
+{
+    const char rg[] = "RG";
+    const char *default_tags[] = {"AS", "CC", "CG", "CP", "H1", "H2", "HI", "H0", "IH",
+                                    "MC", "MD", "MQ", "NM", "SA", "TS"};
+    khint_t iter = 0;
+    int ret = 0, i = 0;
+
+    if (!config)
+        return;
+
+    if (!config->aux_keep && !config->aux_remove) {
+        //none of aux tag filter in use, create remove filter
+        config->aux_remove = kh_init(aux_exists);
+    }
+    if (config->aux_keep) {
+        //keep set in use, remove RG if present
+        if (!config->keepRGs) {
+            iter = kh_get(aux_exists, config->aux_keep, TAGNUM(rg));
+            if (iter != kh_end(config->aux_keep)) {
+                kh_del(aux_exists, config->aux_keep, iter);
+            }
+        }
+    }
+    if (config->aux_remove) {
+        if (!config->keepRGs) {
+            //remove set in use, add RG if not present
+            iter = kh_get(aux_exists, config->aux_remove, TAGNUM(rg));
+            if (iter == kh_end(config->aux_remove)) {
+                kh_put(aux_exists, config->aux_remove, TAGNUM(rg), &ret);
+            }
+        }
+        //add the default tags if not present in remove set
+        //note, keep has priority and this may not be honoured
+        for (i = 0; i < sizeof(default_tags) / sizeof(default_tags[0]); ++i) {
+            iter = kh_get(aux_exists, config->aux_remove, TAGNUM(default_tags[i]));
+            if (iter == kh_end(config->aux_remove)) {
+                kh_put(aux_exists, config->aux_remove, TAGNUM(default_tags[i]), &ret);
+            }
+        }
+    }
 }
 
 /// removeauxtags - remove aux tags in bam data which are not present in acceptable tag set
@@ -76,35 +128,11 @@ returns nothing
 void removeauxtags(bam1_t *bamdata, conf_data *config)
 {
     uint8_t *auxdata = NULL;
-    const char *tag = NULL, rg[] = "RG";
+    const char *tag = NULL;
     khint_t iter = 0;
-    int ret = 0;
 
-    if (!bamdata || !config || (!config->aux_keep && !config->aux_remove && config->keepRGs))
+    if (!bamdata || !config)
         return;
-
-    //remove RG tags from bamdata if keepRG is false
-    if (!config->keepRGs) {
-        if (!config->aux_keep && !config->aux_remove) {
-            //none of aux tag filter in use, create remove filter
-            config->aux_remove = kh_init(aux_exists);
-        }
-
-        if (config->aux_keep) {
-            //keep set in use, remove RG if present
-            iter = kh_get(aux_exists, config->aux_keep, TAGNUM(rg));
-            if (iter != kh_end(config->aux_keep)) {
-                kh_del(aux_exists, config->aux_keep, iter);
-            }
-        }
-        if (config->aux_remove) {
-            //remove set in use, add RG if not present
-            iter = kh_get(aux_exists, config->aux_remove, TAGNUM(rg));
-            if (iter == kh_end(config->aux_remove)) {
-                kh_put(aux_exists, config->aux_remove, TAGNUM(rg), &ret);
-            }
-        }
-    }
 
     for (auxdata = bam_aux_first(bamdata); auxdata; ) {
         tag = bam_aux_tag(auxdata);
@@ -322,7 +350,6 @@ int reset(samFile *infile, samFile *outfile, conf_data *config, char *args)
         if (bamdata->core.flag & BAM_FSECONDARY || bamdata->core.flag & BAM_FSUPPLEMENTARY) {
             continue;
         }
-
         //update flags
         uint16_t flags = bamdata->core.flag & ~BAM_FPROPER_PAIR;    //reset pair info
         flags |= BAM_FUNMAP;                                        //mark as unmapped
@@ -330,6 +357,9 @@ int reset(samFile *infile, samFile *outfile, conf_data *config, char *args)
             flags |= BAM_FMUNMAP;                                   //mark mate as unmapped, if it was a pair
         }
         flags &= ~BAM_FMREVERSE;                                    //reset mate orientation
+        if (!(config->ctrlFlags & RESET_KEEPDUPFLAG)) {
+            flags &= ~BAM_FDUP;                                     //reset dup flag from alignment
+        }
 
         if (0 > ks_resize(&querydata, bamdata->core.l_qseq) ||
             0 > ks_resize(&qualdata, bamdata->core.l_qseq)) {
@@ -439,6 +469,7 @@ int main_reset(int argc, char *argv[])
         //reject PG lines from input, default is to keep them (i.e. option not given); without optional filename, all PGs removed and those given in file are filtered when optional filename is given
         {"reject-PG", required_argument, NULL, 'p'},                //reject entries from this PG onwards
         {"no-PG", no_argument, NULL, 2},                            //do not add PG entry for reset operation, default is to add it
+        {"dupflag", no_argument, NULL, 3},                          //keep the dup flag as it is - as in initial reset implementation
         {NULL, 0, NULL, 0}
     };
     samFile *infile = NULL, *outfile = NULL;
@@ -447,8 +478,7 @@ int main_reset(int argc, char *argv[])
     const char *inname = NULL, *outname = NULL;
     int c = 0, ret = EXIT_FAILURE;
     char outmode[4] = "w", *args = NULL;
-    conf_data resetconf = {1, 0, NULL, NULL, NULL};                //keep RGs and PGs by default
-
+    conf_data resetconf = {1, 0, 0, NULL, NULL, NULL};              //keep RGs and PGs by default, ctrlflags = 0
 
     //samtools reset -o outfile -x/--remove-tag ... --keep-tag ... --threads=n --output-fmt=fmt --no-RG --reject-PG pgid --no-PG [<infile>]
     while ((c = getopt_long(argc, argv, "o:@:x:O:", lopts, NULL)) >= 0)
@@ -468,6 +498,9 @@ int main_reset(int argc, char *argv[])
                 goto exit;
             }
             resetconf.noPGentry = 1;
+            break;
+        case 3:                             //keep dup flag as it is / no reset
+            resetconf.ctrlFlags |= RESET_KEEPDUPFLAG;
             break;
         case 'p':                           //--reject-PG=<id>
             if (resetconf.pgid) {
@@ -498,7 +531,7 @@ int main_reset(int argc, char *argv[])
                 }
             }
             break;
-        case LONG_OPT('x'):                  //keep aux tags
+        case LONG_OPT('x'):                 //keep aux tags
             if (parse_aux_list(&resetconf.aux_keep, optarg, "main_reset")) {
                 usage(stderr);
                 goto exit;
@@ -542,6 +575,8 @@ int main_reset(int argc, char *argv[])
         inname = "-";
     }
 
+    //update aux tag configuration
+    update_aux_conf(&resetconf);
     //set output file format based on name
     sam_open_mode(outmode + 1, outname, NULL);
 

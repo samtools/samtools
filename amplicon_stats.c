@@ -1737,7 +1737,7 @@ int main_ampliconstats(int argc, char **argv) {
         return usage(&oargs, stderr, EXIT_FAILURE);
 
     khash_t(bed_list_hash) *bed_hash = kh_init(bed_list_hash);
-    if (load_bed_file_multi_ref(argv[optind], 1, 0, bed_hash)) {
+    if (load_bed_file_multi_ref(argv[optind], 1, 0, bed_hash, NULL, NULL)) {
         print_error_errno("ampliconstats",
                           "Could not read file \"%s\"", argv[optind]);
         return 1;

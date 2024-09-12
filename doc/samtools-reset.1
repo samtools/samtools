@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-reset 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
+.TH samtools-reset 1 "12 September 2024" "samtools-1.21" "Bioinformatics tools"
 .SH NAME
 samtools reset \- removes the alignment information added by aligners and updates flags accordingly
 .\"
-.\" Copyright (C) 2022, 2023 Genome Research Ltd.
+.\" Copyright (C) 2022 - 2024 Genome Research Ltd.
 .\"
 .\" Author: Vasudeva Sarma <vasudeva.sarma@sanger.ac.uk>
 .\"
@@ -50,17 +50,20 @@ samtools reset
 .IR STR "]"
 .RB [ --reject-PG
 .IR pgid ]
-.RB "["--no-RG "] [" --no-PG "] [...]"
+.RB "["--no-RG "] [" --no-PG "]
+.RB [ --dupflag ]
+.RB [...]
 
 
 .SH DESCRIPTION
 .PP
 
-Removes the alignment information added by the aligner. CIGAR and reference data are removed. Flags are updated as unmapped and as not a proper pair.
+Removes the alignment information added by the aligner. CIGAR and reference data are removed. Flags are updated as unmapped, non-duplicate and as not a proper pair.
 If the alignment was in reverse direction, data and its quality values are reversed and complemented and the reverse flag is reset.
-Supplimentary and secondary alignment data are discarded.
+Supplementary and secondary alignment data are discarded.
 
-Aux tags that will be retained in output is controlled by keep-tag and remove-tag/x. These options take tags as comma separated lists.
+Aux tags that will be retained in output can be controlled by keep-tag and remove-tag/x. These options take tags as comma separated lists.
+Aux tags AS, CC, CG, CP, H1, H2, HI, H0, IH, MC, MD, MQ, NM, SA and TS are removed by default, this can be overridden using keep-tag.
 
 PG and RG tags from input are written on the output by default.
 CO lines are not retained after this operation.
@@ -91,20 +94,24 @@ all tags.  If both \fB--keep-tag\fR and \fB--remove-tag\fR are
 specified then \fB--keep-tag\fR has precedence.
 
 .TP 8
-.BI --reject-PG\  pgid
+.BI "--reject-PG " pgid
 The PG line which has the ID matching \fIpgid\fR and all subsequent PG lines will be removed. If the option itself is absent, the default,
 all PG entries will be in output.
 
 .TP 8
-.BI --no-RG
+.BI "--no-RG"
 RG lines in input will be discarded with this option. By default, RG lines will be present in output.
 
 With this option, RG aux tags will also be discarded.
 
 .TP 8
-.BI --no-PG
+.BI "--no-PG"
 Do not add a @PG line to the header of the output file listing the \fBreset\fR command.
 By default the PG entry for reset will be present in the output.
+
+.TP 8
+.BI "--dupflag"
+Keep the duplicate flag as it is. This option is absent by default and alignments are marked non-duplicates.
 
 .TP
 .BI -@,--thread\  N
@@ -118,25 +125,25 @@ If this option is not present, the format is identified from the output file nam
 .SH EXAMPLES
 Basic usage, to reset the data:
 
-.EX
+.EX 2
 samtools reset -o out.bam in.bam
 .EE
 
 To keep aux tags RG and BC in the output:
 
-.EX
+.EX 2
 samtools reset -o out.sam --keep-tag RG,BC in.bam
 .EE
 
 To discard PG entries from 'bwa_index' onwards,
 
-.EX
+.EX 2
 samtools reset -o out.sam --reject-PG=bwa_index
 .EE
 
 To set output format for use within a pipeline:
 
-.EX
+.EX 2
 samtools collate -O -u input.cram | \\
   samtools reset --output-fmt BAM,level=0 | \\
   myaligner -I bam -o out.bam

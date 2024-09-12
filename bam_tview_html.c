@@ -62,7 +62,8 @@ static void html_destroy(tview_t* base)
     int (*my_colorpair)(struct AbstractTview*,int);
 */
 
-static void html_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fmt,...)
+static void  HTS_FORMAT(HTS_PRINTF_FMT, 4, 5)
+html_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fmt,...)
     {
     int i,nchars=0;
     unsigned int size=tv->mcol+2;

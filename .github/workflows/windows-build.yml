@@ -1,0 +1,55 @@
+name: Windows/MinGW-W64 CI
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Set up MSYS2 MinGW-W64
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: mingw64
+        update: false
+        install: >-
+          mingw-w64-x86_64-toolchain
+          mingw-w64-x86_64-autotools
+          mingw-w64-x86_64-curl
+          mingw-w64-x86_64-libdeflate
+          mingw-w64-x86_64-tools-git
+          mingw-w64-x86_64-zlib
+          mingw-w64-x86_64-bzip2
+          mingw-w64-x86_64-xz
+          mingw-w64-x86_64-ncurses
+    - name: Clone htslib
+      shell: msys2 {0}
+      run: |
+        # Todo 4th arg to track commit message of htslib#PRNUM to
+        # check out a specific htslib PR instead.
+        # Other useful vars:
+        # GITHUB_BASE_REF:  e.g. "develop"
+        # GITHUB_HEAD_REF:  e.g. "my-PR-feature" (aka GITHUB_REF_NAME?)
+        export PATH="$PATH:/mingw64/bin:/c/Program Files/Git/bin"
+        export MSYSTEM=MINGW64
+        .ci_helpers/clone "https://github.com/${GITHUB_REPOSITORY_OWNER}/htslib" htslib "${GITHUB_REF_NAME}"
+        pushd .
+        cd htslib
+        autoreconf -i
+        popd
+    - name: Compile samtools
+      shell: msys2 {0}
+      run: |
+        export PATH="$PATH:/mingw64/bin:/c/Program Files/Git/bin"
+        export MSYSTEM=MINGW64
+        autoheader
+        autoconf -Wno-syntax
+        ./configure --enable-werror
+        make -j4
+    - name: Check samtools
+      shell: msys2 {0}
+      run: |
+        export PATH="$PATH:/mingw64/bin:/c/Program Files/Git/bin"
+        export MSYSTEM=MINGW64
+        make check
+

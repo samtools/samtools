@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-ampliconclip 1 "15 April 2024" "samtools-1.20" "Bioinformatics tools"
+.TH samtools-ampliconclip 1 "12 September 2024" "samtools-1.21" "Bioinformatics tools"
 .SH NAME
 samtools ampliconclip \- clip reads using a BED file
 .\"
@@ -144,6 +144,9 @@ the state of the reads before clipping takes place.
 .TP
 .BI "--rejects-file " FILE
 Write any filtered reads out to a file.
+.TP
+.BI "--primer-counts " FILE
+File to write with read counts per bed entry (bedgraph format).
 .TP
 .B --original
 Add an OA tag with the original data for clipped files.

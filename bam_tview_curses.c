@@ -78,7 +78,8 @@ static void curses_destroy(tview_t* base) {
     int (*my_colorpair)(struct AbstractTview*,int);
 */
 
-static void curses_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fmt,...) {
+static HTS_FORMAT(HTS_PRINTF_FMT, 4, 5)
+void curses_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fmt,...) {
     va_list argptr;
     va_start(argptr, fmt);
     if (wmove(stdscr, y, x) != ERR)
@@ -151,8 +152,8 @@ static int tv_win_goto_get_completions(curses_tview_t *tv, char *str,
         new_str[i] = str[i];
     }
 
-    size_t l_str = strnlen(new_str, TV_MAX_GOTO+1);
-    bool is_different = l_str != strnlen(str, TV_MAX_GOTO+1);
+    size_t l_str = strlen(new_str);
+    bool is_different = l_str != strlen(str);
 
     for (i = 0; i < num_references; i++) {
         char *ref = references[i];
@@ -161,7 +162,7 @@ static int tv_win_goto_get_completions(curses_tview_t *tv, char *str,
         if (strncmp(ref, new_str, l_str) == 0) {
 
             // Special case handling if the reference is already selected
-            if (is_different && strnlen(ref, TV_MAX_GOTO+1) == l_str) {
+            if (is_different && strlen(ref) == l_str) {
                 num_matches = 1;
                 if (hts_resize(int, num_matches, matches_size, matches, 0) == -1)
                     return -1;

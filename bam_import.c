@@ -160,7 +160,7 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
     if (argc == 1)
         opts->fn[FQ_SINGLE] = argv[0];
     else
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < 2; i++)
             if (argc > i)
                 opts->fn[FQ_R1+i] = argv[i];
 
@@ -310,7 +310,7 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
 
 
     // Interleave / combine from n files (ids[0..n-1]).
-    int res;
+    int res = 0;
     int eof = 0;
     do {
         idx_seq.l = idx_qual.l = 0;

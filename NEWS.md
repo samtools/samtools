@@ -1,3 +1,124 @@
+Release 1.21 (12th September 2024)
+----------------------------------
+
+Notice:
+
+* This is the last SAMtools / HTSlib release where CRAM 3.0 will be
+  the default CRAM version.  From the next we will change to CRAM 3.1
+  unless the version is explicitly specified, for example using
+  "samtools view -O cram,version=3.0".
+
+New work and changes:
+
+* `samtools reset` now removes a set of predefined auxtags, as these tags are no
+  longer valid after the reset operation.  This behaviour can be overridden if
+  desired.
+  (PR #2034, fixes #2011.  Reported by Felix Lenner)
+
+* `samtools reset` now also removes duplicate flags.
+  (PR #2047.  Reported by Kevin Lewis)
+
+* Region and section/part filtering added to CRAM `samtools cat`.  Region
+  filtering permits `samtools cat` to produce new CRAMs that only cover a
+  specified region.
+  (PR #2035)
+
+* Added a report of the number of alignments for each primer to
+  `samtools ampliconclip`.
+  (PR #2039, PR #2101, feature request #2033.  Thanks to Brad Langhorst)
+
+* Make `ampliconclip` primer counts output deterministic.
+  (PR #2081)
+
+* `samtools fixmate` no longer removes the PAIRED flag from reads that have no
+  mate.  This is done on the understanding that the PAIRED flag is a sequencing
+  technology indicator not a feature of alignment.  This is a change to
+  previous `fixmate` behaviour.
+  (PR #2056, fixes #2052.  Reported by John Wiedenhoeft)
+
+* Added bgzf compressed FASTA output to `samtools faidx`.
+  (PR #2067, fixes #2055. Requested by Filipe G Vieira)
+
+* Optimise `samtools depth` histogram incrementing code.
+  (PR #2078)
+
+* In `samtools merge` zero pad unique suffix IDs.
+  (PR #2087, fixes #2086.  Thanks to Chris Wright)
+
+* `samtools idxstats` now accepts the `-X` option, making it easier
+  to specify the location of the index file.
+  (PR #2093, feature request #2071.  Requested by Samuel Chen)
+
+* Improved documentation for the mpileup `--adjust-MQ` option.
+  (PR #2098.  Requested by Georg Langebrake)
+
+
+Bug fixes:
+
+* Avoid `tview` buffer overflow for positions with >= 14 digits.
+  (PR #2032.  Thanks to John Marshall. Reported on
+  bioconda/bioconda-recipes#47137 by jmunoz94)
+
+* Added file name and error message to 'error closing output file'
+  error in `samtools sort`.
+  (PR #2050, fixes #2049.  Thanks to Joshua C Randall).
+
+* Fixed hard clip trimming issue in `ampliconclip` where right-hand side
+  qualities were being removed from left-hand side trims.
+  (PR #2053, fixes #2048.  Reported by Duda5)
+
+* Fixed a bug in `samtools merge --template-coordinate` where the wrong heap
+  was being tested.
+  (PR #2062.  Thanks to Nils Homer.  Reported on ng-core/fastquorum#52 by
+  David Mas-Ponte)
+
+* Do not look at chr "*" for unmapped-placed reads with
+  `samtools view --fetch-pairs`.  This was causing a significant slowdown when
+  `--fetch-pairs` was being used.
+  (PR #2070, fixes #2059.  Reported by acorvelo)
+
+* Fixed bug which could cause `samtools view -L` to give incomplete output
+  when the BED file contained nested target locations.
+  (PR #2107, fixes #2104.  Reported by geertvandeweyer)
+
+* Enable `samtools coverage` to handle alignments that do not have quality score
+  data.  This was causing memory access problems.
+  (PR #2083, fixes #2076.  Reported by Matthew Colpus)
+
+* Fix undefined behaviour in `samtools fastq` with empty QUAL.
+  (PR #2084)
+
+* In `plot-bamstats` fixed read-length plot for data with limited variations in
+  length. Lack of data was causing gnuplot problems.
+  (PR #2085, fixes #2068.  Reported by mariyeta)
+
+* Fixed an accidental fall-through that caused `samtools split -p` to
+  also enable `--no-PG`.
+  (PR #2101)
+
+* Fixed an overflow that caused `samtools consensus -m simple` to give
+  incorrect output when the input coverage exceeded several million
+  reads deep.
+  (PR #2099, fixes #2095.  Reported by Dylan Lawrence)
+
+Non user-visible changes and build improvements:
+
+* Work around address sanitizer going missing from the Cirrus CI
+  ubuntu clang compiler by moving the address sanitizer build to gcc.
+  Fix warnings from the new clang compiler.
+  (PR #2043)
+
+* Windows based CI has been migrated from AppVeyor to GitHub Actions.
+  (PR #2072, PR #2108)
+
+* Turn on more warning options in Cirrus-CI builds, ensure everything builds
+  with `-Werror`, and add undefined behaviour checks to the address sanitizer
+  test.
+  (PR #2101, PR #2103, PR #2109)
+
+* Tidy up Makefile dependencies and untracked test files.
+  (PR #2106.  Thanks to John Marshall)
+
 Release 1.20 (15th April 2024)
 ------------------------------
 
@@ -323,6 +444,11 @@ New work and changes:
   aligners.
   (PR #1698)
 
+* Made better use of threading during the merge stage of samtools sort.
+  It also now limits the number of temporary files present by making
+  intermediate merges if the count gets too high.
+  (PR #1706)
+
 * Permit 1 thread with samtools view.  All other subcommands already allow this
   and it does provide a modest speed increase.
   (PR #1755, fixes #1743. Reported by Goran Vinterhalter)
@@ -353,12 +479,20 @@ New work and changes:
   the reference coordinates.
   (PR #1746)
 
+* Consensus min depth now works on the overall depth of the data, in line with
+  the documentation.  Added a --min-BQ (minimum base quality) filtering option.
+  (PR #1704, fixes #1700 reported by Thiseas C. Lamnidis)
+
 * Make faidx/fqidx output line length default to the input line length.
   (PR #1738, fixes #1734. Reported by John Marshall)
 
 * Speed up optical duplicate checking where data has a lot of duplicates
   compared to non-duplicates.
   (PR #1779, fixes #1771. Reported by Poshi)
+
+* Added option to add read group matching to the duplicate criteria.  Change
+  stats to include read groups and add an optional JSON format.
+  (PR #1699, implements #1143 requested by Jonathan Keats)
 
 * For collate use TMPDIR environment variable, when looking for a temporary
   folder.

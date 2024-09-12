@@ -1,6 +1,6 @@
 /*  bam_index.c -- index and idxstats subcommands.
 
-    Copyright (C) 2008-2011, 2013-2016, 2018, 2019, 2023  Genome Research Ltd.
+    Copyright (C) 2008-2011, 2013-2016, 2018, 2019, 2023-2024  Genome Research Ltd.
     Portions copyright (C) 2010 Broad Institute.
     Portions copyright (C) 2013 Peter Cock, The James Hutton Institute.
 
@@ -209,7 +209,8 @@ int slow_idxstats(samFile *fp, sam_hdr_t *header) {
 
 static void usage_exit(FILE *fp, int exit_status)
 {
-    fprintf(fp, "Usage: samtools idxstats [options] <in.bam>\n");
+    fprintf(fp, "Usage: samtools idxstats [options] <in.bam>\n"
+                "  -X           Include customized index file\n");
     sam_global_opt_help(fp, "-.---@-.");
     exit(exit_status);
 }
@@ -219,7 +220,8 @@ int bam_idxstats(int argc, char *argv[])
     hts_idx_t* idx;
     sam_hdr_t* header;
     samFile* fp;
-    int c;
+    int c, has_index_file = 0, file_names = 1;
+    char *index_name = NULL;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -227,16 +229,22 @@ int bam_idxstats(int argc, char *argv[])
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "@:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "@:X", lopts, NULL)) >= 0) {
         switch (c) {
-        default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
-            /* else fall-through */
-        case '?':
-            usage_exit(stderr, EXIT_FAILURE);
+            case 'X': has_index_file=1; break;
+            default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+                /* else fall-through */
+            case '?':
+                usage_exit(stderr, EXIT_FAILURE);
         }
     }
 
-    if (argc != optind+1) {
+    if (has_index_file) {
+        file_names = 2;
+        index_name = argv[optind + 1];
+    }
+
+    if (argc != optind + file_names) {
         if (argc == optind) usage_exit(stdout, EXIT_SUCCESS);
         else usage_exit(stderr, EXIT_FAILURE);
     }
@@ -262,7 +270,7 @@ int bam_idxstats(int argc, char *argv[])
             return 1;
         }
     } else {
-        idx = sam_index_load(fp, argv[optind]);
+        idx = sam_index_load2(fp, argv[optind], index_name);
         if (idx == NULL) {
             print_error("idxstats", "fail to load index for \"%s\", "
                         "reverting to slow method", argv[optind]);

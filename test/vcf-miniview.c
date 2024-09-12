@@ -31,7 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include <htslib/vcf.h>
 
-void usage()
+void usage(void)
 {
     fprintf(stderr,
 "Usage: vcf-miniview [view] [-f] [FILE]\n"
