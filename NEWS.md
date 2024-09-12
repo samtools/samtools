@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.21 (12th September 2024)
+----------------------------------
+
 Notice:
 
 * This is the last SAMtools / HTSlib release where CRAM 3.0 will be
