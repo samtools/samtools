@@ -21,8 +21,16 @@ timeout_in: 10m
 # clone with our own commands too.
 clone_template: &HTSLIB_CLONE
   htslib_clone_script: |
-    printenv CIRRUS_CHANGE_TITLE
-    .ci_helpers/clone "https://github.com/${CIRRUS_REPO_OWNER}/htslib" "${HTSDIR}" "${CIRRUS_BRANCH}" `printenv CIRRUS_CHANGE_TITLE | sed -n 's/.*htslib#\([0-9]*\).*/\1/p'`
+    # Tricky, but when run as a PR Cirrus-CI obscures the branch name and
+    # replaces it by pull/<num>.  This means we can't automatically get PRs
+    # to test whether the user has a similarly named branch to compiler and
+    # test against.
+    #
+    # Instead if we add htslib#NUM into the first line of the commit then
+    # we will use that PR from htslib instead.  This is only needed when
+    # making a PR, so for development prior to the PR being made the
+    # CIRRUS_BRANCH will be used in preference.
+    .ci_helpers/clone ${CIRRUS_REPO_OWNER} htslib "${HTSDIR}" "${CIRRUS_BRANCH}" `printenv CIRRUS_CHANGE_TITLE | sed -n 's/.*htslib#\([0-9]*\).*/\1/p'`
 
 htslib_compile_template: &HTSLIB_COMPILE
   << : *HTSLIB_CLONE

@@ -1,14 +1,21 @@
 #!/bin/sh
-# Usage: .ci_helpers/clone REPOSITORY [DIR] [BRANCH]
+# Usage: .ci_helpers/clone OWNER REPOSITORY [DIR] [BRANCH] [HTSLIB_PR]
 #
 # Creates a shallow clone, checking out the specified branch.  If BRANCH is
 # omitted or if there is no branch with that name, checks out origin/HEAD
 # from the samtools/htslib repository.
+#
+# If BRANCH cannot be found in htslib and HTSLIB_PR is defined (a number)
+# then we checkout that PR number instead.  This is used by Cirrus-CI when
+# making joint PRs on samtools/htslib or bcftools/htslib
 
-repository=$1
-localdir=$2
-branch=$3
-htslib_PR=$4
+echo CLONE: ${@+"$@"}
+
+owner=$1
+repository="https://github.com/$owner/$2"
+localdir=$3
+branch=$4
+htslib_PR=$5
 
 ref=''
 [ -n "$branch" ] && ref=$(git ls-remote --heads "$repository" "$branch" 2>/dev/null)
@@ -17,7 +24,8 @@ ref=''
 set -x
 git clone --recurse-submodules --shallow-submodules --depth=50 ${ref:+--branch="$branch"} "$repository" "$localdir"
 
-if [ "x$htslib_PR" != "x" ]
+# NB: "samtools" as the owner/organisation, not the repo name
+if [ "x$owner" = "xsamtools" -a -z "$ref" -a "x$htslib_PR" != "x" ]
 then
     cd "$localdir"
     git fetch origin "pull/$htslib_PR/head"
