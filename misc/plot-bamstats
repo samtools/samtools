@@ -26,6 +26,7 @@ use strict;
 use warnings;
 use Carp;
 use POSIX qw/floor ceil/;
+use URI::Escape qw(uri_escape);
 use List::Util qw(max);
 
 my $opts = parse_params();
@@ -1598,15 +1599,17 @@ sub create_html
         {
             # new row
             if ( $i>0 ) { print $fh "</tr>\n"; }
-            print $fh "<tr>";
+            print $fh "<tr>\n";
         }
         if ( -e "$$opts{prefix}$imgs[$i].png" )
         {
             my $desc = $imgs{$imgs[$i]};
-            print $fh qq[<td><a class="thumbnail" href="$prefix$imgs[$i].png"><img src="$prefix$imgs[$i].png" width="150px"><span>$desc<br><img src="$prefix$imgs[$i].png"></span></a>\n];
+            my $link = uri_escape("$prefix$imgs[$i].png");
+            print $fh qq[  <td><a class="thumbnail" href="$link"><img src="$link" width="150px"><span>$desc<br><img src="$link"></span></a>\n];
         }
-        else { print $fh "<td>\n"; }
+        else { print $fh "  <td />\n"; }
     }
+    print $fh "</tr></table>\n";
 
     my $reads_total      = get_value($opts,'SN','raw total sequences:');
     my $reads_filtered   = get_value($opts,'SN','filtered sequences:');
@@ -1634,7 +1637,6 @@ sub create_html
     $bases_mapped   = bignum($bases_mapped);
 
     print $fh qq[
-        </table>
 
         <table class="nums">
             <tr><th>Reads</tr>
