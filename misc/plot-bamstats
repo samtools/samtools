@@ -737,7 +737,7 @@ sub plot_qualities
                 set size 0.4,0.8
                 unset ytics
                 set y2tics mirror
-                set yrange [0:$yrange]
+                set y2range [0:$yrange]
                 unset ylabel
                 set xlabel "Cycle (rev reads)"
                 set label "$$args{title}" at screen 0.5,0.95 center noenhanced
@@ -811,16 +811,15 @@ sub plot_qualities
     $args = get_defaults($opts,"$$opts{prefix}quals-hm.png", wh=>'600,500');
     $fh = $$args{fh};
     my $max = defined $lmax && $lmax > $fmax ? $lmax : $fmax;
-    my @ytics;
-    for my $cycle (@ffq) { if ( $$cycle[0]%10==0 ) { push @ytics,qq["$$cycle[0]" $$cycle[0]]; } }
-    my $ytics = join(',', @ytics);
-    $pos_size = $is_paired ? " set origin 0,0.46\n set size 0.95,0.6" : '';
+    my $ytics = generate_ticks([ map { $_->[0] } @ffq ], $is_paired);
+    $pos_size = $is_paired ? " set origin 0.05,0.5\n set size 0.9,0.5" : '';
     print $fh qq[
             $$args{terminal}
             set output "$$args{img}"
             unset key
             unset colorbox
-            set palette defined (0 0 0 0, 1 0 0 1, 3 0 1 0, 4 1 0 0, 6 1 1 1)
+            set palette model RGB
+            set palette defined (1 '#000066', 8 '#0000ff', 24 '#00ffff', 40 '#ffff00', 56 '#ff0000', 64 '#ffffff')
             set cbrange [0:$max]
             set yrange  [0:$ncycles]
             set xrange  [0:$nquals]
@@ -848,12 +847,10 @@ sub plot_qualities
     print $fh "\nend\n";
     if ( $is_paired )
     {
-        @ytics = ();
-        for my $cycle (@lfq) { if ( $$cycle[0]%10==0 ) { push @ytics,qq["$$cycle[0]" $$cycle[0]]; } }
-        $ytics = join(',', @ytics);
+        my $ytics = generate_ticks([ map { $_->[0] } @lfq ], $is_paired);
         print $fh qq[
-                set origin 0,0.03
-                set size 0.95,0.6
+                set origin 0.05,0.05
+                set size 0.9,0.5
                 set ylabel "Cycle (rev reads)" offset character -1,0
                 set xlabel "Base Quality"
                 unset title
@@ -876,6 +873,23 @@ sub plot_qualities
     plot($$args{gp});
 }
 
+sub generate_ticks {
+    my ($cycles, $skip_even) = @_;
+
+    my @marks;
+    foreach my $v (@$cycles) {
+        if ($v % 10 == 0) {
+            if ($skip_even) {
+                my $label = $v % 20 ? $v : '';
+                push @marks, qq{"$label" $v};
+            }
+            else {
+                push @marks, qq{"$v" $v};
+            }
+        }
+    }
+    return join(', ', @marks);
+}
 
 sub plot_acgt_cycles
 {
