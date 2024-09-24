@@ -1,0 +1,17 @@
+# Checksum 1.0 for file:
+# Aux tags:          BC,FI,QT,RT,TC
+# BAM flags:         PAIRED,READ1,READ2
+
+# Group    QC          count  flag+seq  +name     +qual     +aux      combined
+all        all           144  12eebb31  7e82e134  156fc353  12eebb31  435f5683
+all        pass          142  1b36f78a  0f594b69  5597ba9a  1b36f78a  673780f6
+all        fail            2  41a4893d  12b8bf0d  47a8bc86  41a4893d  43cbfd26
+-          all            13  425c725f  5708826e  0f45a8e2  425c725f  3b7ea0ec
+-          pass           13  425c725f  5708826e  0f45a8e2  425c725f  3b7ea0ec
+-          fail            0  00000001  00000001  00000001  00000001  00000001
+ERR013140  all            71  2259e00a  0338c6a3  7621d262  2259e00a  204c67df
+ERR013140  pass           69  016887af  6022caaa  1782a30f  016887af  37323e72
+ERR013140  fail            2  41a4893d  12b8bf0d  47a8bc86  41a4893d  43cbfd26
+ERR156632  all            60  47119710  3ca24166  300d6cfc  47119710  2a8ad12e
+ERR156632  pass           60  47119710  3ca24166  300d6cfc  47119710  2a8ad12e
+ERR156632  fail            0  00000001  00000001  00000001  00000001  00000001

@@ -1,0 +1,17 @@
+# Checksum 1.0 for file:
+# Aux tags:          *,cF,MD,NM
+# BAM flags:         PAIRED,PROPER_PAIR,UNMAP,MUNMAP,REVERSE,MREVERSE,READ1,READ2,SECONDARY,QCFAIL,DUP,SUPPLEMENTARY
+
+# Group    QC          count  flag+seq  +name     +qual     +aux      +chr/pos  +cigar    +mate     combined
+all        all           144  1f3b08b2  0bea7b40  5c8378af  718a93ab  08c04081  2a0d534a  5c4f1280  2f750c72
+all        pass          142  18d00f81  3a2fa5b8  1c1e0488  2588c04d  7b467bad  7603ed40  3561a630  33e28179
+all        fail            2  7adb1cd9  19b50a9a  7ffa66fe  1c6851b2  11d7d40e  03bbd51e  5023928f  26504b39
+-          all            13  5301e7ef  40e64b8d  5dd9326e  4e8a56b4  127a7d6e  5454448e  0dac7c0c  53960b34
+-          pass           13  5301e7ef  40e64b8d  5dd9326e  4e8a56b4  127a7d6e  5454448e  0dac7c0c  53960b34
+-          fail            0  00000001  00000001  00000001  00000001  00000001  00000001  00000001  00000001
+ERR013140  all            71  284ddd75  7e138598  266ada9b  54ebc7e0  4d154504  73ae51d8  5321dabd  3b4b46b6
+ERR013140  pass           69  0cdbe030  4146afc4  76a75f06  3f821e73  37dab952  698636cb  2a1297b6  1052755b
+ERR013140  fail            2  7adb1cd9  19b50a9a  7ffa66fe  1c6851b2  11d7d40e  03bbd51e  5023928f  26504b39
+ERR156632  all            60  2d77e435  040aad2d  718aa362  53a65f1d  5cf6e893  4af8689e  62ae9dd1  12a34431
+ERR156632  pass           60  2d77e435  040aad2d  718aa362  53a65f1d  5cf6e893  4af8689e  62ae9dd1  12a34431
+ERR156632  fail            0  00000001  00000001  00000001  00000001  00000001  00000001  00000001  00000001

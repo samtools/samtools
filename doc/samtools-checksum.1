@@ -1,0 +1,387 @@
+'\" t
+.TH samtools-checksum 1 "7 October 2024" "samtools-1.21" "Bioinformatics tools"
+.SH NAME
+samtools checksum \- produces checksums of SAM / BAM / CRAM content
+.\"
+.\" Copyright (C) 2024 Genome Research Ltd.
+.\"
+.\" Author: James Bonfield <jkb@sanger.ac.uk>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+.B samtools checksum
+.RI [ options ]
+.IR in.sam | in.bam | in.cram | in.fastq " [ ... ]"
+.br
+.B samtools checksum -m
+.RI [ options ]
+.IR in.checksum " [ ... ]"
+
+.SH DESCRIPTION
+.PP
+With no options, this produces an order agnostic checksum of sequence,
+quality, read-name and barcode related aux data in a SAM, BAM, CRAM or
+FASTQ file.  The CRC32 checksum is used, combined together in a
+multiplicative prime field of size (2<<31)-1.
+
+The purpose of this mode is to validate that no data has been lost in
+data processing through the various steps of alignment, sorting and
+processing.  Only primary alignments are recorded and the checksums
+computed are order agnostic so the same checksums are produced in name
+collated or position sorted output files.
+
+One set of checksums is produced per read-group as well as a combined
+file, plus a set for records that have no read-group assigned.  This
+allows for validation of merging multiple runs and splitting pools by
+their read-group.  The checksums are also reported for QC-pass only
+and QC-fail only (indicated by the QCFAIL BAM flag), so checksums of
+data identified and removed as contamination can also be tracked.
+
+All of the above are compatible with Biobambam2's bamseqchksum tool,
+which was the inspiration for this samtools command.  The \fB-B\fR
+option further enhances compatibility by using the same output
+format, although it limits the functionality to the order agnostic
+checksums and fewer types validated.
+
+The \fB-m\fR or \fB--merge\fR option can be used to merge previously
+generated checksums.  The input filenames are checksum outputs from
+this tool (via shell redirection or the \fB-o\fR) option.  The
+intended use of this is to validate no data is lost or corruption
+during file merging of read-group specific files, by algorithmically
+computing the expected checksum output.
+
+Additionally \fBchecksum\fR can track other columns including BAM
+flags, mapping information (MAPQ and CIGAR), pair information (RNEXT,
+PNEXT and TLEN), as well as a wider list of tags.
+
+With the \fB-O\fR option the checksums become record order specific.
+Combined together with the \fB-a\fR option this can be used to
+validate SAM, BAM and CRAM format conversions.  The CRCs per record
+are XORed with a record counter for the Nth record per read group.
+See the detailed description below for single \fB-O\fR vs double and
+the implications on reordering between read-groups.
+
+When performing such validation, it is also useful to enable data
+sanitisation first, as CRAM can fix up certain types of
+inconsistencies including common issues such as MAPQ and CIGAR strings
+for unaligned data.
+
+.SH OUTPUT
+The output format consists of a machine readable table of checksums
+and human readable text starting with a "#" character.
+
+For compatibility with bamseqchksum the data is CRCed in specific
+orders before combining together to form a checksum column.  The last
+column reported is then the combination of all checksums in that row,
+permitting easy comparison by looking at a single value.
+
+The columns reported are as follows.
+
+.RS 4
+.TP 10
+.B Group
+The read group name.  There is always an "all" group which represents
+all records.  This is followed by one checksum set per read-group
+found in the file.
+
+.TP
+.B QC
+This is either "all" or "pass".  "Pass" refers to records that do not
+have the QCFAIL BAM flag specified.
+
+.TP
+.B flag+seq
+The checksum of SAM FLAG + SEQ fields
+
+.TP
+.B +name
+The checksum of SAM QNAME + FLAG + SEQ fields
+
+.TP
+.B +qual
+The checksum of SAM FLAG + SEQ + QUAL fields
+
+.TP
+.B +aux
+The checksum of SAM FLAG + SEQ + selected auxiliary fields
+
+.TP
+.B +chr/pos
+The checksum of SAM FLAG + SEQ + RNAME (chromosome) + POSition fields
+
+.TP
+.B +mate
+The checksum of SAM FLAG + SEQ + RNEXT + PNEXT + ISIZE fields.
+
+.TP
+.B combined
+The combined checksum of all columns prior to this column.
+The first row will be for all alignments, so the combined checksum on
+the first row may be used as a whole file combined checksum.
+.RE
+
+An example output can be seen below.
+
+.EX 2
+# Checksum for file: NA12892.chrom20.ILLUMINA.bwa.CEU.high_coverage.bam
+# Aux tags:          BC,FI,QT,RT,TC
+# BAM flags:         PAIRED,READ1,READ2
+
+# Group    QC        count  flag+seq  +name     +qual     +aux      combined
+all        all    42890086  71169bbb  633fd9f7  2a2e693f  71169bbb  09d03ed4
+SRR010946  all      262249  2957df86  3b6dcbc9  66be71f7  2957df86  58e89c25
+SRR002165  all       97846  47ff17e0  6ff8fc7b  58366bf5  47ff17e0  796eecb0
+[...cut...]
+.EE
+
+
+.SH OPTIONS
+.TP 10
+.BI "-@ " COUNT
+Uses \fICOUNT\fR compute threads in decoding the file.  Typically this
+does not gain much speed beyond 2 or 3.  The default is to use a
+single thread.
+
+.TP
+.BR -B ", " --bamseqchksum
+Produces a report compatible with biobambam2's bamseqchksum default
+output. Note this is only expected to work if no other format options have
+been enabled.  Specifically the header line is not updated to reflect
+additional columns if requested.
+
+Bamseqchksum has more output modes and many alternative checksums.  We
+only support the default CRC32 method.
+
+.TP
+.BI "-F " FLAG ", --exclude-flags " FLAG
+Specifies which alignment \fIFLAGs\fR to filter out.  This defaults to
+secondary and supplementary alignments (0x900) as these can be duplicates of
+the primary alignment.  This ensures the same number of records are
+checksummed in unaligned and aligned files.
+
+.TP
+.BI "-f " FLAG ", --require-flags " FLAG
+A list of \fIFLAGs\fR that are required.  Defaults to zero.  An
+example use of this may be to checksum QCFAIL only.
+
+.TP
+.BI "-b " FLAG ", --flag-mask " FLAG
+The BAM \fIFLAG\fR is masked first before checksumming.  The unaligned
+flags will contain data about the sequencing run - whether it is
+paired in sequencing and if so whether this is READ1 or READ2.  These
+flags will not change post-alignment and so everything except these
+three are masked out.  \fIFLAG\fR defaults to PAIRED,READ1,READ2 (0xc1).
+
+.TP
+.BR -c ", " --no-rev-comp
+By default the sequence and quality strings are reverse complemented
+before checksumming, so unaligned data does not affect the checksums.
+This option disables this and checksums as-is.
+
+.TP
+.BI "-t " STR ", --tags " STR
+Specifies a comma-separated list of aux tags to checksum.  These are
+concatenated together in their canonical BAM encoding in the order
+listed in \fISTR\fR, prior to computing the checksums.
+
+If \fISTR\fR begins with "*" then all tags are used.  This can then be
+followed by a comma separated list of tags to exclude.  For example
+"*,MD,NM" is all tags except MD and NM.  In this mode, the tags are
+combined in alphanumeric order.
+
+The default value is "BC,FI,QT,RT,TC".
+
+.TP
+.BR -O ", " --in-order
+
+By default the CRCs are combined in a multiplicative field that is
+order agnostic, as multiplication is an associative operation.  This
+option XORs the CRC with the a number indicating the Nth record number
+for this grouping prior to the multiply step, making the final
+multiplicative checksum dependent on the order of the input data.
+
+For the "all" row the count is taken from the Nth record in the
+read-group associated with this record (or the "-" row for
+read-group-less data).  This ensures that the checksums can be
+subsequently merged together algorithmically using the \fB-m\fR
+option, but it does mean there is no validation of record swaps
+between read-groups.  Note however due to the way ties are resolved,
+when running \fBsamtools merge out.bam rg1.bam rg2.bam\fR we may get
+different orderings if we merged the two files in the opposite order.
+This can happen when two read-groups have alignments at the same
+position with the same BAM flags.  Hence if we wish to check a
+\fBsamtools split\fR followed by \fBsamtools merge\fR round trip works
+then this counter per readgroup is a benefit.
+
+However, if absolute ordering needs to be validated regardless of
+read-groups, specifying the \fB-O\fR option twice will compute the
+"all" row by combining the CRC with the Nth record in the file rather
+than the Nth record in its readgroup.  This output can no longer can
+merged using \fBchecksum -m\fR.
+
+.TP
+.BR -P ", " --check-pos
+Adds a column to the output with combined chromosome and position
+checksums.  This also incorporates the flag/sequence CRC.
+
+.TP
+.BR -C ", " --check-cigar
+Adds a column to the output with combined mapping quality and CIGAR
+checksums.  This also incorporates the flag/sequence CRC.
+
+.TP
+.BR -M ", " --check-mate
+Adds a column to the output with combined mate reference, mate
+position and template length checksums.  This also incorporates the
+flag/sequence CRC.
+
+.TP
+.BI "-b " FLAGS ", --sanitize " FLAGS
+Perform data sanitization prior to checksumming.  This is off by
+default.  See samtools view for the \fIFLAG\fR terms accepted.
+
+.TP
+.BI "-N " COUNT ", --count " COUNT
+Limits the checksumming to the first \fICOUNT\fR records from the file.
+
+.TP
+.BR -a ", " --all
+Checksum all data.  This is equivalent to \fB-PCMOc -b 0xfff -f0 -F0
+-z all,cigarx -t *,cF,MD,NM\fR.   It is useful for validating round-trips
+between file formats, such as BAM to CRAM.
+
+.TP
+.BR -T ", " --tabs
+Use tabs for separating columns instead of aligned spaces.
+
+.TP
+.BR -q ", " --show-qc
+Also show QC pass and fail rows per read-group.  These are based on
+the QCFAIL BAM flag.
+
+.TP
+.BI "-o " FILE ", --output " FILE
+Output checksum report to \fIFILE\fR instead of stdout.
+
+.TP
+.BI "-m " FILE ", --merge " FILE ...
+Merge checksum outputs produced by the \fB-o\fR option.  This can be
+used to simulate or validate the effect of computing checksum on the
+output of a \fBsamtools merge\fR command.
+
+The columns to report are read from the "# Group" line.  The rows to
+report are still governed by the \fB-q\fR, \fB-v\fR and \fB-T\fR
+options so this can also be used for reformatting of a single file.
+
+Note the "all" row merging cannot be done when the two levels of
+order-specific checksums (\fB-OO\fR) has been used.
+
+.TP
+.BR -v ", " --verbose
+Increase verbosity.  At level 1 or higher this also shows rows that
+have zero count values, which can aid machine parsing.
+
+.SH EXAMPLES
+.IP o 2
+To check that an aligned and position sorted file contains the same
+data as the pre-alignment FASTQ:
+.EX 2
+samtools checksum -q pos-aln.bam
+samtools import -u -1 rg1.fastq.gz -2 rg2.fastq.gz | samtools checksum -q
+.EE
+
+The output for this consists of some human readable comments starting
+with "#" and a series of checksum lines per read-group and QC status.
+
+.EX 2
+# Checksum for file: SRR554369.P_aeruginosa.cram
+# Aux tags:          BC,FI,QT,RT,TC
+# BAM flags:         PAIRED,READ1,READ2
+
+# Group    QC        count  flag+seq  +name     +qual     +aux      combined
+all        all     3315742  4a812bf2  22d15cfe  507f0f57  4a812bf2  035e2f5b
+all        pass    3315742  4a812bf2  22d15cfe  507f0f57  4a812bf2  035e2f5b
+.EE
+
+Note as no barcode tags exist, the "+aux" column is the same as the
+"flag+seq" column it is based upon.
+
+.IP o 2
+To check round-tripping from BAM to CRAM and back again we can convert
+the BAM to CRAM and then run the checksum on the CRAM file.  This does
+not need explicitly converting back to BAM as htslib will decode the
+CRAM and convert it back to the same in-memory representation that
+is utilised in BAM.
+
+.EX 2
+samtools checksum -a 9827_2#49.1m.bam
+[...cut...]
+samtools view -@8 -C -T $HREF 9827_2#49.1m.bam | samtools checksum -a
+# Checksum for file: -
+# Aux tags:          *,cF,MD,NM
+# BAM flags:         PAIRED,PROPER_PAIR,UNMAP,MUNMAP,REVERSE,MREVERSE,READ1,READ2,SECONDARY,QCFAIL,DUP,SUPPLEMENTARY
+
+# Group    QC        count  flag+seq  +name     +qual     +aux      +chr/pos  +cigar    +mate     combined
+all        all       99890  066a0706  0805371d  5506e19f  6b0eec58  60e2347c  09a2c3ba  347a3214  66c5e2de
+1#49       all       99890  066a0706  0805371d  5506e19f  6b0eec58  60e2347c  09a2c3ba  347a3214  66c5e2de
+.EE
+
+.IP o 2
+To validate that splitting a file by regroup retains all the data, we can
+compute checksums on the split BAMs and merge the checksum reports
+together to compare against the original unsplit file.  (Note in the
+example below diff will report the filename changing, which is
+expected.)
+
+.EX 2
+samtools split -u /tmp/split/noRG.bam -f '/tmp/split/%!.%.' in.cram
+samtools checksum -a in.cram -o in.chksum
+s=$(for i in /tmp/split/*.bam;do echo "<(samtools checksum -a $i)";done)
+eval samtools checksum -m $s -o split.chksum
+diff in.chksum split.chksum
+.EE
+
+.SH AUTHOR
+.PP
+Written by James Bonfield from the Sanger Institute.
+.br
+Inspired by bamseqchksum, written by David Jackson of Sanger Institute
+and amended by German Tischler.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-view (1),
+.PP
+Samtools website: <http://www.htslib.org/>
