@@ -64,6 +64,15 @@ TODO
 #include "sam_opts.h"
 #include "sam_utils.h"
 
+// TODO: consider adding hts_crc32 to htslib, similar to our hts_md5
+// This exposes libdeflate from htslib instead of punting the configure /
+// building requirements downstream.
+#ifdef HAVE_LIBDEFLATE
+#  include <libdeflate.h>
+#  define crc32 libdeflate_crc32
+#endif
+
+
 typedef struct {
     int incl_flags, req_flags, excl_flags;  // BAM flags filtering
     int nthreads;
