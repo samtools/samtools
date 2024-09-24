@@ -70,17 +70,6 @@ typedef struct {
     int rev_comp;
 } opts;
 
-static ssize_t bam_aux_size(const bam1_t *b, const uint8_t *s) {
-    uint8_t *next = bam_aux_next(b, s);
-    if (next)
-	return next - s - 2;
-
-    if (errno == ENOENT)
-	return b->data + b->l_data - s;
-
-    return -1;
-}
-
 /*
  * The hash is multiplicative within a finite field, modulo PRIME.
  * We need to avoid zeros, and the data type has to be large enough to ensure
@@ -107,9 +96,17 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     uint8_t *seq_buf = NULL;
     uint8_t *qual_buf = NULL;
     bam1_t *b = bam_init1();
+    static const char *tags[] = {"BC","FI","QT","RT","TC"};
+    const int ntags = sizeof(tags) / sizeof(*tags);
+    uint8_t **tag_ptr = calloc(ntags, sizeof(*tag_ptr));
+    size_t   *tag_len = calloc(ntags, sizeof(*tag_len));
 
-    if (!b)
+    if (!b || !tag_ptr || !tag_len)
 	goto err;
+
+    int tag_keep[125][125] = {0};
+    for (int i = 0; i < ntags; i++)
+	tag_keep[tags[i][0]-'0'][tags[i][1]-'0'] = i+1;
 
 #ifdef HASH_ADD
     uint64_t name_hash = 0;
@@ -122,7 +119,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     uint64_t qual_hash = 1;
     uint64_t aux_hash  = 1;
 #endif
-    
+
     const uint32_t crc32_start = crc32(0L, Z_NULL, 0);
 
     fp = sam_open_format(fn, "r", &ga->in);
@@ -200,24 +197,40 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	qual_hash = update_hash(qual_hash, crc); 
 
 	// flag + seq + aux tags
-	static const char *tags[] = {"BC","FI","QT","RT","TC"};
 	size_t aux_len = bam_get_l_aux(b);
 	if (aux_sz < aux_len)
 	    aux_dat = realloc(aux_dat, aux_sz = aux_len); // FIXME kstring
 	uint8_t *aux_ptr = aux_dat;
-	// FIXME: do a 1 pass check storing pointers, and then a second pass
-	// collapsing the entries.  This avoids multiple scans.
-	// Can use aux_next also to get size?
-	for (int i = 0; i < sizeof(tags)/sizeof(*tags); i++) {
-	    uint8_t *t = bam_aux_get(b, tags[i]);
-	    if (!t)
-		continue;
 
-	    size_t tag_len = bam_aux_size(b, t);
-	    memcpy(aux_ptr, t-2, tag_len+2);
-	    aux_ptr += tag_len+2;
-	    //write(3, aux_dat, aux_ptr - aux_dat);
+	// Pass 1: find all tags to copy and their lengths
+	uint8_t *aux = bam_aux_first(b), *aux_next;
+	while (aux) {
+	    aux_next = bam_aux_next(b, aux);
+	    if (!(aux[-2] >= '0' && aux[-2] <= 'z' &&
+		  aux[-1] >= '0' && aux[-2] <= 'z'))
+		continue; // skip illegal tag names
+	    int i = tag_keep[aux[-2]-'0'][aux[-1]-'0']-1;
+	    if (i>=0) {
+		// found one
+		size_t tag_sz = aux_next
+		    ? aux_next - aux
+		    : b->data + b->l_data - aux + 2;
+
+		tag_ptr[i] = aux-2;
+		tag_len[i] = tag_sz;
+	    }
+
+	    aux = aux_next;
 	}
+
+	// Pass 2: copy tags in the order we requested
+	for (int i = 0; i < ntags; i++) {
+	    if (tag_ptr[i]) {
+		memcpy(aux_ptr, tag_ptr[i], tag_len[i]);
+		aux_ptr += tag_len[i];
+	    }
+	}
+
 	if (aux_ptr > aux_dat) {
 	    crc = crc32(crc_flag_seq, aux_dat, aux_ptr - aux_dat);
 	    aux_hash = update_hash(aux_hash, crc);
@@ -247,6 +260,8 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
     free(seq_buf);
     free(qual_buf);
+    free(tag_ptr);
+    free(tag_len);
 
     bam_destroy1(b);
     return 0;
@@ -258,6 +273,8 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
     free(seq_buf);
     free(qual_buf);
+    free(tag_ptr);
+    free(tag_len);
 
     return -1;
 }
