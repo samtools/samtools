@@ -44,7 +44,8 @@ AOBJS=      bam_aux.o bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
             bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o \
             bam_ampliconclip.o amplicon_stats.o bam_import.o bam_samples.o \
-            bam_consensus.o consensus_pileup.o reference.o reset.o cram_size.o
+            bam_consensus.o consensus_pileup.o reference.o reset.o cram_size.o \
+            bam_checksum.o
 LZ4OBJS  =  $(LZ4DIR)/lz4.o
 
 prefix      = /usr/local
@@ -180,6 +181,7 @@ bam_lpileup.o: bam_lpileup.c config.h $(bam_plbuf_h) $(bam_lpileup_h) splaysort.
 bam_mate.o: bam_mate.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_kstring_h) $(htslib_sam_h) $(samtools_h)
 bam_md.o: bam_md.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_kstring_h) $(htslib_thread_pool_h) $(sam_opts_h) $(samtools_h)
 bam_plbuf.o: bam_plbuf.c config.h $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
+bam_checksum.o: bam_checksum.c config.h $(htslib_sam_h) $(sam_opts_h) $(sam_utils_h)
 bam_consensus.o: bam_consensus.c config.h $(htslib_sam_h) $(htslib_hfile_h) $(samtools_h) $(sam_opts_h) $(bam_plbuf_h) $(consensus_pileup_h)
 bam_plcmd.o: bam_plcmd.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstring_h) $(htslib_klist_h) $(htslib_khash_str2int_h) $(samtools_h) $(bedidx_h) $(sam_opts_h) $(sample_h) $(htslib_cram_h) $(bam_plbuf_h)
 bam_quickcheck.o: bam_quickcheck.c config.h $(htslib_hts_h) $(htslib_sam_h)
