@@ -213,6 +213,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
 	// Pass 1: find all tags to copy and their lengths
 	uint8_t *aux = bam_aux_first(b), *aux_next;
+	memset(tag_len, 0, ntags * sizeof(*tag_len));
 	while (aux) {
 	    aux_next = bam_aux_next(b, aux);
 	    if (!(aux[-2] >= '0' && aux[-2] <= 'z' &&
@@ -234,7 +235,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
 	// Pass 2: copy tags in the order we requested
 	for (int i = 0; i < ntags; i++) {
-	    if (tag_ptr[i]) {
+	    if (tag_len[i]) {
 		memcpy(aux_ptr, tag_ptr[i], tag_len[i]);
 		aux_ptr += tag_len[i];
 	    }
