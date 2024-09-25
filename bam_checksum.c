@@ -31,8 +31,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 /*
- * This is inspired by Biobambam's bamseqchksum tool and ideas from
- * German Tischler and David Jackson.
+ * This is inspired by Biobambam's bamseqchksum tool written by
+ * David Jackson and amended by German Tischler.
  *
  * It computes order agnostic checksums for a variety of SAM fields, allowing
  * validation that all the data is still present at different stages of an
@@ -46,13 +46,15 @@ DEALINGS IN THE SOFTWARE.  */
 
 /*
 TODO
-
 - Support multiple read-groups, which aids spliting pooled samples and
   tracking that data isn't lost.
 - Separate "all" from "pass" only (dropping QC fail)
 - Mechanisms for merging checksums together.  Eg merging two read-groups into
   a new file.
 - Make tags configurable
+- More components so we can checksum also any combo.  Eg CIGAR, MAPQ,
+  RNEXT/PNEXT/TLEN, etc.  This provides a route to detecting more types of
+  data loss. (Also see bam_mate.c:bam_sanitize() function)
  */
 
 #include <config.h>
@@ -79,7 +81,9 @@ typedef struct {
 } opts;
 
 // FIXME: qual+33 is a pain, but only for the benefit of compatability with
-// biobambam's bamseqchksum.  It's also wrong for QUAL "*".
+// biobambam's bamseqchksum.  It's also wrong for QUAL "*" as it triggers a
+// wraparound and turning from BAM's 0xff-run to ASCII makes no sense in a
+// checksum.
 
 #if 1
 // Nibble at a time.  This could be sped up further.  Eg see htslib's simd.c.
@@ -269,21 +273,27 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
 	fill_seq_qual(o, b, seq_buf, qual_buf);
 
+	// flag + seq
+	uint32_t crc = crc32(crc32_start, &flags, 1);
+	crc = crc32(crc, seq_buf, b->core.l_qseq);
+	seq_hash = update_hash(seq_hash, crc);
+	uint32_t crc_flag_seq = crc;
+
 	// name + flag + seq.
 	// Name includes single nul byte, for compatibility with bamseqchksum.
-	// (Would be better to be flag + seq + name as they wouldn't need to
-	// recompute CRC for flag+seq twice.)
-	uint32_t crc = crc32(crc32_start, (uint8_t *)bam_get_qname(b),
-			     b->core.l_qname - b->core.l_extranul);
+	crc = crc32(crc32_start, (uint8_t *)bam_get_qname(b),
+		    b->core.l_qname - b->core.l_extranul);
+	// We may think crc32_combine saves time, but it's very slow
+	//crc = crc32_combine(crc, crc_flag_seq, b->core.l_qseq+1);
 	crc = crc32(crc, &flags, 1);
 	crc = crc32(crc, seq_buf, b->core.l_qseq);
 	name_hash = update_hash(name_hash, crc);
 
-	// flag + seq
-	crc = crc32(crc32_start, &flags, 1);
-	crc = crc32(crc, seq_buf, b->core.l_qseq);
-	seq_hash = update_hash(seq_hash, crc);
-	uint32_t crc_flag_seq = crc;
+	// // flag + seq + name would be faster, but it's not what bamseqchksum
+	// // does sadly.
+	// crc = crc32(crc_flag_seq, (uint8_t *)bam_get_qname(b),
+	//  	    b->core.l_qname - b->core.l_extranul);
+	// name_hash = update_hash(name_hash, crc);
 
 	// flag + seq + qual
 	crc = crc32(crc_flag_seq, qual_buf, b->core.l_qseq);
