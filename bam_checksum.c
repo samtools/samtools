@@ -200,35 +200,109 @@ uint64_t update_hash(uint64_t hash, uint32_t crc) {
 }
 #endif
 
+typedef struct {
+    uint64_t seq;   // flag + seq
+    uint64_t name;  // name + flag + seq
+    uint64_t qual;  // flag + seq + qual
+    uint64_t aux;   // flag + seq + aux
+} hashes;
+
+void
+update_hashes(hashes *h32, uint32_t s, uint32_t n, uint32_t q, uint32_t a) {
+    h32->seq  = update_hash(h32->seq,  s);
+    h32->name = update_hash(h32->name, n);
+    h32->qual = update_hash(h32->qual, q);
+    h32->aux  = update_hash(h32->aux,  a);
+}
+
+#ifdef HASH_ADD
+#  define H32_INIT {0,0,0,0}
+#else
+#  define H32_INIT {1,1,1,1}
+#endif
+
+/*
+ * Produces a concatenated string of aux tags in <ID><TYPE><VAL> binary
+ * representation,  with the tag names and orders defined in tag_ids[],
+ * checksums it, and combines it with the flag-seq CRC.
+ *
+ * Returns 0 on success, updating *crc_aux,
+ *        -1 on error
+ */
+int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
+	     const char *tag_ids[],
+	     uint8_t **tag_ptr, size_t *tag_len,
+	     short (*tag_keep)[125],
+	     uint32_t crc_seq, uint32_t *crc_aux) {
+    size_t aux_len = bam_get_l_aux(b);
+    if (ks_resize(ks, aux_len) < 0)
+	return -1;
+    uint8_t *aux_ptr = (uint8_t *)ks->s;
+
+    // Pass 1: find all tags to copy and their lengths
+    uint8_t *aux = bam_aux_first(b), *aux_next;
+    memset(tag_len, 0, ntags * sizeof(*tag_len));
+    while (aux) {
+	aux_next = bam_aux_next(b, aux);
+	if (!(aux[-2] >= '0' && aux[-2] <= 'z' &&
+	      aux[-1] >= '0' && aux[-2] <= 'z'))
+	    continue; // skip illegal tag names
+	int i = tag_keep[aux[-2]-'0'][aux[-1]-'0']-1;
+	if (i>=0) {
+	    // found one
+	    size_t tag_sz = aux_next
+		? aux_next - aux
+		: b->data + b->l_data - aux + 2;
+
+	    tag_ptr[i] = aux-2;
+	    tag_len[i] = tag_sz;
+	}
+
+	aux = aux_next;
+    }
+
+    // Pass 2: copy tags in the order we requested
+    for (int i = 0; i < ntags; i++) {
+	if (tag_len[i]) {
+	    memcpy(aux_ptr, tag_ptr[i], tag_len[i]);
+	    aux_ptr += tag_len[i];
+	}
+    }
+
+    *crc_aux = aux_ptr > (uint8_t *)ks->s
+	? crc32(crc_seq, ks->s, aux_ptr - (uint8_t *)ks->s)
+	: crc_seq;
+
+    return 0;
+}
+
 int checksum(sam_global_args *ga, opts *o, char *fn) {
     samFile *fp = NULL;
     sam_hdr_t *hdr = NULL;
-    uint8_t *seq_buf = NULL;
-    uint8_t *qual_buf = NULL;
     bam1_t *b = bam_init1();
     static const char *tags[] = {"BC","FI","QT","RT","TC"};
     const int ntags = sizeof(tags) / sizeof(*tags);
     uint8_t **tag_ptr = calloc(ntags, sizeof(*tag_ptr));
     size_t   *tag_len = calloc(ntags, sizeof(*tag_len));
+    kstring_t aux_ks  = KS_INITIALIZE;
+    kstring_t seq_ks  = KS_INITIALIZE;
+    kstring_t qual_ks = KS_INITIALIZE;
 
     if (!b || !tag_ptr || !tag_len)
 	goto err;
 
-    int tag_keep[125][125] = {0};
-    for (int i = 0; i < ntags; i++)
+    // A precomputed lookup table to speed up selection of tags
+    short tag_keep[125][125] = {0};
+    for (int i = 0; i < ntags; i++) {
+	if (!(tags[i][0] >= '0' && tags[i][0] <= 'z' &&
+	      tags[i][1] >= '0' && tags[i][1] <= 'z')) {
+	    fprintf(stderr, "[checksum] Illegal tag ID '%.2s'\n", tags[i]);
+	    goto err;
+	}
 	tag_keep[tags[i][0]-'0'][tags[i][1]-'0'] = i+1;
+    }
 
-#ifdef HASH_ADD
-    uint64_t name_hash = 0;
-    uint64_t seq_hash  = 0;
-    uint64_t qual_hash = 0;
-    uint64_t aux_hash  = 0;
-#else
-    uint64_t name_hash = 1;
-    uint64_t seq_hash  = 1;
-    uint64_t qual_hash = 1;
-    uint64_t aux_hash  = 1;
-#endif
+    hashes h32 = H32_INIT;
 
     const uint32_t crc32_start = crc32(0L, Z_NULL, 0);
 
@@ -241,10 +315,6 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     if (!(hdr = sam_hdr_read(fp)))
 	goto err;
 
-    // FIXME: use kstring instead
-    uint8_t *aux_dat = NULL;
-    size_t aux_sz = 0;
-    size_t seq_buf_len = 0;
     int r;
     uint64_t count = 0;
 
@@ -259,97 +329,44 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	// Copy sequence out from nibble to base, and reverse complement
 	// seq / qual if required.  Qual is +33 (ASCII format) only for
 	// compatibility with biobambam's bamseqchksum tool.
-	if (seq_buf_len < b->core.l_qseq) {
-	    uint8_t *tmp;
-	    
-	    if (!(tmp = realloc(seq_buf, seq_buf_len = b->core.l_qseq)))
-		goto err;
-	    seq_buf = tmp;
+	if (ks_resize(&seq_ks, b->core.l_qseq) < 0 ||
+	    ks_resize(&qual_ks, b->core.l_qseq) < 0)
+	    goto err;
 
-	    if (!(tmp = realloc(qual_buf, seq_buf_len)))
-		goto err;
-	    qual_buf = tmp;
-	}
-
-	fill_seq_qual(o, b, seq_buf, qual_buf);
+	fill_seq_qual(o, b, (uint8_t *)seq_ks.s, (uint8_t *)qual_ks.s);
 
 	// flag + seq
 	uint32_t crc = crc32(crc32_start, &flags, 1);
-	crc = crc32(crc, seq_buf, b->core.l_qseq);
-	seq_hash = update_hash(seq_hash, crc);
-	uint32_t crc_flag_seq = crc;
+	uint32_t crc_seq = crc32(crc, seq_ks.s, b->core.l_qseq);
 
 	// name + flag + seq.
-	// Name includes single nul byte, for compatibility with bamseqchksum.
+	// flag + seq + name would be faster, but bamseqchksum does this.
+	// Also include single nul for compatibility too.
 	crc = crc32(crc32_start, (uint8_t *)bam_get_qname(b),
 		    b->core.l_qname - b->core.l_extranul);
-	// We may think crc32_combine saves time, but it's very slow
-	//crc = crc32_combine(crc, crc_flag_seq, b->core.l_qseq+1);
 	crc = crc32(crc, &flags, 1);
-	crc = crc32(crc, seq_buf, b->core.l_qseq);
-	name_hash = update_hash(name_hash, crc);
-
-	// // flag + seq + name would be faster, but it's not what bamseqchksum
-	// // does sadly.
-	// crc = crc32(crc_flag_seq, (uint8_t *)bam_get_qname(b),
-	//  	    b->core.l_qname - b->core.l_extranul);
-	// name_hash = update_hash(name_hash, crc);
+	uint32_t crc_name = crc32(crc, seq_ks.s, b->core.l_qseq);
 
 	// flag + seq + qual
-	crc = crc32(crc_flag_seq, qual_buf, b->core.l_qseq);
-	qual_hash = update_hash(qual_hash, crc); 
+	uint32_t crc_qual = crc32(crc_seq, qual_ks.s, b->core.l_qseq);
 
 	// flag + seq + aux tags
-	size_t aux_len = bam_get_l_aux(b);
-	if (aux_sz < aux_len)
-	    aux_dat = realloc(aux_dat, aux_sz = aux_len); // FIXME kstring
-	uint8_t *aux_ptr = aux_dat;
+	uint32_t crc_aux;
+	if (hash_aux(b, &aux_ks, ntags, tags, tag_ptr, tag_len,
+		     tag_keep, crc_seq, &crc_aux) < 0)
+	    goto err;
 
-	// Pass 1: find all tags to copy and their lengths
-	uint8_t *aux = bam_aux_first(b), *aux_next;
-	memset(tag_len, 0, ntags * sizeof(*tag_len));
-	while (aux) {
-	    aux_next = bam_aux_next(b, aux);
-	    if (!(aux[-2] >= '0' && aux[-2] <= 'z' &&
-		  aux[-1] >= '0' && aux[-2] <= 'z'))
-		continue; // skip illegal tag names
-	    int i = tag_keep[aux[-2]-'0'][aux[-1]-'0']-1;
-	    if (i>=0) {
-		// found one
-		size_t tag_sz = aux_next
-		    ? aux_next - aux
-		    : b->data + b->l_data - aux + 2;
-
-		tag_ptr[i] = aux-2;
-		tag_len[i] = tag_sz;
-	    }
-
-	    aux = aux_next;
-	}
-
-	// Pass 2: copy tags in the order we requested
-	for (int i = 0; i < ntags; i++) {
-	    if (tag_len[i]) {
-		memcpy(aux_ptr, tag_ptr[i], tag_len[i]);
-		aux_ptr += tag_len[i];
-	    }
-	}
-
-	if (aux_ptr > aux_dat) {
-	    crc = crc32(crc_flag_seq, aux_dat, aux_ptr - aux_dat);
-	    aux_hash = update_hash(aux_hash, crc);
-	} else {
-	    aux_hash = update_hash(aux_hash, crc_flag_seq);
-	}
+	// Aggregate hashes
+	update_hashes(&h32, crc_seq, crc_name, crc_qual, crc_aux);
 
 	count++;
     }
 
     printf("Count          %ld\n", count);
-    printf("Flag+Seq       %08lx\n", seq_hash);
-    printf("Name+Flag+Seq  %08lx\n", name_hash);
-    printf("Flag+Seq+Qual  %08lx\n", qual_hash);
-    printf("Flag+Seq+Aux   %08lx\n", aux_hash);
+    printf("Flag+Seq       %08lx\n", h32.seq);
+    printf("Name+Flag+Seq  %08lx\n", h32.name);
+    printf("Flag+Seq+Qual  %08lx\n", h32.qual);
+    printf("Flag+Seq+Aux   %08lx\n", h32.aux);
     puts("");
 
     if (r <= -1)
@@ -362,10 +379,11 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	goto err;
     }
 
-    free(seq_buf);
-    free(qual_buf);
     free(tag_ptr);
     free(tag_len);
+    ks_free(&aux_ks);
+    ks_free(&seq_ks);
+    ks_free(&qual_ks);
 
     bam_destroy1(b);
     return 0;
@@ -375,10 +393,11 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     if (hdr) sam_hdr_destroy(hdr);
     if (fp)  sam_close(fp);
 
-    free(seq_buf);
-    free(qual_buf);
     free(tag_ptr);
     free(tag_len);
+    ks_free(&aux_ks);
+    ks_free(&seq_ks);
+    ks_free(&qual_ks);
 
     return -1;
 }
