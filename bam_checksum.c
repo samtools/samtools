@@ -76,7 +76,6 @@ TODO
 
 typedef struct {
     int incl_flags, req_flags, excl_flags;  // BAM flags filtering
-    int nthreads;
     int rev_comp;
 } opts;
 
@@ -312,6 +311,9 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	goto err;
     }
 
+    if (ga->nthreads > 0)
+	hts_set_threads(fp, ga->nthreads);
+
     if (!(hdr = sam_hdr_read(fp)))
 	goto err;
 
@@ -363,10 +365,10 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     }
 
     printf("Count          %ld\n", count);
-    printf("Flag+Seq       %08lx\n", h32.seq);
-    printf("Name+Flag+Seq  %08lx\n", h32.name);
-    printf("Flag+Seq+Qual  %08lx\n", h32.qual);
-    printf("Flag+Seq+Aux   %08lx\n", h32.aux);
+    printf("Flag+Seq       %08"PRIx64"\n", h32.seq);
+    printf("Name+Flag+Seq  %08"PRIx64"\n", h32.name);
+    printf("Flag+Seq+Qual  %08"PRIx64"\n", h32.qual);
+    printf("Flag+Seq+Aux   %08"PRIx64"\n", h32.aux);
     puts("");
 
     if (r <= -1)
@@ -423,14 +425,12 @@ int main_checksum(int argc, char **argv) {
 	{"--require-flags", required_argument, NULL, 'f'},
 	{"--incl-flags",    required_argument, NULL, 1},
 	{"--include-flags", required_argument, NULL, 1},
-	{"--threads",       required_argument, NULL, '@'},
 	{NULL, 0, NULL, 0}
     };
 
     int c;
     while ((c = getopt_long(argc, argv, "@:f:F:", lopts, NULL)) >= 0) {
 	switch (c) {
-	case '@': opts.nthreads = atoi(optarg); break;
 	case 'F': opts.excl_flags = atoi(optarg); break;
 	case 'f': opts.req_flags = atoi(optarg); break;
 	case  1 : opts.incl_flags = atoi(optarg); break;
