@@ -4,14 +4,6 @@
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
-The primary work here is GRL since 2021, under an MIT license.
-Sections derived from Gap5, which include calculate_consensus_gap5()
-associated functions, are mostly copyright Genome Research Limited from
-2003 onwards.  These were originally under a BSD license, but as GRL is
-copyright holder these portions can be considered to also be under the
-same MIT license below:
-
-
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -55,6 +47,8 @@ TODO
 - More components so we can checksum also any combo.  Eg CIGAR, MAPQ,
   RNEXT/PNEXT/TLEN, etc.  This provides a route to detecting more types of
   data loss. (Also see bam_mate.c:bam_sanitize() function)
+- Query regions.  When we get differences, this can help bisect the data.
+  (If unmapped it's hard, but see "samtools cat -r" for CRAM)
  */
 
 #include <config.h>
@@ -90,7 +84,7 @@ typedef struct {
 //
 // However this is still 2.4x quicker than the naive implementation below
 void fill_seq_qual(opts *o, bam1_t *b, uint8_t *restrict seq_buf,
-		   uint8_t *restrict qual_buf) {
+                   uint8_t *restrict qual_buf) {
     // Tables mapping a pair of nibbles to a pair of ASCII bytes
     static const char code2fwdbase[512] =
         "===A=C=M=G=R=S=V=T=W=Y=H=K=D=B=N"
@@ -132,49 +126,49 @@ void fill_seq_qual(opts *o, bam1_t *b, uint8_t *restrict seq_buf,
     uint8_t *qual = bam_get_qual(b);
 
     if ((b->core.flag & BAM_FREVERSE) && o->rev_comp) {
-	int i, j, len2 = b->core.l_qseq & ~1;
-	for (i=0, j=b->core.l_qseq-1; i < len2; i+=2, j-=2) {
-	    memcpy(&seq_buf[j-1], &code2revbase[(size_t)seq[i>>1]*2], 2);
-	    qual_buf[j-0] = qual[i+0]+33;
-	    qual_buf[j-1] = qual[i+1]+33;
-	}
-	if (i < b->core.l_qseq) {
-	    seq_buf[j] = "=TGKCYSBAWRDMHVN"[bam_seqi(seq, i)];
-	    qual_buf[j] = qual[i]+33;
-	}
+        int i, j, len2 = b->core.l_qseq & ~1;
+        for (i=0, j=b->core.l_qseq-1; i < len2; i+=2, j-=2) {
+            memcpy(&seq_buf[j-1], &code2revbase[(size_t)seq[i>>1]*2], 2);
+            qual_buf[j-0] = qual[i+0]+33;
+            qual_buf[j-1] = qual[i+1]+33;
+        }
+        if (i < b->core.l_qseq) {
+            seq_buf[j] = "=TGKCYSBAWRDMHVN"[bam_seqi(seq, i)];
+            qual_buf[j] = qual[i]+33;
+        }
     } else {
-	int i, j, len2 = b->core.l_qseq & ~1;
-	for (i = j = 0; i < len2; i+=2, j++) {
-	    // Note size_t cast helps gcc optimiser.
-	    memcpy(&seq_buf[i], &code2fwdbase[(size_t)seq[j]*2], 2);
-	    // Simple, but a union approach is a little faster with clang.
-	    qual_buf[i+0] = qual[i+0]+33;
-	    qual_buf[i+1] = qual[i+1]+33;
-	}
-	if (i < b->core.l_qseq) {
-	    seq_buf[i] = seq_nt16_str[bam_seqi(seq, i)];
-	    qual_buf[i] = qual[i]+33;
-	}
+        int i, j, len2 = b->core.l_qseq & ~1;
+        for (i = j = 0; i < len2; i+=2, j++) {
+            // Note size_t cast helps gcc optimiser.
+            memcpy(&seq_buf[i], &code2fwdbase[(size_t)seq[j]*2], 2);
+            // Simple, but a union approach is a little faster with clang.
+            qual_buf[i+0] = qual[i+0]+33;
+            qual_buf[i+1] = qual[i+1]+33;
+        }
+        if (i < b->core.l_qseq) {
+            seq_buf[i] = seq_nt16_str[bam_seqi(seq, i)];
+            qual_buf[i] = qual[i]+33;
+        }
     }
 }
 
 #else
 // Simple version
 void fill_seq_qual(opts *o, bam1_t *b, uint8_t *restrict seq_buf,
-		   uint8_t *restrict qual_buf) {
+                   uint8_t *restrict qual_buf) {
     uint8_t *seq = bam_get_seq(b);
     uint8_t *qual = bam_get_qual(b);
 
     if ((b->core.flag & BAM_FREVERSE) && o->rev_comp) {
-	for (int i=0, j=b->core.l_qseq-1; i < b->core.l_qseq; i++,j--) {
-	    seq_buf[j] = "=TGKCYSBAWRDMHVN"[bam_seqi(seq, i)];
-	    qual_buf[j] = qual[i]+33;
-	}
+        for (int i=0, j=b->core.l_qseq-1; i < b->core.l_qseq; i++,j--) {
+            seq_buf[j] = "=TGKCYSBAWRDMHVN"[bam_seqi(seq, i)];
+            qual_buf[j] = qual[i]+33;
+        }
     } else {
-	for (int i = 0; i < b->core.l_qseq; i++) {
-	    seq_buf[i] = seq_nt16_str[bam_seqi(seq, i)];
-	    qual_buf[i] = qual[i]+33;
-	}
+        for (int i = 0; i < b->core.l_qseq; i++) {
+            seq_buf[i] = seq_nt16_str[bam_seqi(seq, i)];
+            qual_buf[i] = qual[i]+33;
+        }
     }
 }
 #endif
@@ -193,7 +187,7 @@ uint64_t update_hash(uint64_t hash, uint32_t crc) {
 uint64_t update_hash(uint64_t hash, uint32_t crc) {
     crc &= PRIME;
     if (crc == 0 || crc == PRIME)
-	crc = 1;
+        crc = 1;
 
     return (hash * crc) % PRIME;
 }
@@ -229,48 +223,48 @@ update_hashes(hashes *h32, uint32_t s, uint32_t n, uint32_t q, uint32_t a) {
  *        -1 on error
  */
 int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
-	     const char *tag_ids[],
-	     uint8_t **tag_ptr, size_t *tag_len,
-	     short (*tag_keep)[125],
-	     uint32_t crc_seq, uint32_t *crc_aux) {
+             const char *tag_ids[],
+             uint8_t **tag_ptr, size_t *tag_len,
+             short (*tag_keep)[125],
+             uint32_t crc_seq, uint32_t *crc_aux) {
     size_t aux_len = bam_get_l_aux(b);
     if (ks_resize(ks, aux_len) < 0)
-	return -1;
+        return -1;
     uint8_t *aux_ptr = (uint8_t *)ks->s;
 
     // Pass 1: find all tags to copy and their lengths
     uint8_t *aux = bam_aux_first(b), *aux_next;
     memset(tag_len, 0, ntags * sizeof(*tag_len));
     while (aux) {
-	aux_next = bam_aux_next(b, aux);
-	if (!(aux[-2] >= '0' && aux[-2] <= 'z' &&
-	      aux[-1] >= '0' && aux[-2] <= 'z'))
-	    continue; // skip illegal tag names
-	int i = tag_keep[aux[-2]-'0'][aux[-1]-'0']-1;
-	if (i>=0) {
-	    // found one
-	    size_t tag_sz = aux_next
-		? aux_next - aux
-		: b->data + b->l_data - aux + 2;
+        aux_next = bam_aux_next(b, aux);
+        if (!(aux[-2] >= '0' && aux[-2] <= 'z' &&
+              aux[-1] >= '0' && aux[-2] <= 'z'))
+            continue; // skip illegal tag names
+        int i = tag_keep[aux[-2]-'0'][aux[-1]-'0']-1;
+        if (i>=0) {
+            // found one
+            size_t tag_sz = aux_next
+                ? aux_next - aux
+                : b->data + b->l_data - aux + 2;
 
-	    tag_ptr[i] = aux-2;
-	    tag_len[i] = tag_sz;
-	}
+            tag_ptr[i] = aux-2;
+            tag_len[i] = tag_sz;
+        }
 
-	aux = aux_next;
+        aux = aux_next;
     }
 
     // Pass 2: copy tags in the order we requested
     for (int i = 0; i < ntags; i++) {
-	if (tag_len[i]) {
-	    memcpy(aux_ptr, tag_ptr[i], tag_len[i]);
-	    aux_ptr += tag_len[i];
-	}
+        if (tag_len[i]) {
+            memcpy(aux_ptr, tag_ptr[i], tag_len[i]);
+            aux_ptr += tag_len[i];
+        }
     }
 
     *crc_aux = aux_ptr > (uint8_t *)ks->s
-	? crc32(crc_seq, (uint8_t *)ks->s, aux_ptr - (uint8_t *)ks->s)
-	: crc_seq;
+        ? crc32(crc_seq, (uint8_t *)ks->s, aux_ptr - (uint8_t *)ks->s)
+        : crc_seq;
 
     return 0;
 }
@@ -288,17 +282,17 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     kstring_t qual_ks = KS_INITIALIZE;
 
     if (!b || !tag_ptr || !tag_len)
-	goto err;
+        goto err;
 
     // A precomputed lookup table to speed up selection of tags
     short tag_keep[125][125] = {0};
     for (int i = 0; i < ntags; i++) {
-	if (!(tags[i][0] >= '0' && tags[i][0] <= 'z' &&
-	      tags[i][1] >= '0' && tags[i][1] <= 'z')) {
-	    fprintf(stderr, "[checksum] Illegal tag ID '%.2s'\n", tags[i]);
-	    goto err;
-	}
-	tag_keep[tags[i][0]-'0'][tags[i][1]-'0'] = i+1;
+        if (!(tags[i][0] >= '0' && tags[i][0] <= 'z' &&
+              tags[i][1] >= '0' && tags[i][1] <= 'z')) {
+            fprintf(stderr, "[checksum] Illegal tag ID '%.2s'\n", tags[i]);
+            goto err;
+        }
+        tag_keep[tags[i][0]-'0'][tags[i][1]-'0'] = i+1;
     }
 
     hashes h32 = H32_INIT;
@@ -307,62 +301,62 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
     fp = sam_open_format(fn, "r", &ga->in);
     if (!fp) {
-	print_error_errno("checksum", "Cannot open input file \"%s\"", fn);
-	goto err;
+        print_error_errno("checksum", "Cannot open input file \"%s\"", fn);
+        goto err;
     }
 
     if (ga->nthreads > 0)
-	hts_set_threads(fp, ga->nthreads);
+        hts_set_threads(fp, ga->nthreads);
 
     if (!(hdr = sam_hdr_read(fp)))
-	goto err;
+        goto err;
 
     int r;
     uint64_t count = 0;
 
     while ((r = sam_read1(fp, hdr, b)) >= 0) {
-	// TODO: configurable filter
-	if (b->core.flag & o->excl_flags)
-	    continue;
+        // TODO: configurable filter
+        if (b->core.flag & o->excl_flags)
+            continue;
 
-	// 8 bits of flag corresponding to original instrument data
-	uint8_t flags = b->core.flag & (BAM_FPAIRED | BAM_FREAD1 | BAM_FREAD2);
+        // 8 bits of flag corresponding to original instrument data
+        uint8_t flags = b->core.flag & (BAM_FPAIRED | BAM_FREAD1 | BAM_FREAD2);
 
-	// Copy sequence out from nibble to base, and reverse complement
-	// seq / qual if required.  Qual is +33 (ASCII format) only for
-	// compatibility with biobambam's bamseqchksum tool.
-	if (ks_resize(&seq_ks, b->core.l_qseq) < 0 ||
-	    ks_resize(&qual_ks, b->core.l_qseq) < 0)
-	    goto err;
+        // Copy sequence out from nibble to base, and reverse complement
+        // seq / qual if required.  Qual is +33 (ASCII format) only for
+        // compatibility with biobambam's bamseqchksum tool.
+        if (ks_resize(&seq_ks, b->core.l_qseq) < 0 ||
+            ks_resize(&qual_ks, b->core.l_qseq) < 0)
+            goto err;
 
-	fill_seq_qual(o, b, (uint8_t *)seq_ks.s, (uint8_t *)qual_ks.s);
+        fill_seq_qual(o, b, (uint8_t *)seq_ks.s, (uint8_t *)qual_ks.s);
 
-	// flag + seq
-	uint32_t crc = crc32(crc32_start, &flags, 1);
-	uint32_t crc_seq = crc32(crc, (uint8_t *)seq_ks.s, b->core.l_qseq);
+        // flag + seq
+        uint32_t crc = crc32(crc32_start, &flags, 1);
+        uint32_t crc_seq = crc32(crc, (uint8_t *)seq_ks.s, b->core.l_qseq);
 
-	// name + flag + seq.
-	// flag + seq + name would be faster, but bamseqchksum does this.
-	// Also include single nul for compatibility too.
-	crc = crc32(crc32_start, (uint8_t *)bam_get_qname(b),
-		    b->core.l_qname - b->core.l_extranul);
-	crc = crc32(crc, &flags, 1);
-	uint32_t crc_name = crc32(crc, (uint8_t *)seq_ks.s, b->core.l_qseq);
+        // name + flag + seq.
+        // flag + seq + name would be faster, but bamseqchksum does this.
+        // Also include single nul for compatibility too.
+        crc = crc32(crc32_start, (uint8_t *)bam_get_qname(b),
+                    b->core.l_qname - b->core.l_extranul);
+        crc = crc32(crc, &flags, 1);
+        uint32_t crc_name = crc32(crc, (uint8_t *)seq_ks.s, b->core.l_qseq);
 
-	// flag + seq + qual
-	uint32_t crc_qual = crc32(crc_seq, (uint8_t *)qual_ks.s,
-				  b->core.l_qseq);
+        // flag + seq + qual
+        uint32_t crc_qual = crc32(crc_seq, (uint8_t *)qual_ks.s,
+                                  b->core.l_qseq);
 
-	// flag + seq + aux tags
-	uint32_t crc_aux;
-	if (hash_aux(b, &aux_ks, ntags, tags, tag_ptr, tag_len,
-		     tag_keep, crc_seq, &crc_aux) < 0)
-	    goto err;
+        // flag + seq + aux tags
+        uint32_t crc_aux;
+        if (hash_aux(b, &aux_ks, ntags, tags, tag_ptr, tag_len,
+                     tag_keep, crc_seq, &crc_aux) < 0)
+            goto err;
 
-	// Aggregate hashes
-	update_hashes(&h32, crc_seq, crc_name, crc_qual, crc_aux);
+        // Aggregate hashes
+        update_hashes(&h32, crc_seq, crc_name, crc_qual, crc_aux);
 
-	count++;
+        count++;
     }
 
     printf("Count          %"PRIu64"\n", count);
@@ -373,13 +367,13 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     puts("");
 
     if (r <= -1)
-	goto err;
+        goto err;
     if (hdr)
-	sam_hdr_destroy(hdr);
+        sam_hdr_destroy(hdr);
 
     if (sam_close(fp) < 0) {
-	print_error_errno("checksum", "Closing input file \"%s\"", fn);
-	goto err;
+        print_error_errno("checksum", "Closing input file \"%s\"", fn);
+        goto err;
     }
 
     free(tag_ptr);
@@ -412,42 +406,42 @@ void usage_exit(FILE *fp, int ret) {
 
 int main_checksum(int argc, char **argv) {
     opts opts = {
-	.incl_flags   = 0xffff,
-	.req_flags    = 0,
-	.excl_flags   = BAM_FSECONDARY | BAM_FSUPPLEMENTARY,
-	.rev_comp     = 1,
+        .incl_flags   = 0xffff,
+        .req_flags    = 0,
+        .excl_flags   = BAM_FSECONDARY | BAM_FSUPPLEMENTARY,
+        .rev_comp     = 1,
     };
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 'I', '-', '-', '.', '@'),
-	{"--excl-flags",    required_argument, NULL, 'F'},
-	{"--exclude-flags", required_argument, NULL, 'F'},
-	{"--require-flags", required_argument, NULL, 'f'},
-	{"--incl-flags",    required_argument, NULL, 1},
-	{"--include-flags", required_argument, NULL, 1},
-	{NULL, 0, NULL, 0}
+        {"--excl-flags",    required_argument, NULL, 'F'},
+        {"--exclude-flags", required_argument, NULL, 'F'},
+        {"--require-flags", required_argument, NULL, 'f'},
+        {"--incl-flags",    required_argument, NULL, 1},
+        {"--include-flags", required_argument, NULL, 1},
+        {NULL, 0, NULL, 0}
     };
 
     int c;
     while ((c = getopt_long(argc, argv, "@:f:F:", lopts, NULL)) >= 0) {
-	switch (c) {
-	case 'F': opts.excl_flags = atoi(optarg); break;
-	case 'f': opts.req_flags = atoi(optarg); break;
-	case  1 : opts.incl_flags = atoi(optarg); break;
-	default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
-	    /* else fall-through */
+        switch (c) {
+        case 'F': opts.excl_flags = atoi(optarg); break;
+        case 'f': opts.req_flags  = atoi(optarg); break;
+        case  1 : opts.incl_flags = atoi(optarg); break;
+        default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+            /* else fall-through */
         case '?':
             usage_exit(stderr, EXIT_FAILURE);
-	}
+        }
     }
 
     int ret = 0;
     if (argc-optind) {
-	while (optind < argc)
-	    ret |= checksum(&ga, &opts, argv[optind++]) < 0;
+        while (optind < argc)
+            ret |= checksum(&ga, &opts, argv[optind++]) < 0;
     } else {
-	ret = checksum(&ga, &opts, "-") < 0;
+        ret = checksum(&ga, &opts, "-") < 0;
     }
 
     return ret;
