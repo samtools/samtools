@@ -72,12 +72,109 @@ TODO
 #  define crc32 libdeflate_crc32
 #endif
 
-
 typedef struct {
     int incl_flags, req_flags, excl_flags;  // BAM flags filtering
     int nthreads;
     int rev_comp;
 } opts;
+
+// FIXME: qual+33 is a pain, but only for the benefit of compatability with
+// biobambam's bamseqchksum.  It's also wrong for QUAL "*".
+
+#if 1
+// Nibble at a time.  This could be sped up further.  Eg see htslib's simd.c.
+// That code ought to be expanded upon and exposed from htslib.
+//
+// However this is still 2.4x quicker than the naive implementation below
+void fill_seq_qual(opts *o, bam1_t *b, uint8_t *restrict seq_buf,
+		   uint8_t *restrict qual_buf) {
+    // Tables mapping a pair of nibbles to a pair of ASCII bytes
+    static const char code2fwdbase[512] =
+        "===A=C=M=G=R=S=V=T=W=Y=H=K=D=B=N"
+        "A=AAACAMAGARASAVATAWAYAHAKADABAN"
+        "C=CACCCMCGCRCSCVCTCWCYCHCKCDCBCN"
+        "M=MAMCMMMGMRMSMVMTMWMYMHMKMDMBMN"
+        "G=GAGCGMGGGRGSGVGTGWGYGHGKGDGBGN"
+        "R=RARCRMRGRRRSRVRTRWRYRHRKRDRBRN"
+        "S=SASCSMSGSRSSSVSTSWSYSHSKSDSBSN"
+        "V=VAVCVMVGVRVSVVVTVWVYVHVKVDVBVN"
+        "T=TATCTMTGTRTSTVTTTWTYTHTKTDTBTN"
+        "W=WAWCWMWGWRWSWVWTWWWYWHWKWDWBWN"
+        "Y=YAYCYMYGYRYSYVYTYWYYYHYKYDYBYN"
+        "H=HAHCHMHGHRHSHVHTHWHYHHHKHDHBHN"
+        "K=KAKCKMKGKRKSKVKTKWKYKHKKKDKBKN"
+        "D=DADCDMDGDRDSDVDTDWDYDHDKDDDBDN"
+        "B=BABCBMBGBRBSBVBTBWBYBHBKBDBBBN"
+        "N=NANCNMNGNRNSNVNTNWNYNHNKNDNBNN";
+
+    static const char code2revbase[512] =
+        "==T=G=K=C=Y=S=B=A=W=R=D=M=H=V=N="
+        "=TTTGTKTCTYTSTBTATWTRTDTMTHTVTNT"
+        "=GTGGGKGCGYGSGBGAGWGRGDGMGHGVGNG"
+        "=KTKGKKKCKYKSKBKAKWKRKDKMKHKVKNK"
+        "=CTCGCKCCCYCSCBCACWCRCDCMCHCVCNC"
+        "=YTYGYKYCYYYSYBYAYWYRYDYMYHYVYNY"
+        "=STSGSKSCSYSSSBSASWSRSDSMSHSVSNS"
+        "=BTBGBKBCBYBSBBBABWBRBDBMBHBVBNB"
+        "=ATAGAKACAYASABAAAWARADAMAHAVANA"
+        "=WTWGWKWCWYWSWBWAWWWRWDWMWHWVWNW"
+        "=RTRGRKRCRYRSRBRARWRRRDRMRHRVRNR"
+        "=DTDGDKDCDYDSDBDADWDRDDDMDHDVDND"
+        "=MTMGMKMCMYMSMBMAMWMRMDMMMHMVMNM"
+        "=HTHGHKHCHYHSHBHAHWHRHDHMHHHVHNH"
+        "=VTVGVKVCVYVSVBVAVWVRVDVMVHVVVNV"
+        "=NTNGNKNCNYNSNBNANWNRNDNMNHNVNNN";
+
+    uint8_t *seq = bam_get_seq(b);
+    uint8_t *qual = bam_get_qual(b);
+
+    if ((b->core.flag & BAM_FREVERSE) && o->rev_comp) {
+	int i, j, len2 = b->core.l_qseq & ~1;
+	for (i=0, j=b->core.l_qseq-1; i < len2; i+=2, j-=2) {
+	    memcpy(&seq_buf[j-1], &code2revbase[(size_t)seq[i>>1]*2], 2);
+	    qual_buf[j-0] = qual[i+0]+33;
+	    qual_buf[j-1] = qual[i+1]+33;
+	}
+	if (i < b->core.l_qseq) {
+	    seq_buf[j] = "=TGKCYSBAWRDMHVN"[bam_seqi(seq, i)];
+	    qual_buf[j] = qual[i]+33;
+	}
+    } else {
+	int i, j, len2 = b->core.l_qseq & ~1;
+	for (i = j = 0; i < len2; i+=2, j++) {
+	    // Note size_t cast helps gcc optimiser.
+	    memcpy(&seq_buf[i], &code2fwdbase[(size_t)seq[j]*2], 2);
+	    // Simple, but a union approach is a little faster with clang.
+	    qual_buf[i+0] = qual[i+0]+33;
+	    qual_buf[i+1] = qual[i+1]+33;
+	}
+	if (i < b->core.l_qseq) {
+	    seq_buf[i] = seq_nt16_str[bam_seqi(seq, i)];
+	    qual_buf[i] = qual[i]+33;
+	}
+    }
+}
+
+#else
+// Simple version
+void fill_seq_qual(opts *o, bam1_t *b, uint8_t *restrict seq_buf,
+		   uint8_t *restrict qual_buf) {
+    uint8_t *seq = bam_get_seq(b);
+    uint8_t *qual = bam_get_qual(b);
+
+    if ((b->core.flag & BAM_FREVERSE) && o->rev_comp) {
+	for (int i=0, j=b->core.l_qseq-1; i < b->core.l_qseq; i++,j--) {
+	    seq_buf[j] = "=TGKCYSBAWRDMHVN"[bam_seqi(seq, i)];
+	    qual_buf[j] = qual[i]+33;
+	}
+    } else {
+	for (int i = 0; i < b->core.l_qseq; i++) {
+	    seq_buf[i] = seq_nt16_str[bam_seqi(seq, i)];
+	    qual_buf[i] = qual[i]+33;
+	}
+    }
+}
+#endif
 
 /*
  * The hash is multiplicative within a finite field, modulo PRIME.
@@ -158,8 +255,6 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	// Copy sequence out from nibble to base, and reverse complement
 	// seq / qual if required.  Qual is +33 (ASCII format) only for
 	// compatibility with biobambam's bamseqchksum tool.
-	uint8_t *seq = bam_get_seq(b);
-	uint8_t *qual = bam_get_qual(b);
 	if (seq_buf_len < b->core.l_qseq) {
 	    uint8_t *tmp;
 	    
@@ -171,19 +266,8 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 		goto err;
 	    qual_buf = tmp;
 	}
-	if ((b->core.flag & BAM_FREVERSE) && o->rev_comp) {
-	    for (int i=0, j=b->core.l_qseq-1; i < b->core.l_qseq; i++,j--) {
-		seq_buf[j] = "=TGKCYSBAWRDMHVN"[bam_seqi(seq, i)];
-		qual_buf[j] = qual[i]+33;
-	    }
-	    qual = qual_buf;
-	} else {
-	    for (int i = 0; i < b->core.l_qseq; i++) {
-		seq_buf[i] = seq_nt16_str[bam_seqi(seq, i)];
-		qual_buf[i] = qual[i]+33;
-	    }
-	    qual = qual_buf;
-	}
+
+	fill_seq_qual(o, b, seq_buf, qual_buf);
 
 	// name + flag + seq.
 	// Name includes single nul byte, for compatibility with bamseqchksum.
@@ -202,7 +286,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	uint32_t crc_flag_seq = crc;
 
 	// flag + seq + qual
-	crc = crc32(crc_flag_seq, qual, b->core.l_qseq);
+	crc = crc32(crc_flag_seq, qual_buf, b->core.l_qseq);
 	qual_hash = update_hash(qual_hash, crc); 
 
 	// flag + seq + aux tags
