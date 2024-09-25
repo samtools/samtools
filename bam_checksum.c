@@ -269,7 +269,7 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
     }
 
     *crc_aux = aux_ptr > (uint8_t *)ks->s
-	? crc32(crc_seq, ks->s, aux_ptr - (uint8_t *)ks->s)
+	? crc32(crc_seq, (uint8_t *)ks->s, aux_ptr - (uint8_t *)ks->s)
 	: crc_seq;
 
     return 0;
@@ -339,7 +339,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
 	// flag + seq
 	uint32_t crc = crc32(crc32_start, &flags, 1);
-	uint32_t crc_seq = crc32(crc, seq_ks.s, b->core.l_qseq);
+	uint32_t crc_seq = crc32(crc, (uint8_t *)seq_ks.s, b->core.l_qseq);
 
 	// name + flag + seq.
 	// flag + seq + name would be faster, but bamseqchksum does this.
@@ -347,10 +347,11 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	crc = crc32(crc32_start, (uint8_t *)bam_get_qname(b),
 		    b->core.l_qname - b->core.l_extranul);
 	crc = crc32(crc, &flags, 1);
-	uint32_t crc_name = crc32(crc, seq_ks.s, b->core.l_qseq);
+	uint32_t crc_name = crc32(crc, (uint8_t *)seq_ks.s, b->core.l_qseq);
 
 	// flag + seq + qual
-	uint32_t crc_qual = crc32(crc_seq, qual_ks.s, b->core.l_qseq);
+	uint32_t crc_qual = crc32(crc_seq, (uint8_t *)qual_ks.s,
+				  b->core.l_qseq);
 
 	// flag + seq + aux tags
 	uint32_t crc_aux;
@@ -364,7 +365,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	count++;
     }
 
-    printf("Count          %ld\n", count);
+    printf("Count          %"PRIu64"\n", count);
     printf("Flag+Seq       %08"PRIx64"\n", h32.seq);
     printf("Name+Flag+Seq  %08"PRIx64"\n", h32.name);
     printf("Flag+Seq+Qual  %08"PRIx64"\n", h32.qual);
