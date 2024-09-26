@@ -46,6 +46,8 @@ TODO
   data loss. (Also see bam_mate.c:bam_sanitize() function)
 - Query regions.  When we get differences, this can help bisect the data.
   (If unmapped it's hard, but see "samtools cat -r" for CRAM)
+- Restructure and rename.  "hashes" is vague - maybe chks_t?
+- Remove dead HASH_ADD code.  I don't think it's ever going to be used.
  */
 
 #include <config.h>
@@ -316,6 +318,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     kstring_t seq_ks  = KS_INITIALIZE;
     kstring_t qual_ks = KS_INITIALIZE;
     khash_t(chk) *h = kh_init(chk);
+    int ret = -1;
 
     if (!b || !tag_ptr || !tag_len || !h)
         goto err;
@@ -423,43 +426,20 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
     }
 
-//    printf("Count          %"PRIu64"\n", h32.count);
-//    printf("Flag+Seq       %08"PRIx64"\n", h32.seq);
-//    printf("Name+Flag+Seq  %08"PRIx64"\n", h32.name);
-//    printf("Flag+Seq+Qual  %08"PRIx64"\n", h32.qual);
-//    printf("Flag+Seq+Aux   %08"PRIx64"\n", h32.aux);
-//    puts("");
-
     if (r < -1) {
 	fprintf(stderr, "r=%d\n", r);
         goto err;
     }
-    if (hdr)
-        sam_hdr_destroy(hdr);
 
     if (sam_close(fp) < 0) {
+	fp = NULL;
         print_error_errno("checksum", "Closing input file \"%s\"", fn);
         goto err;
     }
-
-    free(tag_ptr);
-    free(tag_len);
-    ks_free(&aux_ks);
-    ks_free(&seq_ks);
-    ks_free(&qual_ks);
-    for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
-	if (!kh_exist(h, k))
-	    continue;
-
-	free((char *)kh_key(h, k));
-    }
-    kh_destroy(chk, h);
-
-    bam_destroy1(b);
-    return 0;
+    fp = NULL;
+    ret = 0;
 
  err:
-    fprintf(stderr, "FAIL\n");
     if (b)   bam_destroy1(b);
     if (hdr) sam_hdr_destroy(hdr);
     if (fp)  sam_close(fp);
@@ -480,7 +460,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	kh_destroy(chk, h);
     }
 
-    return -1;
+    return ret;
 }
 
 void usage_exit(FILE *fp, int ret) {
