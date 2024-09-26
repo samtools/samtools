@@ -38,9 +38,6 @@ DEALINGS IN THE SOFTWARE.  */
 
 /*
 TODO
-- Support multiple read-groups, which aids spliting pooled samples and
-  tracking that data isn't lost.
-- Separate "all" from "pass" only (dropping QC fail)
 - Mechanisms for merging checksums together.  Eg merging two read-groups into
   a new file.
 - Make tags configurable
@@ -57,6 +54,8 @@ TODO
 #include <zlib.h>
 
 #include <htslib/sam.h>
+#include <htslib/khash.h>
+
 #include "sam_opts.h"
 #include "sam_utils.h"
 
@@ -194,30 +193,63 @@ uint64_t update_hash(uint64_t hash, uint32_t crc) {
 #endif
 
 typedef struct {
-    uint64_t seq;   // flag + seq
-    uint64_t name;  // name + flag + seq
-    uint64_t qual;  // flag + seq + qual
-    uint64_t aux;   // flag + seq + aux
+    uint64_t seq[2];   // flag + seq
+    uint64_t name[2];  // name + flag + seq
+    uint64_t qual[2];  // flag + seq + qual
+    uint64_t aux[2];   // flag + seq + aux
+    uint64_t count[2];
 } hashes;
 
+KHASH_MAP_INIT_STR(chk, hashes)
+
 void
-update_hashes(hashes *h32, uint32_t s, uint32_t n, uint32_t q, uint32_t a) {
-    h32->seq  = update_hash(h32->seq,  s);
-    h32->name = update_hash(h32->name, n);
-    h32->qual = update_hash(h32->qual, q);
-    h32->aux  = update_hash(h32->aux,  a);
+update_hashes(int qcfail, hashes *h32,
+	      uint32_t s, uint32_t n, uint32_t q, uint32_t a) {
+    h32->seq[0]  = update_hash(h32->seq[0],  s);
+    h32->name[0] = update_hash(h32->name[0], n);
+    h32->qual[0] = update_hash(h32->qual[0], q);
+    h32->aux[0]  = update_hash(h32->aux[0],  a);
+    h32->count[0]++;
+
+    if (!qcfail) {
+	h32->seq[1]  = update_hash(h32->seq[1],  s);
+	h32->name[1] = update_hash(h32->name[1], n);
+	h32->qual[1] = update_hash(h32->qual[1], q);
+	h32->aux[1]  = update_hash(h32->aux[1],  a);
+	h32->count[1]++;
+    }
+}
+
+void dump_hashes(hashes *h32, const char *set) {
+    printf("%-10s  all   %12"PRIu64"    %08"PRIx64"    %08"PRIx64
+	   "    %08"PRIx64"    %08"PRIx64"\n", set, h32->count[0],
+	   h32->seq[0], h32->name[0], h32->qual[0], h32->aux[0]);
+    printf("%-10s  pass  %12"PRIu64"    %08"PRIx64"    %08"PRIx64
+	   "    %08"PRIx64"    %08"PRIx64"\n", set, h32->count[1],
+	   h32->seq[1], h32->name[1], h32->qual[1], h32->aux[1]);
 }
 
 #ifdef HASH_ADD
-#  define H32_INIT {0,0,0,0}
+#  define H32_INIT {0}
 #else
-#  define H32_INIT {1,1,1,1}
+#  define H32_INIT {{1,1},{1,1},{1,1},{1,1},{0,0}}
 #endif
+
+void hashes_init(hashes *h32) {
+    h32->seq[0]   = h32->seq[1]   = 1;
+    h32->name[0]  = h32->name[1]  = 1;
+    h32->qual[0]  = h32->qual[1]  = 1;
+    h32->aux[0]   = h32->aux[1]   = 1;
+    h32->count[0] = h32->count[1] = 0;
+}
 
 /*
  * Produces a concatenated string of aux tags in <ID><TYPE><VAL> binary
  * representation,  with the tag names and orders defined in tag_ids[],
  * checksums it, and combines it with the flag-seq CRC.
+ *
+ * If the read-group is found in the RG:Z: aux, this is returned in
+ * the *RGZ ptr (which points to the <VAL> field.
  *
  * Returns 0 on success, updating *crc_aux,
  *        -1 on error
@@ -226,7 +258,8 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
              const char *tag_ids[],
              uint8_t **tag_ptr, size_t *tag_len,
              short (*tag_keep)[125],
-             uint32_t crc_seq, uint32_t *crc_aux) {
+             uint32_t crc_seq, uint32_t *crc_aux,
+	     uint8_t **RGZ) {
     size_t aux_len = bam_get_l_aux(b);
     if (ks_resize(ks, aux_len) < 0)
         return -1;
@@ -236,6 +269,8 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
     uint8_t *aux = bam_aux_first(b), *aux_next;
     memset(tag_len, 0, ntags * sizeof(*tag_len));
     while (aux) {
+	if (aux[-2] == 'R' && aux[-1] == 'G' && aux[0] == 'Z' && RGZ)
+	    *RGZ = aux+1;
         aux_next = bam_aux_next(b, aux);
         if (!(aux[-2] >= '0' && aux[-2] <= 'z' &&
               aux[-1] >= '0' && aux[-2] <= 'z'))
@@ -280,8 +315,9 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     kstring_t aux_ks  = KS_INITIALIZE;
     kstring_t seq_ks  = KS_INITIALIZE;
     kstring_t qual_ks = KS_INITIALIZE;
+    khash_t(chk) *h = kh_init(chk);
 
-    if (!b || !tag_ptr || !tag_len)
+    if (!b || !tag_ptr || !tag_len || !h)
         goto err;
 
     // A precomputed lookup table to speed up selection of tags
@@ -296,7 +332,6 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     }
 
     hashes h32 = H32_INIT;
-
     const uint32_t crc32_start = crc32(0L, Z_NULL, 0);
 
     fp = sam_open_format(fn, "r", &ga->in);
@@ -312,8 +347,6 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         goto err;
 
     int r;
-    uint64_t count = 0;
-
     while ((r = sam_read1(fp, hdr, b)) >= 0) {
         // TODO: configurable filter
         if (b->core.flag & o->excl_flags)
@@ -349,25 +382,58 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
         // flag + seq + aux tags
         uint32_t crc_aux;
+	uint8_t *RGZ = NULL;
         if (hash_aux(b, &aux_ks, ntags, tags, tag_ptr, tag_len,
-                     tag_keep, crc_seq, &crc_aux) < 0)
+                     tag_keep, crc_seq, &crc_aux, &RGZ) < 0)
             goto err;
 
         // Aggregate hashes
-        update_hashes(&h32, crc_seq, crc_name, crc_qual, crc_aux);
+        update_hashes(b->core.flag & BAM_FQCFAIL, &h32,
+		      crc_seq, crc_name, crc_qual, crc_aux);
 
-        count++;
+	if (RGZ) {
+	    hashes *h32p;
+
+	    // create func
+	    int ret;
+	    khiter_t k = kh_get(chk, h, (char *)RGZ);
+	    if (k == kh_end(h)) {
+		char *rgz_;
+		k = kh_put(chk, h, rgz_ = strdup((char *)RGZ), &ret);
+		if (ret < 0)
+		    goto err;
+		hashes_init(&kh_value(h, k));
+	    }
+	    h32p = &kh_value(h, k);
+
+	    update_hashes(b->core.flag & BAM_FQCFAIL, h32p,
+			  crc_seq, crc_name, crc_qual, crc_aux);
+	}
     }
 
-    printf("Count          %"PRIu64"\n", count);
-    printf("Flag+Seq       %08"PRIx64"\n", h32.seq);
-    printf("Name+Flag+Seq  %08"PRIx64"\n", h32.name);
-    printf("Flag+Seq+Qual  %08"PRIx64"\n", h32.qual);
-    printf("Flag+Seq+Aux   %08"PRIx64"\n", h32.aux);
-    puts("");
+    // Report hashes
+    printf("Group       QC           count    flag+seq       +name       +qual"
+	   "        +aux\n");
+    dump_hashes(&h32,  "all");
+    for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
+	if (!kh_exist(h, k))
+	    continue;
 
-    if (r <= -1)
+	dump_hashes(&kh_value(h, k), kh_key(h, k));
+
+    }
+
+//    printf("Count          %"PRIu64"\n", h32.count);
+//    printf("Flag+Seq       %08"PRIx64"\n", h32.seq);
+//    printf("Name+Flag+Seq  %08"PRIx64"\n", h32.name);
+//    printf("Flag+Seq+Qual  %08"PRIx64"\n", h32.qual);
+//    printf("Flag+Seq+Aux   %08"PRIx64"\n", h32.aux);
+//    puts("");
+
+    if (r < -1) {
+	fprintf(stderr, "r=%d\n", r);
         goto err;
+    }
     if (hdr)
         sam_hdr_destroy(hdr);
 
@@ -381,11 +447,19 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     ks_free(&aux_ks);
     ks_free(&seq_ks);
     ks_free(&qual_ks);
+    for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
+	if (!kh_exist(h, k))
+	    continue;
+
+	free((char *)kh_key(h, k));
+    }
+    kh_destroy(chk, h);
 
     bam_destroy1(b);
     return 0;
 
  err:
+    fprintf(stderr, "FAIL\n");
     if (b)   bam_destroy1(b);
     if (hdr) sam_hdr_destroy(hdr);
     if (fp)  sam_close(fp);
@@ -395,6 +469,16 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     ks_free(&aux_ks);
     ks_free(&seq_ks);
     ks_free(&qual_ks);
+
+    if (h) {
+	for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
+	    if (!kh_exist(h, k))
+		continue;
+
+	    free((char *)kh_key(h, k));
+	}
+	kh_destroy(chk, h);
+    }
 
     return -1;
 }
