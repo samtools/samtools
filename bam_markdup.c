@@ -1045,6 +1045,19 @@ static inline int optical_retag(md_param_t *param, khash_t(duplicates) *dup_hash
 }
 
 
+/* This is based on the fixmate actions for when only one of a pair is present */
+static inline int has_mate(bam1_t *b) {
+    int ret = 0;
+
+    if ((b->core.flag & BAM_FPAIRED) && !(b->core.flag & BAM_FMUNMAP) &&
+       !((b->core.mtid == -1) && (b->core.mpos == -1))) {
+        ret = 1;
+    }
+
+    return ret;
+}
+
+
 /* Check all duplicates of the highest quality read (the "original") for consistancy.  Also
    pre-calculate any values for use in check_duplicate_chain later.
    Returns 0 on success, >0 on coordinate reading error (program can continue) or
@@ -1118,7 +1131,7 @@ static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *
             uint8_t *data;
             char *dup_type;
             int is_opt = 0;
-            int current_paired = (current->b->core.flag & BAM_FPAIRED) && !(current->b->core.flag & BAM_FMUNMAP);
+            int current_paired = has_mate(current->b);
 
             if ((data = bam_aux_get(current->b, "dt"))) {
                 if ((dup_type = bam_aux2Z(data))) {
@@ -1202,7 +1215,7 @@ static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_has
         while (curr < end_name_match) {
             size_t count = curr;
             check_t *current = &list->c[curr];
-            int current_paired = (current->b->core.flag & BAM_FPAIRED) && !(current->b->core.flag & BAM_FMUNMAP);
+            int current_paired = has_mate(current->b);
 
             while (++count < end_name_match && (list->c[count].x - current->x <= param->opt_dist)) {
                 // while close enough along the x coordinate
@@ -1224,7 +1237,7 @@ static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_has
 
                 // optical duplicates
                 int chk_dup = 0;
-                int chk_paired = (chk->b->core.flag & BAM_FPAIRED) && !(chk->b->core.flag & BAM_FMUNMAP);
+                int chk_paired = has_mate(chk->b);
 
                 if (current_paired != chk_paired) {
                     if (!chk_paired) {
@@ -1688,7 +1701,7 @@ static int bam_mark_duplicates(md_param_t *param) {
 
 
             // look at the pairs first
-            if ((in_read->b->core.flag & BAM_FPAIRED) && !(in_read->b->core.flag & BAM_FMUNMAP)) {
+            if (has_mate(in_read->b)) {
                 int ret, mate_tmp;
                 key_data_t pair_key;
                 key_data_t single_key;
@@ -1716,7 +1729,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                     // look at singles only for duplication marking
                     bp = &kh_val(single_hash, k);
 
-                    if (!(bp->p->b->core.flag & BAM_FPAIRED) || (bp->p->b->core.flag & BAM_FMUNMAP)) {
+                    if (!has_mate(bp->p->b)) {
                        // singleton will always be marked duplicate even if
                        // scores more than one read of the pair
                         bam1_t *dup = bp->p->b;
@@ -1861,7 +1874,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                 } else if (ret == 0) { // exists
                     bp = &kh_val(single_hash, k);
 
-                    if ((bp->p->b->core.flag & BAM_FPAIRED) && !(bp->p->b->core.flag & BAM_FMUNMAP)) {
+                    if (has_mate(bp->p->b)) {
                         // if matched against one of a pair just mark as duplicate
 
                         if (param->check_chain) {
