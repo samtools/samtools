@@ -204,6 +204,19 @@ and
 are taken into account.
 .RB "The " -p " option is ignored in this mode."
 .TP
+.BI "--save-counts " FILE
+Save data on the number of records processed, accepted and rejected by any
+filter options to
+.IR FILE .
+The data is stored in JSON format.
+The counts only include records that are processed through the filtering
+options.
+Any records skipped while iterating over regions will not be included,
+so the number processed may be less than the total number of records in the
+file.
+If used with the \fB--fetch-pairs\fR option,
+counts will be given for records processed during the second pass over the data.
+.TP
 .BR -? ", " --help
 Output long help and exit immediately.
 .TP

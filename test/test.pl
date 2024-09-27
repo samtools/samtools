@@ -1129,6 +1129,8 @@ sub querylen
 #   $args->{strip_tags}     hash of tags to strip from alignments (-x)
 #   $args->{min_qlen}       minimum query length to output (-m)
 #
+# Returns record counts before and after filtering.
+#
 # The region list is a reference to an array of region definitions.  Each
 # region definition is itself a reference to an array with between one and
 # three elements - reference, start position and end position.  The positions
@@ -1191,6 +1193,10 @@ sub filter_sam
 
     open(my $sam_in, '<', $in) || die "Couldn't open $in : $!\n";
     open(my $sam_out, '>', $out) || die "Couldn't open $out for writing : $!\n";
+
+    my $total_records = 0;
+    my $output_records = 0;
+
     while (<$sam_in>) {
         chomp;
         if (/^@/) {
@@ -1213,6 +1219,9 @@ sub filter_sam
             print $sam_out "$_\n" || die "Error writing to $out : $!\n";
         } else {
             next if ($no_body);
+
+            $total_records++;
+
             if ($body_filter) {
                 my @sam = split(/\t/, $_);
                 next if ($flags_required
@@ -1264,11 +1273,14 @@ sub filter_sam
                     if ($stripped) { $_ = join("\t", @sam); }
                 }
             }
+
+            $output_records++;
             print $sam_out "$_\n" || die "Error writing to $out : $!\n";
         }
     }
     close($sam_in) || die "Error reading $in : $!\n";
     close($sam_out) || die "Error writing to $out : $!\n";
+    return ($total_records, $output_records);
 }
 
 # Run a samtools subcommand test.  As well as running samtools, various
@@ -1380,12 +1392,50 @@ sub run_view_test
             $res = text_compare($args{out}, $args{compare_text});
         }
     }
+
+    if (!$res && $args{check_save_counts}) {
+        $res = check_saved_counts(@{$args{check_save_counts}});
+    }
+
     if ($res) {
         print "\tFailed command:\n\t@cmd\n\n";
         failed($opts, %args);
     } else {
         passed($opts, %args);
     }
+}
+
+# Check the contents of a file made by the view --save-counts option
+sub check_saved_counts {
+    my ($counts_file, $total, $accepted) = @_;
+    local $/ = undef;
+    open(my $in, '<', $counts_file) || die "Couldn't open $counts_file $!\n";
+    my $content = <$in>;
+    close($in) || die "Error reading $counts_file $!\n";
+    $content =~ s/\r\n/\n/g;
+
+    my ($file_total, $file_accepted, $file_rejected, $trailing_content) =
+        $content =~ m/\{\n
+\s+"records_processed"\ :\ (\d+),\n
+\s+"records_filter_accepted"\ :\ (\d+),\n
+\s+"records_filter_rejected"\ :\ (\d+)\n
+\}\n(.*)/xs;
+
+    my $ok = (defined($file_total) && $file_total == $total
+              && defined($file_accepted) && $file_accepted == $accepted
+              && defined($file_rejected) && $file_rejected == $total - $accepted
+              && !$trailing_content);
+    if (!$ok) {
+        printf(STDERR "\nSaved counts file content differs.  Got:\n%s\n"
+               . "Expected:\n"
+               . "{\n"
+               . "    \"records_processed\" : %d,\n"
+               . "    \"records_filter_accepted\" : %d,\n"
+               . "    \"records_filter_rejected\" : %d\n"
+               . "}\n", $content, $total, $accepted, $total - $accepted);
+        return 1;
+    }
+    return 0;
 }
 
 # Runs a test of the samtools view -s subsampling option.
@@ -2196,17 +2246,29 @@ sub test_view
 
     foreach my $filter (@filter_tests) {
         my $sam_file = "$$opts{tmp}/view.001.$$filter[0].sam";
-        filter_sam($sam_with_ur, $sam_file, $$filter[1]);
+        my ($total, $accepted) = filter_sam($sam_with_ur, $sam_file,
+                                            $$filter[1]);
 
         foreach my $ip (@filter_inputs) {
 
             # Filter test
+            my $expect_fail = $$filter[3];
+            my $count_output = sprintf("%s.test%03d.counts.json", $out, $test);
+            my $save_counts_args = ($expect_fail
+                                    ? [] : ['--save-counts', $count_output]);
+            my $save_counts_params = ($expect_fail ? {} : {
+                check_save_counts => [$count_output, $total, $accepted ]
+                               });
             run_view_test($opts,
                           msg => "$test: Filter @{$$filter[2]} ($$ip[0] input)",
-                          args => ['-h', @{$$filter[2]}, $$ip[1], '--no-PG'],
+                          args => ['-h', @{$$filter[2]},
+                                   @$save_counts_args,
+                                   $$ip[1], '--no-PG'],
                           out => sprintf("%s.test%03d.sam", $out, $test),
                           compare => $sam_file,
-                          expect_fail => $$filter[3]);
+                          expect_fail => $expect_fail,
+                          %$save_counts_params);
+
             $test++;
 
             # Count test
@@ -2216,7 +2278,7 @@ sub test_view
                           out => sprintf("%s.test%03d.count", $out, $test),
                           redirect => 1,
                           compare_count => $sam_file,
-                          expect_fail => $$filter[3]);
+                          expect_fail => $expect_fail);
             $test++;
         }
     }
@@ -2558,30 +2620,39 @@ sub test_view
 
 
     # retrieve reads from a region including their mates
+    my $count_output;
     my $bam = 'test/dat/view.fetch-pairs.bam';
     cmd("$$opts{bin}/samtools index $bam");
 
     $test++;
+    $count_output = sprintf("%s.fetch-pairs.test%03d.counts.json", $out, $test);
     run_view_test($opts,
             msg => "$test: fetch pairs",
-            args => ['--no-PG','--fetch-pairs',$bam,'6:25515943-25515943','6:25020026-25020026','6:25515822-25515822'],
+            args => ['--no-PG', '--save-counts', $count_output,
+                     '--fetch-pairs',$bam,'6:25515943-25515943','6:25020026-25020026','6:25515822-25515822'],
             out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
-            compare_sam => 'test/dat/view.fetch-pairs.expected.sam');
+            compare_sam => 'test/dat/view.fetch-pairs.expected.sam',
+            check_save_counts => [$count_output, 28, 28]);
 
     $test++;
+    $count_output = sprintf("%s.fetch-pairs.test%03d.counts.json", $out, $test);
     run_view_test($opts,
             msg => "$test: fetch pairs",
-            args => ['--no-PG','--fetch-pairs',$bam,'6:25515857-25515857'],
+            args => ['--no-PG', '--save-counts', $count_output,
+                     '--fetch-pairs',$bam,'6:25515857-25515857'],
             out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
-            compare_sam => 'test/dat/view.fetch-pairs.filter0.expected.sam');
+            compare_sam => 'test/dat/view.fetch-pairs.filter0.expected.sam',
+            check_save_counts => [$count_output, 34, 34]);
 
     $test++;
+    $count_output = sprintf("%s.fetch-pairs.test%03d.counts.json", $out, $test);
     run_view_test($opts,
             msg => "$test: fetch pairs",
-            args => ['--no-PG','--fetch-pairs','--exclude-flags','DUP',$bam,'6:25515857-25515857'],
+            args => ['--no-PG', '--save-counts', $count_output,
+                     '--fetch-pairs','--exclude-flags','DUP',$bam,'6:25515857-25515857'],
             out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
-            compare_sam => 'test/dat/view.fetch-pairs.filter1.expected.sam');
-
+            compare_sam => 'test/dat/view.fetch-pairs.filter1.expected.sam',
+            check_save_counts => [$count_output, 31, 28]);
 }
 
 sub gen_head_output
