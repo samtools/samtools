@@ -7,6 +7,8 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
     - name: Set up MSYS2 MinGW-W64
       uses: msys2/setup-msys2@v2
       with:
@@ -25,14 +27,10 @@ jobs:
     - name: Clone htslib
       shell: msys2 {0}
       run: |
-        # Todo 4th arg to track commit message of htslib#PRNUM to
-        # check out a specific htslib PR instead.
-        # Other useful vars:
-        # GITHUB_BASE_REF:  e.g. "develop"
-        # GITHUB_HEAD_REF:  e.g. "my-PR-feature" (aka GITHUB_REF_NAME?)
         export PATH="$PATH:/mingw64/bin:/c/Program Files/Git/bin"
         export MSYSTEM=MINGW64
-        .ci_helpers/clone "https://github.com/${GITHUB_REPOSITORY_OWNER}/htslib" htslib "${GITHUB_REF_NAME}"
+        htslib_pr=`git log -2 --format='%s' | sed -n 's/.*htslib#\([0-9]*\).*/\1/p'`
+        .ci_helpers/clone ${GITHUB_REPOSITORY_OWNER} htslib htslib ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME} $htslib_pr
         pushd .
         cd htslib
         autoreconf -i

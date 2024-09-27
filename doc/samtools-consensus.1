@@ -402,7 +402,7 @@ parameters they are equivalent to.
 .IP -
 Create a modified FASTA reference that has a 1:1 coordinate correspondence with the original reference used in alignment.
 .EX 2
-samtools consensus -a --show-ins no in.bam -o ref.fa
+samtools consensus -a --show-ins no --show-del yes in.bam -o ref.fa
 .EE
 
 .IP -
