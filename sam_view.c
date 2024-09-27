@@ -37,6 +37,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/faidx.h"
 #include "htslib/khash.h"
 #include "htslib/kstring.h"
+#include "htslib/hfile.h"
 #include "htslib/thread_pool.h"
 #include "htslib/hts_expr.h"
 #include "samtools.h"
@@ -85,8 +86,10 @@ typedef struct samview_settings {
     sam_hdr_t *header;
     samFile *in, *out, *un_out;
     int64_t count;
+    int64_t processed;
     int is_count;
     char *fn_in, *fn_idx_in, *fn_out, *fn_fai, *fn_un_out, *fn_out_idx, *fn_un_out_idx;
+    char *fn_counts;
     int fetch_pairs, nreglist;
     hts_reglist_t *reglist;
     int sanitize;
@@ -671,13 +674,17 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
              k = kh_get(names,mate_names,bam_get_qname(rec));
              if ( k != kh_end(mate_names) ) drop = 0;
         }
+        if ( drop )
+            continue;
         int p = 0;
-        if (!drop && (p=process_aln(conf->header, rec, conf))== 0) {
+        conf->processed++;
+        if ((p=process_aln(conf->header, rec, conf)) == 0) {
             if (adjust_tags(conf->header, rec, conf) != 0)
                 goto out;
             if (check_sam_write1(conf->out, conf->header, rec, conf->fn_out,
                                  &write_error) < 0)
                 goto out;
+            conf->count++;
         }
         if (p < 0)
             goto out;
@@ -707,6 +714,7 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
 // Common code for processing and writing a record
 static inline int process_one_record(samview_settings_t *conf, bam1_t *b,
                                      int *write_error) {
+    conf->processed++;
     if (conf->sanitize)
         if (bam_sanitize(conf->header, b, conf->sanitize) < 0)
             return -1;
@@ -815,6 +823,48 @@ static void aux_list_free(samview_settings_t *settings) {
         kh_destroy(aux_exists, settings->remove_tag);
 }
 
+static int write_counts_to_file(samview_settings_t *settings) {
+    kstring_t text = KS_INITIALIZE;
+    hFILE *outfile = NULL;
+    int ret = -1;
+    int r = ksprintf(&text,
+                     "{\n"
+                     "    \"records_processed\" : %"PRId64",\n"
+                     "    \"records_filter_accepted\" : %"PRId64",\n"
+                     "    \"records_filter_rejected\" : %"PRId64"\n"
+                     "}\n",
+                     settings->processed, settings->count,
+                     settings->processed - settings->count);
+    if (r < 0) {
+        print_error_errno("view", "failed to make read counts text");
+        goto out;
+    }
+    outfile = hopen(settings->fn_counts, "w");
+    if (!outfile) {
+        print_error_errno("view", "failed to open \"%s\"", settings->fn_counts);
+        goto out;
+    }
+    if (hwrite(outfile, ks_c_str(&text), ks_len(&text)) != ks_len(&text)) {
+        print_error_errno("view", "failed to write to \"%s\"",
+                          settings->fn_counts);
+        goto out;
+    }
+    r = hclose(outfile);
+    outfile = NULL;
+    if (r < 0) {
+        print_error_errno("view", "error on closing \"%s\"",
+                          settings->fn_counts);
+        goto out;
+    }
+    ret = 0;
+
+ out:
+    ks_free(&text);
+    if (outfile)
+        hclose_abruptly(outfile);
+    return ret;
+}
+
 int main_samview(int argc, char *argv[])
 {
     samview_settings_t settings;
@@ -872,6 +922,7 @@ int main_samview(int argc, char *argv[])
         {"remove-flags", required_argument, NULL, LONGOPT('r')},
         {"remove-tag", required_argument, NULL, 'x'},
         {"require-flags", required_argument, NULL, 'f'},
+        {"save-counts", required_argument, NULL, LONGOPT('c')},
         {"subsample", required_argument, NULL, LONGOPT('s')},
         {"subsample-seed", required_argument, NULL, LONGOPT('S')},
         {"tag", required_argument, NULL, 'd'},
@@ -935,6 +986,7 @@ int main_samview(int argc, char *argv[])
             settings.count_rf |= SAM_SEQ;
             break;
         case 'c': settings.is_count = 1; break;
+        case LONGOPT('c'): settings.fn_counts = optarg; break;
         case 'S': break;
         case 'b': out_format = "b"; break;
         case 'C': out_format = "c"; break;
@@ -1457,6 +1509,11 @@ view_end:
         }
     }
 
+    if (settings.fn_counts && ret == 0) {
+        if (write_counts_to_file(&settings) < 0)
+            ret = EXIT_FAILURE;
+    }
+
     // close files, free and return
     if (settings.in) check_sam_close("view", settings.in, settings.fn_in, "standard input", &ret);
     if (settings.out) check_sam_close("view", settings.out, settings.fn_out, "standard output", &ret);
@@ -1525,6 +1582,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -H, --header-only          Print SAM header only (no alignments)\n"
 "      --no-header            Print SAM alignment records only [default]\n"
 "  -c, --count                Print only the count of matching records\n"
+"      --save-counts FILE     Write counts of passed/failed records to FILE\n"
 "  -o, --output FILE          Write output to FILE [standard output]\n"
 "  -U, --unoutput FILE, --output-unselected FILE\n"
 "                             Output reads not selected by filters to FILE\n"
