@@ -818,8 +818,23 @@ sub plot_qualities
             set output "$$args{img}"
             unset key
             unset colorbox
+
+            # Perceptually uniform heatmap "plasma" by Nathaniel J. Smith & Stefan van der Walt
+            # used in Python's matplotlib:  https://github.com/BIDS/colormap/blob/master/colormaps.py
+            # Values from:  https://github.com/Gnuplotting/gnuplot-palettes/blob/master/plasma.pal
+            # Dark end squished to make low values more distinguishable.
             set palette model RGB
-            set palette defined (1 '#000066', 8 '#0000ff', 24 '#00ffff', 40 '#ffff00', 56 '#ff0000', 64 '#ffffff')
+            set palette defined ( \\
+                 0 '#0c0887' \\
+              ,  5 '#4b03a1' \\
+              , 10 '#7d03a8' \\
+              , 20 '#a82296' \\
+              , 30 '#cb4679' \\
+              , 40 '#e56b5d' \\
+              , 50 '#f89441' \\
+              , 60 '#fdc328' \\
+              , 70 '#f0f921' )
+
             set cbrange [0:$max]
             set yrange  [0:$ncycles]
             set xrange  [0:$nquals]
