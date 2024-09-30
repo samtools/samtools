@@ -40,7 +40,6 @@ DEALINGS IN THE SOFTWARE.  */
 TODO
 - Mechanisms for merging checksums together.  Eg merging two read-groups into
   a new file.
-- Make tags configurable
 - More components so we can checksum also any combo.  Eg CIGAR, MAPQ,
   RNEXT/PNEXT/TLEN, etc.  This provides a route to detecting more types of
   data loss. (Also see bam_mate.c:bam_sanitize() function)
@@ -70,8 +69,11 @@ TODO
 #endif
 
 typedef struct {
-    int incl_flags, req_flags, excl_flags;  // BAM flags filtering
+    int req_flags, excl_flags;  // BAM flags filtering
     int rev_comp;
+    char *tag_str;
+    char **tags;  // parsed and split tag_str
+    int ntags;
 } opts;
 
 // FIXME: qual+33 is a pain, but only for the benefit of compatability with
@@ -257,7 +259,7 @@ void hashes_init(hashes *h32) {
  *        -1 on error
  */
 int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
-             const char *tag_ids[],
+             char **tag_ids,
              uint8_t **tag_ptr, size_t *tag_len,
              short (*tag_keep)[125],
              uint32_t crc_seq, uint32_t *crc_aux,
@@ -310,8 +312,10 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     samFile *fp = NULL;
     sam_hdr_t *hdr = NULL;
     bam1_t *b = bam_init1();
-    static const char *tags[] = {"BC","FI","QT","RT","TC"};
-    const int ntags = sizeof(tags) / sizeof(*tags);
+    //static const char *tags[] = {"BC","FI","QT","RT","TC"};
+    //const int ntags = sizeof(tags) / sizeof(*tags);
+    char **tags = o->tags;
+    int ntags = o->ntags;
     uint8_t **tag_ptr = calloc(ntags, sizeof(*tag_ptr));
     size_t   *tag_len = calloc(ntags, sizeof(*tag_len));
     kstring_t aux_ks  = KS_INITIALIZE;
@@ -351,8 +355,10 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
     int r;
     while ((r = sam_read1(fp, hdr, b)) >= 0) {
-        // TODO: configurable filter
         if (b->core.flag & o->excl_flags)
+            continue;
+
+        if ((b->core.flag & o->req_flags) != o->req_flags)
             continue;
 
         // 8 bits of flag corresponding to original instrument data
@@ -415,8 +421,8 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     }
 
     // Report hashes
-    printf("Group       QC           count    flag+seq       +name       +qual"
-	   "        +aux\n");
+    printf("Group       QC           count    flag+seq    +name       +qual"
+	   "       +aux(%s)\n", o->tag_str);
     dump_hashes(&h32,  "all");
     for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
 	if (!kh_exist(h, k))
@@ -465,39 +471,104 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
 void usage_exit(FILE *fp, int ret) {
     fprintf(stderr, "Usage: samtools checksum [options] [file]\n");
+    fprintf(stderr, "Options:\n\
+  -F, --exclude-flags FLAG    Filter if any FLAG is present [0x900]\n\
+  -f, --require-flags FLAG    Filter unless all FLAGs are present [0]\n\
+  -c, --no-rev-comp           Do not reverse-complement sequences\n\
+  -t, --tags STR[,STR]        Select tags to checksum [BC,FI,QT,RT,TC]\n");
+    fprintf(fp, "\nGlobal options:\n");
+    sam_global_opt_help(fp, "-.---@-.");
     exit(ret);
+}
+
+int parse_tags(opts *o) {
+    // Count
+    int nt = 0;
+    for (char *t = o->tag_str; *t; t++) {
+        nt++;
+        char *l = t;
+        while (*t && *t != ',')
+            t++;
+        if (t-l != 2) {
+            fprintf(stderr, "Bad tag string.  Should be XX,YY,ZZ syntax\n");
+            return 1;
+        }
+        if (!*t)
+            break;
+    }
+
+    // Split by tag
+    o->ntags = nt;
+    o->tags = calloc(nt, sizeof(*o->tags));
+    if (!o->tags)
+        return 1;
+
+    nt = 0;
+    for (char *t = o->tag_str; *t; t++, nt++) {
+        o->tags[nt] =  t;
+        while (*t && *t != ',')
+            t++;
+        if (!*t)
+            break;
+    }
+
+    return 0;
 }
 
 int main_checksum(int argc, char **argv) {
     opts opts = {
-        .incl_flags   = 0xffff,
         .req_flags    = 0,
         .excl_flags   = BAM_FSECONDARY | BAM_FSUPPLEMENTARY,
         .rev_comp     = 1,
+        .tag_str      = "BC,FI,QT,RT,TC"
     };
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 'I', '-', '-', '.', '@'),
-        {"--excl-flags",    required_argument, NULL, 'F'},
         {"--exclude-flags", required_argument, NULL, 'F'},
         {"--require-flags", required_argument, NULL, 'f'},
-        {"--incl-flags",    required_argument, NULL, 1},
-        {"--include-flags", required_argument, NULL, 1},
+        {"--tags",          required_argument, NULL, 't'},
+        {"--no-rev-comp",   no_argument,       NULL, 'c'},
         {NULL, 0, NULL, 0}
     };
 
+    if (argc == 1 && isatty(STDIN_FILENO))
+        usage_exit(stdout, EXIT_SUCCESS);
+
     int c;
-    while ((c = getopt_long(argc, argv, "@:f:F:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "@:f:F:t:c", lopts, NULL)) >= 0) {
         switch (c) {
-        case 'F': opts.excl_flags = atoi(optarg); break;
-        case 'f': opts.req_flags  = atoi(optarg); break;
-        case  1 : opts.incl_flags = atoi(optarg); break;
-        default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+        case 'F':
+            if ((opts.excl_flags = bam_str2flag(optarg)) < 0) {
+                print_error("checksum", "could not parse flag %s", optarg);
+                return 1;
+            }
+            break;
+        case 'f':
+            if ((opts.req_flags  = bam_str2flag(optarg)) < 0) {
+                print_error("checksum", "could not parse flag %s", optarg);
+                return 1;
+            }
+            break;
+        case 't':
+            opts.tag_str = optarg;
+            break;
+        case 'c':
+            opts.rev_comp = 0;
+            break;
+        default:
+            if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0)
+                break;
             /* else fall-through */
         case '?':
             usage_exit(stderr, EXIT_FAILURE);
         }
+    }
+
+    if (!opts.tags) {
+        if (parse_tags(&opts) < 0)
+            return 1;
     }
 
     int ret = 0;
