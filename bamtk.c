@@ -196,7 +196,7 @@ static void usage(FILE *fp)
 "     phase          phase heterozygotes\n"
 "     stats          generate stats (former bamcheck)\n"
 "     ampliconstats  generate amplicon specific stats\n"
-"     checksum       produce checksum on sequence name, sequence and quality\n"
+"     checksum       produce order-agnostic checksums of sequence content\n"
 "\n"
 "  -- Viewing\n"
 "     flags          explain BAM flags\n"

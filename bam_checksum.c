@@ -45,7 +45,6 @@ TODO
   data loss. (Also see bam_mate.c:bam_sanitize() function)
 - Query regions.  When we get differences, this can help bisect the data.
   (If unmapped it's hard, but see "samtools cat -r" for CRAM)
-- Restructure and rename.  "hashes" is vague - maybe chks_t?
 - Remove dead HASH_ADD code.  I don't think it's ever going to be used.
  */
 
@@ -70,7 +69,8 @@ TODO
 
 typedef struct {
     int req_flags, excl_flags;  // BAM flags filtering
-    int rev_comp;
+    int flag_mask, rev_comp, in_order;
+    int check_pos, check_cigar, check_mate;
     char *tag_str;
     char **tags;  // parsed and split tag_str
     int ntags;
@@ -80,6 +80,10 @@ typedef struct {
 // biobambam's bamseqchksum.  It's also wrong for QUAL "*" as it triggers a
 // wraparound and turning from BAM's 0xff-run to ASCII makes no sense in a
 // checksum.
+
+/* ----------------------------------------------------------------------
+ * Utility functions.  Possible candidates for moving to htslib?
+ */
 
 #if 1
 // Nibble at a time.  This could be sped up further.  Eg see htslib's simd.c.
@@ -176,6 +180,11 @@ void fill_seq_qual(opts *o, bam1_t *b, uint8_t *restrict seq_buf,
 }
 #endif
 
+
+/* ----------------------------------------------------------------------
+ * Checksum aggregation
+ */
+
 /*
  * The hash is multiplicative within a finite field, modulo PRIME.
  * We need to avoid zeros, and the data type has to be large enough to ensure
@@ -201,51 +210,77 @@ typedef struct {
     uint64_t name[2];  // name + flag + seq
     uint64_t qual[2];  // flag + seq + qual
     uint64_t aux[2];   // flag + seq + aux
+    uint64_t pos[2];   // flag + seq + chr/pos
+    uint64_t cigar[2]; // flag + seq + cigar
+    uint64_t mate[2];  // flag + seq + rnext/pnext/tlen
     uint64_t count[2];
-} hashes;
+} sums_t;
 
-KHASH_MAP_INIT_STR(chk, hashes)
+typedef struct {
+    uint32_t seq;
+    uint32_t name;
+    uint32_t qual;
+    uint32_t aux;
+    uint32_t pos;
+    uint32_t cigar;
+    uint32_t mate;
+} crcs_t;
+
+KHASH_MAP_INIT_STR(chk, sums_t)
 
 void
-update_hashes(int qcfail, hashes *h32,
-	      uint32_t s, uint32_t n, uint32_t q, uint32_t a) {
-    h32->seq[0]  = update_hash(h32->seq[0],  s);
-    h32->name[0] = update_hash(h32->name[0], n);
-    h32->qual[0] = update_hash(h32->qual[0], q);
-    h32->aux[0]  = update_hash(h32->aux[0],  a);
+sums_update(int qcfail, sums_t *h32, const crcs_t *c) {
+    h32->seq[0]  = update_hash(h32->seq[0],  c->seq);
+    h32->name[0] = update_hash(h32->name[0], c->name);
+    h32->qual[0] = update_hash(h32->qual[0], c->qual);
+    h32->aux[0]  = update_hash(h32->aux[0],  c->aux);
+    h32->pos[0]  = update_hash(h32->pos[0],  c->pos);
+    h32->cigar[0]= update_hash(h32->cigar[0],c->cigar);
+    h32->mate[0] = update_hash(h32->mate[0], c->mate);
     h32->count[0]++;
 
     if (!qcfail) {
-	h32->seq[1]  = update_hash(h32->seq[1],  s);
-	h32->name[1] = update_hash(h32->name[1], n);
-	h32->qual[1] = update_hash(h32->qual[1], q);
-	h32->aux[1]  = update_hash(h32->aux[1],  a);
+	h32->seq[1]  = update_hash(h32->seq[1],  c->seq);
+	h32->name[1] = update_hash(h32->name[1], c->name);
+	h32->qual[1] = update_hash(h32->qual[1], c->qual);
+	h32->aux[1]  = update_hash(h32->aux[1],  c->aux);
+        h32->pos[1]  = update_hash(h32->pos[1],  c->pos);
+        h32->cigar[1]= update_hash(h32->cigar[1],c->cigar);
+        h32->mate[1] = update_hash(h32->mate[1], c->mate);
 	h32->count[1]++;
     }
 }
 
-void dump_hashes(hashes *h32, const char *set) {
-    printf("%-10s  all   %12"PRIu64"    %08"PRIx64"    %08"PRIx64
-	   "    %08"PRIx64"    %08"PRIx64"\n", set, h32->count[0],
-	   h32->seq[0], h32->name[0], h32->qual[0], h32->aux[0]);
-    printf("%-10s  pass  %12"PRIu64"    %08"PRIx64"    %08"PRIx64
-	   "    %08"PRIx64"    %08"PRIx64"\n", set, h32->count[1],
-	   h32->seq[1], h32->name[1], h32->qual[1], h32->aux[1]);
+void sums_report(opts *o, sums_t *h32, const char *set) {
+    for (int i = 0; i < 2; i++) {
+        char *pass[] = {"all", "pass"};
+        printf("%-10s %-4s %10"PRIu64"  %08"PRIx64"  %08"PRIx64
+               "  %08"PRIx64"  %08"PRIx64, set, pass[i], h32->count[i],
+	       h32->seq[i], h32->name[i], h32->qual[i], h32->aux[i]);
+        if (o->check_pos)
+            printf("  %08"PRIx64, h32->pos[i]);
+        if (o->check_cigar)
+            printf("  %08"PRIx64, h32->cigar[i]);
+        if (o->check_mate)
+            printf("  %08"PRIx64, h32->mate[i]);
+        printf("\n");
+    }
 }
 
-#ifdef HASH_ADD
-#  define H32_INIT {0}
-#else
-#  define H32_INIT {{1,1},{1,1},{1,1},{1,1},{0,0}}
-#endif
-
-void hashes_init(hashes *h32) {
+void sums_init(sums_t *h32) {
     h32->seq[0]   = h32->seq[1]   = 1;
     h32->name[0]  = h32->name[1]  = 1;
     h32->qual[0]  = h32->qual[1]  = 1;
     h32->aux[0]   = h32->aux[1]   = 1;
+    h32->pos[0]   = h32->pos[1]   = 1;
+    h32->cigar[0] = h32->cigar[1] = 1;
+    h32->mate[0]  = h32->mate[1]  = 1;
     h32->count[0] = h32->count[1] = 0;
 }
+
+/* ----------------------------------------------------------------------
+ * Main checksumming algorithm
+ */
 
 /*
  * Produces a concatenated string of aux tags in <ID><TYPE><VAL> binary
@@ -324,6 +359,11 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     khash_t(chk) *h = kh_init(chk);
     int ret = -1;
 
+#undef HTS_LITTLE_ENDIAN
+#ifndef HTS_LITTLE_ENDIAN
+    kstring_t cigar_ks = KS_INITIALIZE;
+#endif
+
     if (!b || !tag_ptr || !tag_len || !h)
         goto err;
 
@@ -338,8 +378,9 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         tag_keep[tags[i][0]-'0'][tags[i][1]-'0'] = i+1;
     }
 
-    hashes h32 = H32_INIT;
-    const uint32_t crc32_start = crc32(0L, Z_NULL, 0);
+    sums_t h32;
+    sums_init(&h32);
+    uint32_t crc32_start = crc32(0L, Z_NULL, 0);
 
     fp = sam_open_format(fn, "r", &ga->in);
     if (!fp) {
@@ -355,14 +396,22 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
     int r;
     while ((r = sam_read1(fp, hdr, b)) >= 0) {
+        crcs_t c;
+
         if (b->core.flag & o->excl_flags)
             continue;
 
         if ((b->core.flag & o->req_flags) != o->req_flags)
             continue;
 
+        if (o->in_order) {
+            uint8_t order[4];
+            u32_to_le(h32.count[0], order);
+            crc32_start = crc32(0L, order, 4);
+        }
+
         // 8 bits of flag corresponding to original instrument data
-        uint8_t flags = b->core.flag & (BAM_FPAIRED | BAM_FREAD1 | BAM_FREAD2);
+        uint8_t flags = b->core.flag & o->flag_mask;
 
         // Copy sequence out from nibble to base, and reverse complement
         // seq / qual if required.  Qual is +33 (ASCII format) only for
@@ -375,7 +424,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
         // flag + seq
         uint32_t crc = crc32(crc32_start, &flags, 1);
-        uint32_t crc_seq = crc32(crc, (uint8_t *)seq_ks.s, b->core.l_qseq);
+        c.seq = crc32(crc, (uint8_t *)seq_ks.s, b->core.l_qseq);
 
         // name + flag + seq.
         // flag + seq + name would be faster, but bamseqchksum does this.
@@ -383,25 +432,54 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         crc = crc32(crc32_start, (uint8_t *)bam_get_qname(b),
                     b->core.l_qname - b->core.l_extranul);
         crc = crc32(crc, &flags, 1);
-        uint32_t crc_name = crc32(crc, (uint8_t *)seq_ks.s, b->core.l_qseq);
+        c.name = crc32(crc, (uint8_t *)seq_ks.s, b->core.l_qseq);
 
         // flag + seq + qual
-        uint32_t crc_qual = crc32(crc_seq, (uint8_t *)qual_ks.s,
-                                  b->core.l_qseq);
+        c.qual = crc32(c.seq, (uint8_t *)qual_ks.s, b->core.l_qseq);
 
         // flag + seq + aux tags
-        uint32_t crc_aux;
 	uint8_t *RGZ = NULL;
         if (hash_aux(b, &aux_ks, ntags, tags, tag_ptr, tag_len,
-                     tag_keep, crc_seq, &crc_aux, &RGZ) < 0)
+                     tag_keep, c.seq, &c.aux, &RGZ) < 0)
             goto err;
 
-        // Aggregate hashes
-        update_hashes(b->core.flag & BAM_FQCFAIL, &h32,
-		      crc_seq, crc_name, crc_qual, crc_aux);
+        // + chr + pos
+        if (o->check_pos) {
+            uint8_t chr_pos[12];
+            u32_to_le(b->core.tid, chr_pos);
+            u64_to_le(b->core.pos, chr_pos+4);
+            c.pos = crc32(c.seq, chr_pos, 12);
+        }
+
+        // + mate rnext/pnext/tlen
+        if (o->check_mate) {
+            uint8_t mate[4+8+8];
+            u32_to_le(b->core.mtid, mate);
+            u64_to_le(b->core.mpos, mate+4);
+            u64_to_le(b->core.isize, mate+12);
+            c.mate = crc32(c.seq, mate, 12);
+        }
+
+        // + cigar
+        if (o->check_cigar) {
+            uint8_t *cigar = (uint8_t *)bam_get_cigar(b);
+#ifndef HTS_LITTLE_ENDIAN
+            if (ks_resize(&cigar_ks, 4 * b->core.n_cigar) < 0)
+                goto err;
+            uint32_t *cig32 = bam_get_cigar(b);
+            cigar = (uint8_t *)cigar_ks.s;
+
+            for (int i = 0; i < b->core.n_cigar; i++)
+                u32_to_le(cig32[i], cigar + 4*i);
+#endif
+            c.cigar = crc32(c.seq, cigar, 4 * b->core.n_cigar);
+        }
+
+        // Aggregate checksum hashes
+        sums_update(b->core.flag & BAM_FQCFAIL, &h32, &c);
 
 	if (RGZ) {
-	    hashes *h32p;
+	    sums_t *h32p;
 
 	    // create func
 	    int ret;
@@ -411,24 +489,31 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 		k = kh_put(chk, h, rgz_ = strdup((char *)RGZ), &ret);
 		if (ret < 0)
 		    goto err;
-		hashes_init(&kh_value(h, k));
+		sums_init(&kh_value(h, k));
 	    }
 	    h32p = &kh_value(h, k);
 
-	    update_hashes(b->core.flag & BAM_FQCFAIL, h32p,
-			  crc_seq, crc_name, crc_qual, crc_aux);
+	    sums_update(b->core.flag & BAM_FQCFAIL, h32p, &c);
 	}
     }
 
     // Report hashes
-    printf("Group       QC           count    flag+seq    +name       +qual"
-	   "       +aux(%s)\n", o->tag_str);
-    dump_hashes(&h32,  "all");
+    printf("# Checksum for file: %s\n", fn);
+    printf("# Aux tags:          %s\n", o->tag_str);
+    printf("\n# Group    QC        count  flag+seq  +name     +qual     +aux    ");
+    if (o->check_pos)
+        printf("  +chr/pos");
+    if (o->check_cigar)
+        printf("  +cigar  ");
+    if (o->check_mate)
+        printf("  +mate   ");
+    printf("\n");
+    sums_report(o, &h32,  "all");
     for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
 	if (!kh_exist(h, k))
 	    continue;
 
-	dump_hashes(&kh_value(h, k), kh_key(h, k));
+	sums_report(o, &kh_value(h, k), kh_key(h, k));
 
     }
 
@@ -455,6 +540,9 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     ks_free(&aux_ks);
     ks_free(&seq_ks);
     ks_free(&qual_ks);
+#ifndef HTS_LITTLE_ENDIAN
+    ks_free(&cigar_ks);
+#endif
 
     if (h) {
 	for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
@@ -474,8 +562,13 @@ void usage_exit(FILE *fp, int ret) {
     fprintf(stderr, "Options:\n\
   -F, --exclude-flags FLAG    Filter if any FLAG is present [0x900]\n\
   -f, --require-flags FLAG    Filter unless all FLAGs are present [0]\n\
+  -b, --flag-mask             BAM FLAGs to use in checksums [0x0c1]\n\
   -c, --no-rev-comp           Do not reverse-complement sequences\n\
-  -t, --tags STR[,STR]        Select tags to checksum [BC,FI,QT,RT,TC]\n");
+  -t, --tags STR[,STR]        Select tags to checksum [BC,FI,QT,RT,TC]\n\
+  -O, --in-order              Use order-specific checksumming [off]\n\
+  -P, --check-pos             Also checksum CHR / POS[off]\n\
+  -C, --check-cigar           Also checksum CIGAR [off]\n\
+  -M, --check_mate            Also checksum PNEXT / RNEXT / TLEN [off]\n");
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@-.");
     exit(ret);
@@ -519,7 +612,9 @@ int main_checksum(int argc, char **argv) {
     opts opts = {
         .req_flags    = 0,
         .excl_flags   = BAM_FSECONDARY | BAM_FSUPPLEMENTARY,
+        .flag_mask    = BAM_FPAIRED | BAM_FREAD1 | BAM_FREAD2,
         .rev_comp     = 1,
+        .check_pos    = 0,
         .tag_str      = "BC,FI,QT,RT,TC"
     };
 
@@ -528,8 +623,13 @@ int main_checksum(int argc, char **argv) {
         SAM_OPT_GLOBAL_OPTIONS('-', 'I', '-', '-', '.', '@'),
         {"--exclude-flags", required_argument, NULL, 'F'},
         {"--require-flags", required_argument, NULL, 'f'},
+        {"--flag-mask",     required_argument, NULL, 'b'},
         {"--tags",          required_argument, NULL, 't'},
         {"--no-rev-comp",   no_argument,       NULL, 'c'},
+        {"--in-order",      no_argument,       NULL, 'O'},
+        {"--check-pos",     no_argument,       NULL, 'P'},
+        {"--check-cigar",   no_argument,       NULL, 'C'},
+        {"--check-mate",    no_argument,       NULL, 'M'},
         {NULL, 0, NULL, 0}
     };
 
@@ -537,8 +637,11 @@ int main_checksum(int argc, char **argv) {
         usage_exit(stdout, EXIT_SUCCESS);
 
     int c;
-    while ((c = getopt_long(argc, argv, "@:f:F:t:c", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:", lopts, NULL)) >= 0) {
         switch (c) {
+        case 'O':
+            opts.in_order = 1;
+            break;
         case 'F':
             if ((opts.excl_flags = bam_str2flag(optarg)) < 0) {
                 print_error("checksum", "could not parse flag %s", optarg);
@@ -550,6 +653,21 @@ int main_checksum(int argc, char **argv) {
                 print_error("checksum", "could not parse flag %s", optarg);
                 return 1;
             }
+            break;
+        case 'b':
+            if ((opts.flag_mask  = bam_str2flag(optarg)) < 0) {
+                print_error("checksum", "could not parse flag %s", optarg);
+                return 1;
+            }
+            break;
+        case 'P':
+            opts.check_pos = 1;
+            break;
+        case 'C':
+            opts.check_cigar = 1;
+            break;
+        case 'M':
+            opts.check_mate = 1;
             break;
         case 't':
             opts.tag_str = optarg;
@@ -578,6 +696,8 @@ int main_checksum(int argc, char **argv) {
     } else {
         ret = checksum(&ga, &opts, "-") < 0;
     }
+
+    free(opts.tags);
 
     return ret;
 }
