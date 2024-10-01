@@ -594,7 +594,8 @@ void usage_exit(FILE *fp, int ret) {
   -P, --check-pos             Also checksum CHR / POS[off]\n\
   -C, --check-cigar           Also checksum MAPQ / CIGAR [off]\n\
   -M, --check_mate            Also checksum PNEXT / RNEXT / TLEN [off]\n\
-  -z, --sanitize FLAGS        Perform sanity checks and fix records [off]\n");
+  -z, --sanitize FLAGS        Perform sanity checks and fix records [off]\n\
+  -a                          Check all: equiv to -PCMOc -b 0xfff -f0 -F0\n");
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@-.");
     exit(ret);
@@ -640,8 +641,11 @@ int main_checksum(int argc, char **argv) {
         .excl_flags   = BAM_FSECONDARY | BAM_FSUPPLEMENTARY,
         .flag_mask    = BAM_FPAIRED | BAM_FREAD1 | BAM_FREAD2,
         .rev_comp     = 1,
-        .check_pos    = 0,
         .tag_str      = "BC,FI,QT,RT,TC",
+        .check_pos    = 0,
+        .check_cigar  = 0,
+        .check_mate   = 0,
+        .in_order     = 0,
         .sanitize     = 0
     };
 
@@ -665,7 +669,7 @@ int main_checksum(int argc, char **argv) {
         usage_exit(stdout, EXIT_SUCCESS);
 
     int c;
-    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:a", lopts, NULL)) >= 0) {
         switch (c) {
         case 'O':
             opts.in_order = 1;
@@ -707,6 +711,20 @@ int main_checksum(int argc, char **argv) {
             if ((opts.sanitize = bam_sanitize_options(optarg)) < 0)
                 return 1;
             break;
+
+        case 'a':
+            // ALL: a shorthand for a bunch of options to checksum the entire
+            // file contents.  TODO: we still need tag wildcards.
+            opts.req_flags = 0;
+            opts.excl_flags = 0;
+            opts.flag_mask = -1;
+            opts.rev_comp = 0;
+            opts.in_order = 1;
+            opts.check_pos = 1;
+            opts.check_cigar = 1;
+            opts.check_mate = 1;
+            break;
+
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0)
                 break;
