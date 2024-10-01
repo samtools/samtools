@@ -595,7 +595,7 @@ void usage_exit(FILE *fp, int ret) {
   -C, --check-cigar           Also checksum MAPQ / CIGAR [off]\n\
   -M, --check_mate            Also checksum PNEXT / RNEXT / TLEN [off]\n\
   -z, --sanitize FLAGS        Perform sanity checks and fix records [off]\n\
-  -a                          Check all: equiv to -PCMOc -b 0xfff -f0 -F0\n");
+  -a                          Check all: -PCMOc -b 0xfff -f0 -F0 -z all,cigarx\n");
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@-.");
     exit(ret);
@@ -723,6 +723,7 @@ int main_checksum(int argc, char **argv) {
             opts.check_pos = 1;
             opts.check_cigar = 1;
             opts.check_mate = 1;
+            opts.sanitize = FIX_ALL | FIX_CIGARX;
             break;
 
         default:
