@@ -550,6 +550,19 @@ Modifies CIGAR fields, either by adding soft-clips for reads that
 overlap the end of the reference or by clearing it for unmapped
 reads.
 .TP
+cigdup
+Canonicalises CIGAR by collapsing neighbouring elements with identical
+opcodes (provided the length field does not extend beyond 28-bits
+which is problematic for BAM).  So for example 2M 3M becomes 5M, with
+spaces added for clarity only.
+.TP
+cigarx
+Replaces CIGAR "=" and "X" codes with "M".  While "=" and "X" are
+valid codes, they are not supported by CRAM so this can aid validation
+and also improve support by some third party tools that do not cope
+with "=" and "X".  Note this implicitly also enables \fBcigdup\fR so
+10=1X9= becomes 10M1M9M which then becomes 20M.
+.TP
 aux
 For unmapped data, some auxiliary fields are meaningless and will be
 removed.  These include NM, MD, CG and SM.
@@ -559,10 +572,12 @@ Perform no sanity fixing.  This is the default
 .TP
 on
 Sanitize data in a way that guarantees the same sort order.  This is
-everything except for \fBpos\fR.
+everything except for \fBpos\fR as it cannot be checked and
+\fBcigarx\fR as it is not erroneous data.
 .TP
 all
-All sanitizing options, including \fBpos\fR.
+All sanitizing options except \fBcigarx\fR, including \fBpos\fR.
+Combine with \fBall,cigarx\fR to perform the "=" and "X" replacement too.
 .RE
 
 .TP

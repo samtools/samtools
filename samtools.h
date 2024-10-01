@@ -32,18 +32,20 @@ DEALINGS IN THE SOFTWARE.  */
 const char *samtools_version(void);
 
 /* BAM sanitizer options */
-#define FIX_POS   2
-#define FIX_MQUAL 4
-#define FIX_UNMAP 8
-#define FIX_CIGAR 16
-#define FIX_AUX   32
+#define FIX_POS     2
+#define FIX_MQUAL   4
+#define FIX_UNMAP   8
+#define FIX_CIGAR   16
+#define FIX_AUX     32
+#define FIX_CIGDUP  64
+#define FIX_CIGARX  128
 
 // default for position sorted data
-#define FIX_ON (FIX_MQUAL|FIX_UNMAP|FIX_CIGAR|FIX_AUX)
-#define FIX_ALL 255
+#define FIX_ON (FIX_MQUAL|FIX_UNMAP|FIX_CIGAR|FIX_AUX|FIX_CIGDUP)
+#define FIX_ALL 127
 
-// Parses a comma-separated list of "pos", "mqual", "unmap", "cigar", and "aux"
-// keywords for the bam sanitizer.
+// Parses a comma-separated list of "pos", "mqual", "unmap", "cigar", "cigdup",
+// "cigarx" and "aux" keywords for the bam sanitizer.
 int bam_sanitize_options(const char *str);
 
 // Sanitize a BAM record, using FIX_* bit flags as defined above.
