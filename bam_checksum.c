@@ -230,24 +230,35 @@ typedef struct {
 KHASH_MAP_INIT_STR(chk, sums_t)
 
 void
-sums_update(int qcfail, sums_t *h32, const crcs_t *c) {
-    h32->seq[0]  = update_hash(h32->seq[0],  c->seq);
-    h32->name[0] = update_hash(h32->name[0], c->name);
-    h32->qual[0] = update_hash(h32->qual[0], c->qual);
-    h32->aux[0]  = update_hash(h32->aux[0],  c->aux);
-    h32->pos[0]  = update_hash(h32->pos[0],  c->pos);
-    h32->cigar[0]= update_hash(h32->cigar[0],c->cigar);
-    h32->mate[0] = update_hash(h32->mate[0], c->mate);
+sums_update(int qcfail, sums_t *h32, const crcs_t *c, uint64_t count) {
+    uint32_t count_crc = 0;
+    if (count) {
+        uint8_t c[8];
+        u64_to_le(h32->count[0], c);
+        count_crc = crc32(0L, c, 8);
+    }
+    h32->seq[0]  = update_hash(h32->seq[0],  count_crc ^ c->seq);
+    h32->name[0] = update_hash(h32->name[0], count_crc ^ c->name);
+    h32->qual[0] = update_hash(h32->qual[0], count_crc ^ c->qual);
+    h32->aux[0]  = update_hash(h32->aux[0],  count_crc ^ c->aux);
+    h32->pos[0]  = update_hash(h32->pos[0],  count_crc ^ c->pos);
+    h32->cigar[0]= update_hash(h32->cigar[0],count_crc ^ c->cigar);
+    h32->mate[0] = update_hash(h32->mate[0], count_crc ^ c->mate);
     h32->count[0]++;
 
     if (!qcfail) {
-	h32->seq[1]  = update_hash(h32->seq[1],  c->seq);
-	h32->name[1] = update_hash(h32->name[1], c->name);
-	h32->qual[1] = update_hash(h32->qual[1], c->qual);
-	h32->aux[1]  = update_hash(h32->aux[1],  c->aux);
-        h32->pos[1]  = update_hash(h32->pos[1],  c->pos);
-        h32->cigar[1]= update_hash(h32->cigar[1],c->cigar);
-        h32->mate[1] = update_hash(h32->mate[1], c->mate);
+        if (count) {
+            uint8_t c[8];
+            u64_to_le(h32->count[1], c);
+            count_crc = crc32(0L, c, 8);
+        }
+	h32->seq[1]  = update_hash(h32->seq[1],  count_crc ^ c->seq);
+	h32->name[1] = update_hash(h32->name[1], count_crc ^ c->name);
+	h32->qual[1] = update_hash(h32->qual[1], count_crc ^ c->qual);
+	h32->aux[1]  = update_hash(h32->aux[1],  count_crc ^ c->aux);
+        h32->pos[1]  = update_hash(h32->pos[1],  count_crc ^ c->pos);
+        h32->cigar[1]= update_hash(h32->cigar[1],count_crc ^ c->cigar);
+        h32->mate[1] = update_hash(h32->mate[1], count_crc ^ c->mate);
 	h32->count[1]++;
     }
 }
@@ -417,12 +428,6 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         if ((b->core.flag & o->req_flags) != o->req_flags)
             continue;
 
-        if (o->in_order) {
-            uint8_t order[4];
-            u32_to_le(h32.count[0], order);
-            crc32_start = crc32(0L, order, 4);
-        }
-
         if (o->sanitize)
             bam_sanitize(hdr, b, o->sanitize);
 
@@ -498,7 +503,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         }
 
         // Aggregate checksum hashes
-        sums_update(b->core.flag & BAM_FQCFAIL, &h32, &c);
+        sums_update(b->core.flag & BAM_FQCFAIL, &h32, &c, o->in_order);
 
 	if (RGZ) {
 	    sums_t *h32p;
@@ -515,7 +520,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	    }
 	    h32p = &kh_value(h, k);
 
-	    sums_update(b->core.flag & BAM_FQCFAIL, h32p, &c);
+	    sums_update(b->core.flag & BAM_FQCFAIL, h32p, &c, o->in_order);
 	}
     }
 
