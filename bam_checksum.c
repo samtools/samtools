@@ -58,6 +58,7 @@ TODO
 
 #include "sam_opts.h"
 #include "sam_utils.h"
+#include "samtools.h"
 
 // TODO: consider adding hts_crc32 to htslib, similar to our hts_md5
 // This exposes libdeflate from htslib instead of punting the configure /
@@ -69,7 +70,7 @@ TODO
 
 typedef struct {
     int req_flags, excl_flags;  // BAM flags filtering
-    int flag_mask, rev_comp, in_order;
+    int flag_mask, rev_comp, in_order, sanitize;
     int check_pos, check_cigar, check_mate;
     char *tag_str;
     char **tags;  // parsed and split tag_str
@@ -253,6 +254,7 @@ sums_update(int qcfail, sums_t *h32, const crcs_t *c) {
 
 void sums_report(opts *o, sums_t *h32, const char *set) {
     for (int i = 0; i < 2; i++) {
+        uint64_t hc = 1;
         char *pass[] = {"all", "pass"};
         printf("%-10s %-4s %10"PRIu64"  %08"PRIx64"  %08"PRIx64
                "  %08"PRIx64"  %08"PRIx64, set, pass[i], h32->count[i],
@@ -263,7 +265,22 @@ void sums_report(opts *o, sums_t *h32, const char *set) {
             printf("  %08"PRIx64, h32->cigar[i]);
         if (o->check_mate)
             printf("  %08"PRIx64, h32->mate[i]);
-        printf("\n");
+
+        // Merge all
+        hc = update_hash(hc, h32->count[i]>>32);
+        hc = update_hash(hc, h32->count[i] & 0xffffffff);
+        hc = update_hash(hc, h32->seq[i]);
+        hc = update_hash(hc, h32->name[i]);
+        hc = update_hash(hc, h32->seq[i]);
+        hc = update_hash(hc, h32->aux[i]);
+        if (o->check_pos)
+            hc = update_hash(hc, h32->pos[i]);
+        if (o->check_cigar)
+            hc = update_hash(hc, h32->cigar[i]);
+        if (o->check_mate)
+            hc = update_hash(hc, h32->mate[i]);
+
+        printf("  %08"PRIx64"\n", hc);
     }
 }
 
@@ -300,7 +317,8 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
              uint32_t crc_seq, uint32_t *crc_aux,
 	     uint8_t **RGZ) {
     size_t aux_len = bam_get_l_aux(b);
-    if (ks_resize(ks, aux_len) < 0)
+    // 1 byte minimum forces a non-NULL pointer so CRC works
+    if (ks_resize(ks, aux_len+1) < 0)
         return -1;
     uint8_t *aux_ptr = (uint8_t *)ks->s;
 
@@ -336,9 +354,7 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
         }
     }
 
-    *crc_aux = aux_ptr > (uint8_t *)ks->s
-        ? crc32(crc_seq, (uint8_t *)ks->s, aux_ptr - (uint8_t *)ks->s)
-        : crc_seq;
+    *crc_aux = crc32(crc_seq, (uint8_t *)ks->s, aux_ptr - (uint8_t *)ks->s);
 
     return 0;
 }
@@ -347,8 +363,6 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     samFile *fp = NULL;
     sam_hdr_t *hdr = NULL;
     bam1_t *b = bam_init1();
-    //static const char *tags[] = {"BC","FI","QT","RT","TC"};
-    //const int ntags = sizeof(tags) / sizeof(*tags);
     char **tags = o->tags;
     int ntags = o->ntags;
     uint8_t **tag_ptr = calloc(ntags, sizeof(*tag_ptr));
@@ -359,13 +373,12 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     khash_t(chk) *h = kh_init(chk);
     int ret = -1;
 
-#undef HTS_LITTLE_ENDIAN
+    if (!b || !tag_ptr || !tag_len || !h)
+        goto err;
+
 #ifndef HTS_LITTLE_ENDIAN
     kstring_t cigar_ks = KS_INITIALIZE;
 #endif
-
-    if (!b || !tag_ptr || !tag_len || !h)
-        goto err;
 
     // A precomputed lookup table to speed up selection of tags
     short tag_keep[125][125] = {0};
@@ -410,14 +423,20 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
             crc32_start = crc32(0L, order, 4);
         }
 
+        if (o->sanitize)
+            bam_sanitize(hdr, b, o->sanitize);
+
         // 8 bits of flag corresponding to original instrument data
         uint8_t flags = b->core.flag & o->flag_mask;
 
         // Copy sequence out from nibble to base, and reverse complement
         // seq / qual if required.  Qual is +33 (ASCII format) only for
         // compatibility with biobambam's bamseqchksum tool.
-        if (ks_resize(&seq_ks, b->core.l_qseq) < 0 ||
-            ks_resize(&qual_ks, b->core.l_qseq) < 0)
+        // The +1 here and elsewhere is to force zero byte allocations to
+        // always return a pointer rather than NULL.  This in turn prevents
+        // crc32() from considering it as a reinitialisation.
+        if (ks_resize(&seq_ks, b->core.l_qseq+1) < 0 ||
+            ks_resize(&qual_ks, b->core.l_qseq+1) < 0)
             goto err;
 
         fill_seq_qual(o, b, (uint8_t *)seq_ks.s, (uint8_t *)qual_ks.s);
@@ -460,11 +479,11 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
             c.mate = crc32(c.seq, mate, 12);
         }
 
-        // + cigar
+        // + cigar + mapq
         if (o->check_cigar) {
             uint8_t *cigar = (uint8_t *)bam_get_cigar(b);
 #ifndef HTS_LITTLE_ENDIAN
-            if (ks_resize(&cigar_ks, 4 * b->core.n_cigar) < 0)
+            if (ks_resize(&cigar_ks, 4 * b->core.n_cigar+1) < 0)
                 goto err;
             uint32_t *cig32 = bam_get_cigar(b);
             cigar = (uint8_t *)cigar_ks.s;
@@ -472,7 +491,10 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
             for (int i = 0; i < b->core.n_cigar; i++)
                 u32_to_le(cig32[i], cigar + 4*i);
 #endif
-            c.cigar = crc32(c.seq, cigar, 4 * b->core.n_cigar);
+            uint8_t mapq[4];
+            u32_to_le(b->core.qual, mapq);
+            c.cigar = crc32(c.seq, mapq, 4);
+            c.cigar = crc32(c.cigar, cigar, 4 * b->core.n_cigar);
         }
 
         // Aggregate checksum hashes
@@ -500,6 +522,9 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     // Report hashes
     printf("# Checksum for file: %s\n", fn);
     printf("# Aux tags:          %s\n", o->tag_str);
+    char *s=bam_flag2str(o->flag_mask);
+    printf("# BAM flags:         %s\n", s);
+    free(s);
     printf("\n# Group    QC        count  flag+seq  +name     +qual     +aux    ");
     if (o->check_pos)
         printf("  +chr/pos");
@@ -507,7 +532,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         printf("  +cigar  ");
     if (o->check_mate)
         printf("  +mate   ");
-    printf("\n");
+    printf("  combined\n");
     sums_report(o, &h32,  "all");
     for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
 	if (!kh_exist(h, k))
@@ -560,15 +585,16 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 void usage_exit(FILE *fp, int ret) {
     fprintf(stderr, "Usage: samtools checksum [options] [file]\n");
     fprintf(stderr, "Options:\n\
-  -F, --exclude-flags FLAG    Filter if any FLAG is present [0x900]\n\
+  -F, --exclude-flags FLAG    Filter if any FLAGs are present [0x900]\n\
   -f, --require-flags FLAG    Filter unless all FLAGs are present [0]\n\
   -b, --flag-mask             BAM FLAGs to use in checksums [0x0c1]\n\
   -c, --no-rev-comp           Do not reverse-complement sequences\n\
   -t, --tags STR[,STR]        Select tags to checksum [BC,FI,QT,RT,TC]\n\
   -O, --in-order              Use order-specific checksumming [off]\n\
   -P, --check-pos             Also checksum CHR / POS[off]\n\
-  -C, --check-cigar           Also checksum CIGAR [off]\n\
-  -M, --check_mate            Also checksum PNEXT / RNEXT / TLEN [off]\n");
+  -C, --check-cigar           Also checksum MAPQ / CIGAR [off]\n\
+  -M, --check_mate            Also checksum PNEXT / RNEXT / TLEN [off]\n\
+  -z, --sanitize FLAGS        Perform sanity checks and fix records [off]\n");
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@-.");
     exit(ret);
@@ -615,7 +641,8 @@ int main_checksum(int argc, char **argv) {
         .flag_mask    = BAM_FPAIRED | BAM_FREAD1 | BAM_FREAD2,
         .rev_comp     = 1,
         .check_pos    = 0,
-        .tag_str      = "BC,FI,QT,RT,TC"
+        .tag_str      = "BC,FI,QT,RT,TC",
+        .sanitize     = 0
     };
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -630,6 +657,7 @@ int main_checksum(int argc, char **argv) {
         {"--check-pos",     no_argument,       NULL, 'P'},
         {"--check-cigar",   no_argument,       NULL, 'C'},
         {"--check-mate",    no_argument,       NULL, 'M'},
+        {"--sanitize",      required_argument, NULL, 'z'},
         {NULL, 0, NULL, 0}
     };
 
@@ -637,7 +665,7 @@ int main_checksum(int argc, char **argv) {
         usage_exit(stdout, EXIT_SUCCESS);
 
     int c;
-    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'O':
             opts.in_order = 1;
@@ -674,6 +702,10 @@ int main_checksum(int argc, char **argv) {
             break;
         case 'c':
             opts.rev_comp = 0;
+            break;
+        case 'z':
+            if ((opts.sanitize = bam_sanitize_options(optarg)) < 0)
+                return 1;
             break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0)
