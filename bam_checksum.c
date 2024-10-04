@@ -91,6 +91,8 @@ typedef struct {
 // That code ought to be expanded upon and exposed from htslib.
 //
 // However this is still 2.4x quicker than the naive implementation below
+// It's now around 8% of CPU for a NovaSeq BAM, so some optimisation is
+// possible but we're at deminishing returns.
 void fill_seq_qual(opts *o, bam1_t *b, uint8_t *restrict seq_buf,
                    uint8_t *restrict qual_buf) {
     // Tables mapping a pair of nibbles to a pair of ASCII bytes
@@ -237,29 +239,18 @@ sums_update(int qcfail, sums_t *h32, const crcs_t *c, uint64_t count) {
         u64_to_le(h32->count[0], c);
         count_crc = crc32(0L, c, 8);
     }
-    h32->seq[0]  = update_hash(h32->seq[0],  count_crc ^ c->seq);
-    h32->name[0] = update_hash(h32->name[0], count_crc ^ c->name);
-    h32->qual[0] = update_hash(h32->qual[0], count_crc ^ c->qual);
-    h32->aux[0]  = update_hash(h32->aux[0],  count_crc ^ c->aux);
-    h32->pos[0]  = update_hash(h32->pos[0],  count_crc ^ c->pos);
-    h32->cigar[0]= update_hash(h32->cigar[0],count_crc ^ c->cigar);
-    h32->mate[0] = update_hash(h32->mate[0], count_crc ^ c->mate);
-    h32->count[0]++;
 
-    if (!qcfail) {
-        if (count) {
-            uint8_t c[8];
-            u64_to_le(h32->count[1], c);
-            count_crc = crc32(0L, c, 8);
-        }
-	h32->seq[1]  = update_hash(h32->seq[1],  count_crc ^ c->seq);
-	h32->name[1] = update_hash(h32->name[1], count_crc ^ c->name);
-	h32->qual[1] = update_hash(h32->qual[1], count_crc ^ c->qual);
-	h32->aux[1]  = update_hash(h32->aux[1],  count_crc ^ c->aux);
-        h32->pos[1]  = update_hash(h32->pos[1],  count_crc ^ c->pos);
-        h32->cigar[1]= update_hash(h32->cigar[1],count_crc ^ c->cigar);
-        h32->mate[1] = update_hash(h32->mate[1], count_crc ^ c->mate);
-	h32->count[1]++;
+    for (int i = 0; i < 2; i++) {
+        h32->seq[i]  = update_hash(h32->seq[i],  count_crc ^ c->seq);
+        h32->name[i] = update_hash(h32->name[i], count_crc ^ c->name);
+        h32->qual[i] = update_hash(h32->qual[i], count_crc ^ c->qual);
+        h32->aux[i]  = update_hash(h32->aux[i],  count_crc ^ c->aux);
+        h32->pos[i]  = update_hash(h32->pos[i],  count_crc ^ c->pos);
+        h32->cigar[i]= update_hash(h32->cigar[i],count_crc ^ c->cigar);
+        h32->mate[i] = update_hash(h32->mate[i], count_crc ^ c->mate);
+        h32->count[i]++;
+        if (qcfail)
+            break;
     }
 }
 
@@ -383,6 +374,9 @@ static int tag_qsort(const void *t1, const void *t2) {
  * Produces a concatenated string of aux tags in <ID><TYPE><VAL> binary
  * representation,  with the tag names and orders defined in tag_ids[],
  * checksums it, and combines it with the flag-seq CRC.
+ * If *tag_str is "*" then we negate tag_ids and encode everything but those.
+ * This is a bit trickier as we can no longer use the order specified and
+ * instead encode in ASCII sorted order instead.
  *
  * If the read-group is found in the RG:Z: aux, this is returned in
  * the *RGZ ptr (which points to the <VAL> field.
@@ -407,27 +401,10 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
     memset(tag_len, 0, ntags * sizeof(*tag_len));
 
     if (*tag_str == '*') {
-#if 0
-        // All tags bar specific ones, in the order they occur
-        while (aux) {
-            if (aux[-2] == 'R' && aux[-1] == 'G' && aux[0] == 'Z' && RGZ)
-                *RGZ = aux+1;
-            aux_next = bam_aux_next(b, aux);
-            if (tag_keep[aux[-2]-'0'][aux[-1]-'0'] == 0) {
-                size_t tag_len = aux_next
-                    ? aux_next - aux
-                    : b->data + b->l_data - aux + 2;
-                memcpy(aux_ptr, aux-2, tag_len);
-                aux_ptr += tag_len;
-            }
-
-            aux = aux_next;
-        }
-#else
         // All tags bar specific ones, in alphanumeric order.
         // Select the tags by name on pass 1, then sort by name to get
         // a canonical order, and finally concatenate tags in order.
-        int *tag_id = calloc(aux_len, sizeof(*tag_id));
+        int *tag_id = malloc(aux_len/4 * sizeof(*tag_id));
         ntags = 0;
         while (aux) {
             if (aux[-2] == 'R' && aux[-1] == 'G' && aux[0] == 'Z' && RGZ)
@@ -453,7 +430,6 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
         // lexicalgraphical order.  Stitch together
         for (int i = 0; i < ntags; i++) {
             int orig_pos = tag_id[i]&0xffff;
-//            fprintf(stderr, "tag %.3s %d\n", tag_ptr[orig_pos], (int)tag_len[orig_pos]);
             size_t len = tag_len[orig_pos];
             uint8_t *tag = canonical_tag(tag_ptr[orig_pos], &len);
             memcpy(aux_ptr, tag, len);
@@ -461,8 +437,6 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
         }
 
         free(tag_id);
-#endif
-
     } else {
         // Selected tags only, in the order requested
         while (aux) {
@@ -736,7 +710,7 @@ void usage_exit(FILE *fp, int ret) {
   -z, --sanitize FLAGS        Perform sanity checks and fix records [off]\n\
   -a                          Check all: -PCMOc -b 0xfff -f0 -F0 -z all,cigarx\n");
     fprintf(fp, "\nGlobal options:\n");
-    sam_global_opt_help(fp, "-.---@-.");
+    sam_global_opt_help(fp, "-.---@--");
     exit(ret);
 }
 
