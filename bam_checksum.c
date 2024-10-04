@@ -310,6 +310,70 @@ void sums_init(sums_t *h32) {
  * Main checksumming algorithm
  */
 
+/*
+ * Canonicalised integer tags.
+ * We can store CcSsIi for unsigned and signed char, short and integer.
+ * (This can also happen for B arrays, but we don't yet canonicalise these.)
+ *
+ * Unfortunately some BAMs have degenerate encs, eg XAs\000\001 for XA:s:1.
+ * Also CRAM's computed NM can change, so NM:i:0 could be NMc0 or NMC0.
+ *
+ * Rules: unsigned if >= 0
+ *        smallest encoding necessary
+ *
+ * Returns a tag pointer (possibly local static, or original ptr),
+ *         plus rewrites *tag_len if needed.
+ */
+uint8_t *canonical_tag(uint8_t *tag, size_t *tag_len) {
+    switch (tag[2]) {
+        static uint8_t ct[7], code;
+        int64_t val;
+
+    case 'C': case 'c':
+    case 'S': case 's':
+    case 'I': case 'i':
+        val = bam_aux2i(tag+2);
+        if (val >= 0) {
+            if (val <= 255) code = 'C';
+            else if (val <= 65535) code = 'S';
+            else code = 'i';
+        } else {
+            if (val >= -128 && val <= 127) code = 'c';
+            else if (val >= -32768 && val <= 32767) code = 's';
+            else code = 'i';
+        }
+        if (code == tag[2])
+            return tag;
+
+        // Otherwise rewrite it;
+        ct[0] = tag[0];
+        ct[1] = tag[1];
+        ct[2] = code;
+        switch (code) {
+        case 'C': case 'c':
+            ct[3] = val;
+            *tag_len = 4;
+            break;
+
+        case 'S': case 's':
+            // Don't care about sign as it's defined anyway
+            u16_to_le(val, tag+3);
+            *tag_len = 5;
+            break;
+
+        case 'I': case 'i':
+            // Don't care about sign as it's defined anyway
+            u32_to_le(val, tag+3);
+            *tag_len = 7;
+            break;
+        }
+        return ct;
+
+    default:
+        return tag;
+    }
+}
+
 // Qsort callback, by integer
 static int tag_qsort(const void *t1, const void *t2) {
     return *(const int *)t1 - *(const int *)t2;
@@ -365,8 +429,6 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
         // a canonical order, and finally concatenate tags in order.
         int *tag_id = calloc(aux_len, sizeof(*tag_id));
         ntags = 0;
-        uint8_t **tag_ptr2 = calloc(aux_len, sizeof(*tag_ptr2));
-        size_t *tag_len2 = calloc(aux_len, sizeof(*tag_len2));
         while (aux) {
             if (aux[-2] == 'R' && aux[-1] == 'G' && aux[0] == 'Z' && RGZ)
                 *RGZ = aux+1;
@@ -376,8 +438,8 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
                     ? aux_next - aux
                     : b->data + b->l_data - aux + 2;
                 tag_id[ntags] = (aux[-2]<<24) | (aux[-1]<<16) | ntags;
-                tag_ptr2[ntags] = aux-2;
-                tag_len2[ntags] = tag_sz;
+                tag_ptr[ntags] = aux-2;
+                tag_len[ntags] = tag_sz;
                 ntags++;
             }
 
@@ -391,13 +453,14 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
         // lexicalgraphical order.  Stitch together
         for (int i = 0; i < ntags; i++) {
             int orig_pos = tag_id[i]&0xffff;
-            memcpy(aux_ptr, tag_ptr2[orig_pos], tag_len2[orig_pos]);
-            aux_ptr += tag_len2[orig_pos];
+//            fprintf(stderr, "tag %.3s %d\n", tag_ptr[orig_pos], (int)tag_len[orig_pos]);
+            size_t len = tag_len[orig_pos];
+            uint8_t *tag = canonical_tag(tag_ptr[orig_pos], &len);
+            memcpy(aux_ptr, tag, len);
+            aux_ptr += len;
         }
 
         free(tag_id);
-        free(tag_ptr2);
-        free(tag_len2);
 #endif
 
     } else {
@@ -426,8 +489,10 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
         // Pass 2: copy tags in the order we requested
         for (int i = 0; i < ntags; i++) {
             if (tag_len[i]) {
-                memcpy(aux_ptr, tag_ptr[i], tag_len[i]);
-                aux_ptr += tag_len[i];
+                size_t len = tag_len[i];
+                uint8_t *tag = canonical_tag(tag_ptr[i], &len);
+                memcpy(aux_ptr, tag, len);
+                aux_ptr += len;
             }
         }
     }
@@ -443,8 +508,8 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     bam1_t *b = bam_init1();
     char **tags = o->tags;
     int ntags = o->ntags;
-    uint8_t **tag_ptr = calloc(ntags, sizeof(*tag_ptr));
-    size_t   *tag_len = calloc(ntags, sizeof(*tag_len));
+    uint8_t **tag_ptr = calloc(65536, sizeof(*tag_ptr));
+    size_t   *tag_len = calloc(65536, sizeof(*tag_len));
     kstring_t aux_ks  = KS_INITIALIZE;
     kstring_t seq_ks  = KS_INITIALIZE;
     kstring_t qual_ks = KS_INITIALIZE;
@@ -798,6 +863,7 @@ int main_checksum(int argc, char **argv) {
             opts.check_cigar = 1;
             opts.check_mate = 1;
             opts.sanitize = FIX_ALL | FIX_CIGARX;
+            opts.tag_str = "*";
             break;
 
         default:
