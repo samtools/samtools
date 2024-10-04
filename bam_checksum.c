@@ -72,8 +72,8 @@ typedef struct {
     int req_flags, excl_flags;  // BAM flags filtering
     int flag_mask, rev_comp, in_order, sanitize;
     int check_pos, check_cigar, check_mate;
-    char *tag_str;
-    char **tags;  // parsed and split tag_str
+    char *tag_str; // X,Y,Z or "*,X,Y,Z" for negation
+    char **tags;   // parsed and split tag_str
     int ntags;
 } opts;
 
@@ -310,6 +310,11 @@ void sums_init(sums_t *h32) {
  * Main checksumming algorithm
  */
 
+// Qsort callback, by integer
+static int tag_qsort(const void *t1, const void *t2) {
+    return *(const int *)t1 - *(const int *)t2;
+}
+
 /*
  * Produces a concatenated string of aux tags in <ID><TYPE><VAL> binary
  * representation,  with the tag names and orders defined in tag_ids[],
@@ -324,7 +329,7 @@ void sums_init(sums_t *h32) {
 int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
              char **tag_ids,
              uint8_t **tag_ptr, size_t *tag_len,
-             short (*tag_keep)[125],
+             const char *tag_str, short (*tag_keep)[125],
              uint32_t crc_seq, uint32_t *crc_aux,
 	     uint8_t **RGZ) {
     size_t aux_len = bam_get_l_aux(b);
@@ -336,32 +341,94 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
     // Pass 1: find all tags to copy and their lengths
     uint8_t *aux = bam_aux_first(b), *aux_next;
     memset(tag_len, 0, ntags * sizeof(*tag_len));
-    while (aux) {
-	if (aux[-2] == 'R' && aux[-1] == 'G' && aux[0] == 'Z' && RGZ)
-	    *RGZ = aux+1;
-        aux_next = bam_aux_next(b, aux);
-        if (!(aux[-2] >= '0' && aux[-2] <= 'z' &&
-              aux[-1] >= '0' && aux[-2] <= 'z'))
-            continue; // skip illegal tag names
-        int i = tag_keep[aux[-2]-'0'][aux[-1]-'0']-1;
-        if (i>=0) {
-            // found one
-            size_t tag_sz = aux_next
-                ? aux_next - aux
-                : b->data + b->l_data - aux + 2;
 
-            tag_ptr[i] = aux-2;
-            tag_len[i] = tag_sz;
+    if (*tag_str == '*') {
+#if 0
+        // All tags bar specific ones, in the order they occur
+        while (aux) {
+            if (aux[-2] == 'R' && aux[-1] == 'G' && aux[0] == 'Z' && RGZ)
+                *RGZ = aux+1;
+            aux_next = bam_aux_next(b, aux);
+            if (tag_keep[aux[-2]-'0'][aux[-1]-'0'] == 0) {
+                size_t tag_len = aux_next
+                    ? aux_next - aux
+                    : b->data + b->l_data - aux + 2;
+                memcpy(aux_ptr, aux-2, tag_len);
+                aux_ptr += tag_len;
+            }
+
+            aux = aux_next;
+        }
+#else
+        // All tags bar specific ones, in alphanumeric order.
+        // Select the tags by name on pass 1, then sort by name to get
+        // a canonical order, and finally concatenate tags in order.
+        int *tag_id = calloc(aux_len, sizeof(*tag_id));
+        ntags = 0;
+        uint8_t **tag_ptr2 = calloc(aux_len, sizeof(*tag_ptr2));
+        size_t *tag_len2 = calloc(aux_len, sizeof(*tag_len2));
+        while (aux) {
+            if (aux[-2] == 'R' && aux[-1] == 'G' && aux[0] == 'Z' && RGZ)
+                *RGZ = aux+1;
+            aux_next = bam_aux_next(b, aux);
+            if (tag_keep[aux[-2]-'0'][aux[-1]-'0'] == 0) {
+                size_t tag_sz = aux_next
+                    ? aux_next - aux
+                    : b->data + b->l_data - aux + 2;
+                tag_id[ntags] = (aux[-2]<<24) | (aux[-1]<<16) | ntags;
+                tag_ptr2[ntags] = aux-2;
+                tag_len2[ntags] = tag_sz;
+                ntags++;
+            }
+
+            aux = aux_next;
         }
 
-        aux = aux_next;
-    }
+        // Sort
+        qsort(tag_id, ntags, sizeof(*tag_id), tag_qsort);
 
-    // Pass 2: copy tags in the order we requested
-    for (int i = 0; i < ntags; i++) {
-        if (tag_len[i]) {
-            memcpy(aux_ptr, tag_ptr[i], tag_len[i]);
-            aux_ptr += tag_len[i];
+        // Now we have tag_ptr2 in order of occurrence and tag_id in
+        // lexicalgraphical order.  Stitch together
+        for (int i = 0; i < ntags; i++) {
+            int orig_pos = tag_id[i]&0xffff;
+            memcpy(aux_ptr, tag_ptr2[orig_pos], tag_len2[orig_pos]);
+            aux_ptr += tag_len2[orig_pos];
+        }
+
+        free(tag_id);
+        free(tag_ptr2);
+        free(tag_len2);
+#endif
+
+    } else {
+        // Selected tags only, in the order requested
+        while (aux) {
+            if (aux[-2] == 'R' && aux[-1] == 'G' && aux[0] == 'Z' && RGZ)
+                *RGZ = aux+1;
+            aux_next = bam_aux_next(b, aux);
+            if (!(aux[-2] >= '0' && aux[-2] <= 'z' &&
+                  aux[-1] >= '0' && aux[-2] <= 'z'))
+                continue; // skip illegal tag names
+            int i = tag_keep[aux[-2]-'0'][aux[-1]-'0']-1;
+            if (i>=0) {
+                // found one
+                size_t tag_sz = aux_next
+                    ? aux_next - aux
+                    : b->data + b->l_data - aux + 2;
+
+                tag_ptr[i] = aux-2;
+                tag_len[i] = tag_sz;
+            }
+
+            aux = aux_next;
+        }
+
+        // Pass 2: copy tags in the order we requested
+        for (int i = 0; i < ntags; i++) {
+            if (tag_len[i]) {
+                memcpy(aux_ptr, tag_ptr[i], tag_len[i]);
+                aux_ptr += tag_len[i];
+            }
         }
     }
 
@@ -394,12 +461,14 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     // A precomputed lookup table to speed up selection of tags
     short tag_keep[125][125] = {0};
     for (int i = 0; i < ntags; i++) {
-        if (!(tags[i][0] >= '0' && tags[i][0] <= 'z' &&
-              tags[i][1] >= '0' && tags[i][1] <= 'z')) {
-            fprintf(stderr, "[checksum] Illegal tag ID '%.2s'\n", tags[i]);
+        char *t = tags[i];
+        if (t[0] != '*' &&
+            !(t[0] >= '0' && t[0] <= 'z' &&
+              t[1] >= '0' && t[1] <= 'z')) {
+            fprintf(stderr, "[checksum] Illegal tag ID '%.2s'\n", t);
             goto err;
         }
-        tag_keep[tags[i][0]-'0'][tags[i][1]-'0'] = i+1;
+        tag_keep[t[0]-'0'][t[1]-'0'] = i+1;
     }
 
     sums_t h32;
@@ -464,7 +533,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         // flag + seq + aux tags
 	uint8_t *RGZ = NULL;
         if (hash_aux(b, &aux_ks, ntags, tags, tag_ptr, tag_len,
-                     tag_keep, c.seq, &c.aux, &RGZ) < 0)
+                     o->tag_str, tag_keep, c.seq, &c.aux, &RGZ) < 0)
             goto err;
 
         // + chr + pos
@@ -614,7 +683,7 @@ int parse_tags(opts *o) {
         char *l = t;
         while (*t && *t != ',')
             t++;
-        if (t-l != 2) {
+        if (t-l != 2 && !(t-l == 1 && *l == '*')) {
             fprintf(stderr, "Bad tag string.  Should be XX,YY,ZZ syntax\n");
             return 1;
         }
