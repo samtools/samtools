@@ -40,9 +40,6 @@ DEALINGS IN THE SOFTWARE.  */
 TODO
 - Mechanisms for merging checksums together.  Eg merging two read-groups into
   a new file.
-- More components so we can checksum also any combo.  Eg CIGAR, MAPQ,
-  RNEXT/PNEXT/TLEN, etc.  This provides a route to detecting more types of
-  data loss. (Also see bam_mate.c:bam_sanitize() function)
 - Query regions.  When we get differences, this can help bisect the data.
   (If unmapped it's hard, but see "samtools cat -r" for CRAM)
 - Remove dead HASH_ADD code.  I don't think it's ever going to be used.
@@ -75,6 +72,7 @@ typedef struct {
     char *tag_str; // X,Y,Z or "*,X,Y,Z" for negation
     char **tags;   // parsed and split tag_str
     int ntags;
+    int64_t nrec;
 } opts;
 
 // FIXME: qual+33 is a pain, but only for the benefit of compatability with
@@ -630,6 +628,9 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
 	    sums_update(b->core.flag & BAM_FQCFAIL, h32p, &c, o->in_order);
 	}
+
+        if (o->nrec && --o->nrec == 0)
+            break;
     }
 
     // Report hashes
@@ -700,14 +701,15 @@ void usage_exit(FILE *fp, int ret) {
     fprintf(stderr, "Options:\n\
   -F, --exclude-flags FLAG    Filter if any FLAGs are present [0x900]\n\
   -f, --require-flags FLAG    Filter unless all FLAGs are present [0]\n\
-  -b, --flag-mask             BAM FLAGs to use in checksums [0x0c1]\n\
-  -c, --no-rev-comp           Do not reverse-complement sequences\n\
+  -b, --flag-mask FLAG        BAM FLAGs to use in checksums [0x0c1]\n\
+  -c, --no-rev-comp           Do not reverse-complement sequences [off]\n\
   -t, --tags STR[,STR]        Select tags to checksum [BC,FI,QT,RT,TC]\n\
   -O, --in-order              Use order-specific checksumming [off]\n\
-  -P, --check-pos             Also checksum CHR / POS[off]\n\
+  -P, --check-pos             Also checksum CHR / POS [off]\n\
   -C, --check-cigar           Also checksum MAPQ / CIGAR [off]\n\
   -M, --check_mate            Also checksum PNEXT / RNEXT / TLEN [off]\n\
   -z, --sanitize FLAGS        Perform sanity checks and fix records [off]\n\
+  -N INT                      Stop after INT number of records [0]\n\
   -a                          Check all: -PCMOc -b 0xfff -f0 -F0 -z all,cigarx\n");
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@--");
@@ -759,7 +761,8 @@ int main_checksum(int argc, char **argv) {
         .check_cigar  = 0,
         .check_mate   = 0,
         .in_order     = 0,
-        .sanitize     = 0
+        .sanitize     = 0,
+        .nrec         = 0,
     };
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -782,7 +785,7 @@ int main_checksum(int argc, char **argv) {
         usage_exit(stdout, EXIT_SUCCESS);
 
     int c;
-    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:a", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:aN:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'O':
             opts.in_order = 1;
@@ -820,6 +823,10 @@ int main_checksum(int argc, char **argv) {
         case 'c':
             opts.rev_comp = 0;
             break;
+        case 'N':
+            opts.nrec = strtoll(optarg, NULL, 0);
+            break;
+
         case 'z':
             if ((opts.sanitize = bam_sanitize_options(optarg)) < 0)
                 return 1;
