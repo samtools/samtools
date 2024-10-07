@@ -844,7 +844,7 @@ int main_checksum(int argc, char **argv) {
             opts.check_cigar = 1;
             opts.check_mate = 1;
             opts.sanitize = FIX_ALL | FIX_CIGARX;
-            opts.tag_str = "*";
+            opts.tag_str = "*,cF";
             break;
 
         default:
