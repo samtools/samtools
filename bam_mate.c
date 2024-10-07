@@ -503,11 +503,13 @@ int bam_sanitize(sam_hdr_t *h, bam1_t *b, int flags) {
                 } else {
                     cigt[j-1] = bam_cigar_gen(len = last_len + len, op);
                 }
-            } else {
+            } else if (len > 0) {
                 cigt[j++] = cigf[i];
             }
-            last_op  = op;
-            last_len = len;
+            if (len > 0) {
+                last_op  = op;
+                last_len = len;
+            }
         }
 
         if (j != nc) {
