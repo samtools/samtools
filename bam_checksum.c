@@ -73,6 +73,8 @@ typedef struct {
     char **tags;   // parsed and split tag_str
     int ntags;
     int64_t nrec;
+    int verbose;   // whether to show zero count lines
+    int show_qc;   // show pass & fail stats
 } opts;
 
 // FIXME: qual+33 is a pain, but only for the benefit of compatability with
@@ -207,14 +209,14 @@ uint64_t update_hash(uint64_t hash, uint32_t crc) {
 #endif
 
 typedef struct {
-    uint64_t seq[2];   // flag + seq
-    uint64_t name[2];  // name + flag + seq
-    uint64_t qual[2];  // flag + seq + qual
-    uint64_t aux[2];   // flag + seq + aux
-    uint64_t pos[2];   // flag + seq + chr/pos
-    uint64_t cigar[2]; // flag + seq + cigar
-    uint64_t mate[2];  // flag + seq + rnext/pnext/tlen
-    uint64_t count[2];
+    uint64_t seq[3];   // flag + seq
+    uint64_t name[3];  // name + flag + seq
+    uint64_t qual[3];  // flag + seq + qual
+    uint64_t aux[3];   // flag + seq + aux
+    uint64_t pos[3];   // flag + seq + chr/pos
+    uint64_t cigar[3]; // flag + seq + cigar
+    uint64_t mate[3];  // flag + seq + rnext/pnext/tlen
+    uint64_t count[3];
 } sums_t;
 
 typedef struct {
@@ -248,14 +250,17 @@ sums_update(int qcfail, sums_t *h32, const crcs_t *c, uint64_t count) {
         h32->mate[i] = update_hash(h32->mate[i], count_crc ^ c->mate);
         h32->count[i]++;
         if (qcfail)
-            break;
+            i++;  // 0/1 for pass, 0/2 for fail
     }
 }
 
 void sums_report(opts *o, sums_t *h32, const char *set) {
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 1 + 2*o->show_qc; i++) {
         uint64_t hc = 1;
-        char *pass[] = {"all", "pass"};
+        char *pass[] = {"all", "pass", "fail"};
+        if (!o->verbose && !h32->count[i])
+            continue;
+
         printf("%-10s %-4s %10"PRIu64"  %08"PRIx64"  %08"PRIx64
                "  %08"PRIx64"  %08"PRIx64, set, pass[i], h32->count[i],
 	       h32->seq[i], h32->name[i], h32->qual[i], h32->aux[i]);
@@ -285,14 +290,16 @@ void sums_report(opts *o, sums_t *h32, const char *set) {
 }
 
 void sums_init(sums_t *h32) {
-    h32->seq[0]   = h32->seq[1]   = 1;
-    h32->name[0]  = h32->name[1]  = 1;
-    h32->qual[0]  = h32->qual[1]  = 1;
-    h32->aux[0]   = h32->aux[1]   = 1;
-    h32->pos[0]   = h32->pos[1]   = 1;
-    h32->cigar[0] = h32->cigar[1] = 1;
-    h32->mate[0]  = h32->mate[1]  = 1;
-    h32->count[0] = h32->count[1] = 0;
+    for (int i = 0; i < 3; i++) {
+        h32->seq[i]   = 1;
+        h32->name[i]  = 1;
+        h32->qual[i]  = 1;
+        h32->aux[i]   = 1;
+        h32->pos[i]   = 1;
+        h32->cigar[i] = 1;
+        h32->mate[i]  = 1;
+        h32->count[i] = 0;
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -508,8 +515,9 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         tag_keep[t[0]-'0'][t[1]-'0'] = i+1;
     }
 
-    sums_t h32;
+    sums_t h32, noRG;
     sums_init(&h32);
+    sums_init(&noRG);
     uint32_t crc32_start = crc32(0L, Z_NULL, 0);
 
     fp = sam_open_format(fn, "r", &ga->in);
@@ -627,7 +635,9 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	    h32p = &kh_value(h, k);
 
 	    sums_update(b->core.flag & BAM_FQCFAIL, h32p, &c, o->in_order);
-	}
+	} else {
+            sums_update(b->core.flag & BAM_FQCFAIL, &noRG, &c, o->in_order);
+        }
 
         if (o->nrec && --o->nrec == 0)
             break;
@@ -648,6 +658,8 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         printf("  +mate   ");
     printf("  combined\n");
     sums_report(o, &h32,  "all");
+    if (o->verbose || (noRG.count[0]+noRG.count[1]))
+        sums_report(o, &noRG,  "-");
     for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
 	if (!kh_exist(h, k))
 	    continue;
@@ -710,6 +722,8 @@ void usage_exit(FILE *fp, int ret) {
   -M, --check_mate            Also checksum PNEXT / RNEXT / TLEN [off]\n\
   -z, --sanitize FLAGS        Perform sanity checks and fix records [off]\n\
   -N INT                      Stop after INT number of records [0]\n\
+  -q                          Also show QC pass/fail lines\n\
+  -v                          Increase verbosity: show lines with 0 counts\n\
   -a                          Check all: -PCMOc -b 0xfff -f0 -F0 -z all,cigarx\n");
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@--");
@@ -763,6 +777,8 @@ int main_checksum(int argc, char **argv) {
         .in_order     = 0,
         .sanitize     = 0,
         .nrec         = 0,
+        .verbose      = 0,
+        .show_qc      = 0
     };
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -785,7 +801,7 @@ int main_checksum(int argc, char **argv) {
         usage_exit(stdout, EXIT_SUCCESS);
 
     int c;
-    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:aN:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:aN:vq", lopts, NULL)) >= 0) {
         switch (c) {
         case 'O':
             opts.in_order = 1;
@@ -826,6 +842,12 @@ int main_checksum(int argc, char **argv) {
         case 'N':
             opts.nrec = strtoll(optarg, NULL, 0);
             break;
+
+        case 'v':
+            opts.verbose++;
+            break;
+        case 'q':
+            opts.show_qc=1;
 
         case 'z':
             if ((opts.sanitize = bam_sanitize_options(optarg)) < 0)

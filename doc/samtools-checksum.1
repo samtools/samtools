@@ -59,10 +59,11 @@ computed are order agnostic so the same checksums are produced in name
 collated or position sorted output files.
 
 One set of checksums is produced per read-group as well as a combined
-file.  This allows for validation of merging multiple runs and splitting
-pools by their read-group.  The checksums are also reported for
-QC-pass only (indicated by the  lack of the QCFAIL BAM flag), so
-checksums of data identified and removed as contamination can also be tracked.
+file, plus a set for records that have no read-group assigned.  This
+allows for validation of merging multiple runs and splitting pools by
+their read-group.  The checksums are also reported for QC-pass only
+and QC-fail only (indicated by the QCFAIL BAM flag), so checksums of
+data identified and removed as contamination can also be tracked.
 
 All of the above are compatible with Biobambam2's bamseqchksum tool,
 which was the inspiration for this samtools command.
@@ -141,11 +142,8 @@ An example output can be seen below.
 
 # Group    QC        count  flag+seq  +name     +qual     +aux      combined
 all        all    42890086  71169bbb  633fd9f7  2a2e693f  71169bbb  09d03ed4
-all        pass   42890086  71169bbb  633fd9f7  2a2e693f  71169bbb  09d03ed4
 SRR010946  all      262249  2957df86  3b6dcbc9  66be71f7  2957df86  58e89c25
-SRR010946  pass     262249  2957df86  3b6dcbc9  66be71f7  2957df86  58e89c25
 SRR002165  all       97846  47ff17e0  6ff8fc7b  58366bf5  47ff17e0  796eecb0
-SRR002165  pass      97846  47ff17e0  6ff8fc7b  58366bf5  47ff17e0  796eecb0
 [...cut...]
 .EE
 
@@ -237,14 +235,23 @@ Checksum all data.  This is equiavalent to \fB-PCMOc -b 0xfff -f0 -F0
 -z all,cigarx -t *,cF\fR.   It is useful for validating round-trips
 between file formats, such as BAM to CRAM.
 
+.TP
+.B -q
+Also show QC pass and fail rows per read-group.  These are based on
+the QCFAIL BAM flag.
+
+.TP
+.B -v
+Increase verbosity.  At level 1 or higher this also shows rows that
+have zero count values, which can aid machine parsing.
 
 .SH EXAMPLES
 .IP o 2
 To check that an aligned and position sorted file contains the same
 data as the pre-alignment FASTQ:
 .EX 2
-samtools checksum pos-aln.bam
-samtools import -u -1 rg1.fastq.gz -2 rg2.fastq.gz | samtools checksum 
+samtools checksum -q pos-aln.bam
+samtools import -u -1 rg1.fastq.gz -2 rg2.fastq.gz | samtools checksum -q
 .EE
 
 The output for this consists of some human readable comments starting
@@ -266,28 +273,21 @@ Note as no barcode tags exist, the "+aux" column is the same as the
 .IP o 2
 To check round-tripping from BAM to CRAM and back again we can convert
 the BAM to CRAM and then run the checksum on the CRAM file.  This does
-not need explicitly converting back to BAM as htslib will be
-decoding the CRAM and converting it back to the same in-memory
-representation that is utilised in BAM.
+not need explicitly converting back to BAM as htslib will decode the
+CRAM and convert it back to the same in-memory representation that
+is utilised in BAM.
 
 .EX 2
 samtools checksum -a 9827_2#49.1m.bam
 [...cut...]
 samtools view -@8 -C -T $HREF 9827_2#49.1m.bam | samtools checksum -a
 # Checksum for file: -
-.EE
-
-The output will contain more columns, as seen below.
-
-.EX 2
 # Aux tags:          *,cF
 # BAM flags:         PAIRED,PROPER_PAIR,UNMAP,MUNMAP,REVERSE,MREVERSE,READ1,READ2,SECONDARY,QCFAIL,DUP,SUPPLEMENTARY
 
 # Group    QC        count  flag+seq  +name     +qual     +aux      +chr/pos  +cigar    +mate     combined
 all        all       99890  066a0706  0805371d  5506e19f  6b0eec58  60e2347c  09a2c3ba  347a3214  66c5e2de
-all        pass      99890  066a0706  0805371d  5506e19f  6b0eec58  60e2347c  09a2c3ba  347a3214  66c5e2de
 1#49       all       99890  066a0706  0805371d  5506e19f  6b0eec58  60e2347c  09a2c3ba  347a3214  66c5e2de
-1#49       pass      99890  066a0706  0805371d  5506e19f  6b0eec58  60e2347c  09a2c3ba  347a3214  66c5e2de
 .EE
 
 .SH AUTHOR
