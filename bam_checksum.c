@@ -39,9 +39,13 @@ DEALINGS IN THE SOFTWARE.  */
 /*
 TODO
 - Mechanisms for merging checksums together.  Eg merging two read-groups into
-  a new file.
+  a new file. This can be done by calling update_hash on each CRC in the rows
+  (except "combined") to get a new "all" category which would match a merged
+  file checksum.
+
 - Query regions.  When we get differences, this can help bisect the data.
   (If unmapped it's hard, but see "samtools cat -r" for CRAM)
+
 - Remove dead HASH_ADD code.  I don't think it's ever going to be used.
  */
 
@@ -233,25 +237,25 @@ typedef struct {
 KHASH_MAP_INIT_STR(chk, sums_t)
 
 void
-sums_update(int qcfail, sums_t *h32, const crcs_t *c, uint64_t count) {
+sums_update(int qcfail, sums_t *h32, const crcs_t *c, opts *o) {
     uint32_t count_crc = 0;
-    if (count) {
+    if (o->in_order) {
         uint8_t c[8];
         u64_to_le(h32->count[0], c);
         count_crc = crc32(0L, c, 8);
     }
 
-    for (int i = 0; i < 2; i++) {
-        h32->seq[i]  = update_hash(h32->seq[i],  count_crc ^ c->seq);
-        h32->name[i] = update_hash(h32->name[i], count_crc ^ c->name);
-        h32->qual[i] = update_hash(h32->qual[i], count_crc ^ c->qual);
-        h32->aux[i]  = update_hash(h32->aux[i],  count_crc ^ c->aux);
-        h32->pos[i]  = update_hash(h32->pos[i],  count_crc ^ c->pos);
-        h32->cigar[i]= update_hash(h32->cigar[i],count_crc ^ c->cigar);
-        h32->mate[i] = update_hash(h32->mate[i], count_crc ^ c->mate);
-        h32->count[i]++;
+    for (int i = 0, j = 0; i < 1 + o->show_qc; i++, j++) {
+        h32->seq[j]  = update_hash(h32->seq[j],  count_crc ^ c->seq);
+        h32->name[j] = update_hash(h32->name[j], count_crc ^ c->name);
+        h32->qual[j] = update_hash(h32->qual[j], count_crc ^ c->qual);
+        h32->aux[j]  = update_hash(h32->aux[j],  count_crc ^ c->aux);
+        h32->pos[j]  = update_hash(h32->pos[j],  count_crc ^ c->pos);
+        h32->cigar[j]= update_hash(h32->cigar[j],count_crc ^ c->cigar);
+        h32->mate[j] = update_hash(h32->mate[j], count_crc ^ c->mate);
+        h32->count[j]++;
         if (qcfail)
-            i++;  // 0/1 for pass, 0/2 for fail
+            j++;  // 0/1 for pass, 0/2 for fail
     }
 }
 
@@ -619,7 +623,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         }
 
         // Aggregate checksum hashes
-        sums_update(b->core.flag & BAM_FQCFAIL, &h32, &c, o->in_order);
+        sums_update(b->core.flag & BAM_FQCFAIL, &h32, &c, o);
 
 	if (RGZ) {
 	    sums_t *h32p;
@@ -636,9 +640,9 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 	    }
 	    h32p = &kh_value(h, k);
 
-	    sums_update(b->core.flag & BAM_FQCFAIL, h32p, &c, o->in_order);
+	    sums_update(b->core.flag & BAM_FQCFAIL, h32p, &c, o);
 	} else {
-            sums_update(b->core.flag & BAM_FQCFAIL, &noRG, &c, o->in_order);
+            sums_update(b->core.flag & BAM_FQCFAIL, &noRG, &c, o);
         }
 
         if (nrec && --nrec == 0)
@@ -765,6 +769,8 @@ int parse_tags(opts *o) {
     return 0;
 }
 
+/* ----------------------------------------------------------------------
+ */
 int main_checksum(int argc, char **argv) {
     opts opts = {
         .req_flags    = 0,
@@ -856,6 +862,7 @@ int main_checksum(int argc, char **argv) {
             break;
         case 'q':
             opts.show_qc=1;
+            break;
 
         case 'z':
             if ((opts.sanitize = bam_sanitize_options(optarg)) < 0)
