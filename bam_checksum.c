@@ -486,6 +486,56 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
     return 0;
 }
 
+// Qsort callback, by kh_key(h,idx).
+// Needs a global due to the rubbish interface of qsort, but that's fine
+// as we're not multi-threaded.
+static khash_t(chk) *key_qsort_h = NULL;
+static int key_qsort(const void *t1, const void *t2) {
+    return strcmp(kh_key(key_qsort_h, *(const khiter_t *)t1),
+                  kh_key(key_qsort_h, *(const khiter_t *)t2));
+}
+
+int checksum_report(char *fn, opts *o,
+                    sums_t *all, sums_t *noRG, khash_t(chk) *h) {
+    // headers
+    fprintf(o->fp, "# Checksum for file: %s\n", fn);
+    fprintf(o->fp, "# Aux tags:          %s\n", o->tag_str);
+    char *s=bam_flag2str(o->flag_mask);
+    fprintf(o->fp, "# BAM flags:         %s\n", s);
+    free(s);
+    fprintf(o->fp, "\n# Group    QC        count  flag+seq  +name     +qual     +aux    ");
+    if (o->check_pos)
+        fprintf(o->fp, "  +chr/pos");
+    if (o->check_cigar)
+        fprintf(o->fp, "  +cigar  ");
+    if (o->check_mate)
+        fprintf(o->fp, "  +mate   ");
+    fprintf(o->fp, "  combined\n");
+
+    // All and "-" (no RG) lines
+    sums_report(o, all,  "all");
+    if (o->verbose || (noRG->count[0] + noRG->count[1]))
+        sums_report(o, noRG,  "-");
+
+    // Per read-group line
+    int nrgs = 0;
+    khiter_t *rgs = malloc(kh_size(h) * sizeof(*rgs));
+    if (!rgs)
+        return -1;
+
+    for (khiter_t k = kh_begin(h); k != kh_end(h); k++)
+        if (kh_exist(h, k))
+            rgs[nrgs++] = k;
+
+    key_qsort_h = h; // Use a global to avoid extra hash lookups here
+    qsort(rgs, nrgs, sizeof(*rgs), key_qsort);
+    for (int k = 0; k < nrgs; k++)
+        sums_report(o, &kh_value(h, rgs[k]), kh_key(h, rgs[k]));
+    free(rgs);
+
+    return 0;
+}
+
 int checksum(sam_global_args *ga, opts *o, char *fn) {
     samFile *fp = NULL;
     sam_hdr_t *hdr = NULL;
@@ -649,31 +699,6 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
             break;
     }
 
-    // Report hashes
-    fprintf(o->fp, "# Checksum for file: %s\n", fn);
-    fprintf(o->fp, "# Aux tags:          %s\n", o->tag_str);
-    char *s=bam_flag2str(o->flag_mask);
-    fprintf(o->fp, "# BAM flags:         %s\n", s);
-    free(s);
-    fprintf(o->fp, "\n# Group    QC        count  flag+seq  +name     +qual     +aux    ");
-    if (o->check_pos)
-        fprintf(o->fp, "  +chr/pos");
-    if (o->check_cigar)
-        fprintf(o->fp, "  +cigar  ");
-    if (o->check_mate)
-        fprintf(o->fp, "  +mate   ");
-    fprintf(o->fp, "  combined\n");
-    sums_report(o, &h32,  "all");
-    if (o->verbose || (noRG.count[0]+noRG.count[1]))
-        sums_report(o, &noRG,  "-");
-    for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
-        if (!kh_exist(h, k))
-            continue;
-
-        sums_report(o, &kh_value(h, k), kh_key(h, k));
-
-    }
-
     if (r < -1)
         goto err;
 
@@ -684,6 +709,10 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     }
     fp = NULL;
     ret = 0;
+
+    // Report hashes
+    if (checksum_report(fn, o, &h32, &noRG, h) < 0)
+        goto err;
 
  err:
     if (b)   bam_destroy1(b);
