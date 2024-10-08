@@ -1044,6 +1044,47 @@ if it has been explicitly changed already.  Additionally
 \fBbases_per_slice\fR is set to \fB500*seqs_per_slice\fR unless previously
 explicitly set.
 
+.TP
+.B fastq_name2
+FASTQ input only.  Indicates that the names are not the first word in
+the header, but the second.  This is a FASTQ variant commonly used in
+the SRA and ENA archives.
+
+.TP
+.B fastq_casava
+FASTQ input and output only.  The Illumina CASAVA identifiers are
+stored in the second word of the FASTQ header lines and store read
+meta-data.  The CASAVA tag defines the data held in the READ1, READ2
+and QCFAIL flags and the barcode auxiliary tag ("BC" by default).
+This option may be used to both read and write CASAVA identifiers.
+
+.TP
+.BI fastq_barcode= TAG
+FASTQ input and output only.  When the \fBfastq_casava\fR option is
+used, this controls the name of the barcode aux tag to be used. \fITAG\fR
+defaults to "BC" if not specified.
+
+.TP
+.BI fastq_aux= LIST
+FASTQ input and output only.  Processes SAM format auxiliary tags
+following the other fields on the record identifier lines.  If no
+\fB=\fR\fILIST\fR is specified or \fILIST\fR is "1" then all aux tags
+listed are copied to/from the SAM record.  Otherwise it is a comma
+separated list of 2-letter tag types and is used to control which tags
+are processed with any others being omitted.
+
+Note as commas are used to separate options in the \fB--output-fmt\fR
+string detailing file format and options combined together, you will
+need to use the \fB--output-fmt-option\fR option if you want to
+specify a comma separated list of tag types.
+
+.TP
+.B fastq_rnum
+FASTQ output only.  If set, paired reads will have "/1" and "/2"
+appended to their read names.  This has no effect on unpaired reads.
+When reading FASTQ these suffixes are automatically detected
+and processed irrespective of the \fBfastq_rnum\fR option.
+
 .RE
 .PP
 For example:
