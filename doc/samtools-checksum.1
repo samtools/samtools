@@ -226,22 +226,26 @@ Perform data sanitization prior to checksumming.  This is off by
 default.  See samtools view for the \fIFLAG\fR terms accepted.
 
 .TP
-.BI "-N " COUNT
+.BI "-N " COUNT ", --count " COUNT
 Limits the checksumming to the first \fICOUNT\fR records from the file.
 
 .TP
-.B -a
+.BR -a ", " --all
 Checksum all data.  This is equiavalent to \fB-PCMOc -b 0xfff -f0 -F0
 -z all,cigarx -t *,cF\fR.   It is useful for validating round-trips
 between file formats, such as BAM to CRAM.
 
 .TP
-.B -q
+.BR -q ", " --show-qc
 Also show QC pass and fail rows per read-group.  These are based on
 the QCFAIL BAM flag.
 
 .TP
-.B -v
+.BI "-o " FILE ", --output " FILE
+Output checksum report to \fIFILE\fR instead of stdout.
+
+.TP
+.BR -v ", " --verbose
 Increase verbosity.  At level 1 or higher this also shows rows that
 have zero count values, which can aid machine parsing.
 
