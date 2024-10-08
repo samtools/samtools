@@ -494,6 +494,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     kstring_t qual_ks = KS_INITIALIZE;
     khash_t(chk) *h = kh_init(chk);
     int ret = -1;
+    int64_t nrec = o->nrec;
 
     if (!b || !tag_ptr || !tag_len || !h)
         goto err;
@@ -639,7 +640,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
             sums_update(b->core.flag & BAM_FQCFAIL, &noRG, &c, o->in_order);
         }
 
-        if (o->nrec && --o->nrec == 0)
+        if (nrec && --nrec == 0)
             break;
     }
 
@@ -709,7 +710,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 }
 
 void usage_exit(FILE *fp, int ret) {
-    fprintf(stderr, "Usage: samtools checksum [options] [file]\n");
+    fprintf(stderr, "Usage: samtools checksum [options] [file ...]\n");
     fprintf(stderr, "Options:\n\
   -F, --exclude-flags FLAG    Filter if any FLAGs are present [0x900]\n\
   -f, --require-flags FLAG    Filter unless all FLAGs are present [0]\n\
