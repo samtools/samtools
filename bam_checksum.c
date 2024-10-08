@@ -399,7 +399,7 @@ int hash_aux(bam1_t *b, kstring_t *ks, int ntags,
              uint8_t **tag_ptr, size_t *tag_len,
              const char *tag_str, short (*tag_keep)[125],
              uint32_t crc_seq, uint32_t *crc_aux,
-	     uint8_t **RGZ) {
+             uint8_t **RGZ) {
     size_t aux_len = bam_get_l_aux(b);
     // 1 byte minimum forces a non-NULL pointer so CRC works
     if (ks_resize(ks, aux_len+1) < 0)
@@ -582,7 +582,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         c.qual = crc32(c.seq, (uint8_t *)qual_ks.s, b->core.l_qseq);
 
         // flag + seq + aux tags
-	uint8_t *RGZ = NULL;
+        uint8_t *RGZ = NULL;
         if (hash_aux(b, &aux_ks, ntags, tags, tag_ptr, tag_len,
                      o->tag_str, tag_keep, c.seq, &c.aux, &RGZ) < 0)
             goto err;
@@ -625,23 +625,23 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         // Aggregate checksum hashes
         sums_update(b->core.flag & BAM_FQCFAIL, &h32, &c, o);
 
-	if (RGZ) {
-	    sums_t *h32p;
+        if (RGZ) {
+            sums_t *h32p;
 
-	    // create func
-	    int ret;
-	    khiter_t k = kh_get(chk, h, (char *)RGZ);
-	    if (k == kh_end(h)) {
-		char *rgz_;
-		k = kh_put(chk, h, rgz_ = strdup((char *)RGZ), &ret);
-		if (ret < 0)
-		    goto err;
-		sums_init(&kh_value(h, k));
-	    }
-	    h32p = &kh_value(h, k);
+            // create func
+            int ret;
+            khiter_t k = kh_get(chk, h, (char *)RGZ);
+            if (k == kh_end(h)) {
+                char *rgz_;
+                k = kh_put(chk, h, rgz_ = strdup((char *)RGZ), &ret);
+                if (ret < 0)
+                    goto err;
+                sums_init(&kh_value(h, k));
+            }
+            h32p = &kh_value(h, k);
 
-	    sums_update(b->core.flag & BAM_FQCFAIL, h32p, &c, o);
-	} else {
+            sums_update(b->core.flag & BAM_FQCFAIL, h32p, &c, o);
+        } else {
             sums_update(b->core.flag & BAM_FQCFAIL, &noRG, &c, o);
         }
 
@@ -667,10 +667,10 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     if (o->verbose || (noRG.count[0]+noRG.count[1]))
         sums_report(o, &noRG,  "-");
     for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
-	if (!kh_exist(h, k))
-	    continue;
+        if (!kh_exist(h, k))
+            continue;
 
-	sums_report(o, &kh_value(h, k), kh_key(h, k));
+        sums_report(o, &kh_value(h, k), kh_key(h, k));
 
     }
 
@@ -678,7 +678,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         goto err;
 
     if (sam_close(fp) < 0) {
-	fp = NULL;
+        fp = NULL;
         print_error_errno("checksum", "Closing input file \"%s\"", fn);
         goto err;
     }
@@ -700,13 +700,13 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 #endif
 
     if (h) {
-	for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
-	    if (!kh_exist(h, k))
-		continue;
+        for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
+            if (!kh_exist(h, k))
+                continue;
 
-	    free((char *)kh_key(h, k));
-	}
-	kh_destroy(chk, h);
+            free((char *)kh_key(h, k));
+        }
+        kh_destroy(chk, h);
     }
 
     return ret;
