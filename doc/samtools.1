@@ -55,6 +55,8 @@ samtools calmd in.sorted.bam ref.fasta
 .PP
 samtools cat out.bam in1.bam in2.bam in3.bam
 .PP
+samtools checksum in.bam
+.PP
 samtools collate -o aln.name_collated.bam aln.sorted.bam
 .PP
 samtools consensus -o out.fasta in.bam
@@ -215,6 +217,19 @@ intensive tasks on them.
 This command will exit with a non-zero exit code if any input files don't have a
 valid header or are missing an EOF block. Otherwise it will exit successfully
 (with a zero exit code).
+
+.TP \"-------- checksum
+.B checksum
+samtools checksum
+.RI [ options ]
+.IR in.sam | in.bam | in.cram
+
+samtools checksum produces a CRC32 based checksum of data contained
+within a BAM file.  This can either be order and orientation agnostic
+for purposes of validating all the sequencing data has passed through
+the entire pipeline from FASTQ through alignment and sorting, or full
+alignment information and order aware for the purposes of validating
+format conversions and while file data processing.
 
 .TP \"-------- head
 .B head
@@ -1376,6 +1391,7 @@ for further authorship.
 .IR samtools-bedcov (1),
 .IR samtools-calmd (1),
 .IR samtools-cat (1),
+.IR samtools-checksum (1),
 .IR samtools-collate (1),
 .IR samtools-consensus (1),
 .IR samtools-coverage (1),
