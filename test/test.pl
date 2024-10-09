@@ -77,6 +77,8 @@ test_ampliconclip($opts);
 test_ampliconclip($opts, threads=>2);
 test_ampliconstats($opts, threads=>2);
 test_reset($opts);
+test_checksum($opts);
+test_checksum($opts, threads=>2);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -3850,4 +3852,25 @@ sub test_reset
     test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.flg.1.expected"}, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{bin}/test/reset/seq.sam -o $$opts{bin}/test/reset/output");
     #flag update default
     test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.flg.2.expected"}, cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/reset/seq.sam -o $$opts{bin}/test/reset/output");
+}
+
+sub test_checksum
+{
+    my ($opts, %args) = @_;
+
+    my $chk = exists($args{threads}) ?"checksum -@ $args{threads}" :"checksum";
+
+    # Basic mode, two files with one read-group removed and subtle QC diffs
+    # 1.1 and 2.1 checksums should have the same "all" and ERR013140 and
+    # ERR156632 groups should match, with "-" matching delted ERR016352.
+    test_cmd($opts, out=>"checksum/chk1.1.expected", cmd=>"$$opts{bin}/samtools $chk $$opts{path}/checksum/chk1.bam | sed 's#: .*checksum/#: #'");
+    test_cmd($opts, out=>"checksum/chk2.1.expected", cmd=>"$$opts{bin}/samtools $chk $$opts{path}/checksum/chk2.cram | sed 's#: .*checksum/#: #'");
+
+    # Whole file comparison.
+    # These checksums differ to above as the order is now included
+    test_cmd($opts, out=>"checksum/chk2.2.expected", cmd=>"$$opts{bin}/samtools $chk -a $$opts{path}/checksum/chk2.cram | sed 's#: .*checksum/#: #'");
+
+    # QC fail and verbose modes
+    test_cmd($opts, out=>"checksum/chk2.3.expected", cmd=>"$$opts{bin}/samtools $chk -qv $$opts{path}/checksum/chk2.cram | sed 's#: .*checksum/#: #'");
+    test_cmd($opts, out=>"checksum/chk2.4.expected", cmd=>"$$opts{bin}/samtools $chk -qv -a $$opts{path}/checksum/chk2.cram | sed 's#: .*checksum/#: #'");
 }
