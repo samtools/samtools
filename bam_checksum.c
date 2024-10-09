@@ -591,7 +591,8 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
             fprintf(stderr, "[checksum] Illegal tag ID '%.2s'\n", t);
             goto err;
         }
-        tag_keep[t[0]-'0'][t[1]-'0'] = i+1;
+        if (t[0] != '*')
+            tag_keep[t[0]-'0'][t[1]-'0'] = i+1;
     }
 
     sums_t h32, noRG;
