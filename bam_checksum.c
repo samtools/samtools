@@ -80,6 +80,7 @@ typedef struct {
     int verbose;   // whether to show zero count lines
     int show_qc;   // show pass & fail stats
     FILE *fp;
+    int tabs;
 } opts;
 
 // FIXME: qual+33 is a pain, but only for the benefit of compatability with
@@ -266,15 +267,27 @@ void sums_report(opts *o, sums_t *h32, const char *set) {
         if (!o->verbose && !h32->count[i])
             continue;
 
-        fprintf(o->fp, "%-10s %-4s %10"PRIu64"  %08"PRIx64"  %08"PRIx64
-                "  %08"PRIx64"  %08"PRIx64, set, pass[i], h32->count[i],
-                h32->seq[i], h32->name[i], h32->qual[i], h32->aux[i]);
-        if (o->check_pos)
-            fprintf(o->fp, "  %08"PRIx64, h32->pos[i]);
-        if (o->check_cigar)
-            fprintf(o->fp, "  %08"PRIx64, h32->cigar[i]);
-        if (o->check_mate)
-            fprintf(o->fp, "  %08"PRIx64, h32->mate[i]);
+        if (o->tabs) {
+            fprintf(o->fp, "%s\t%s\t%"PRIu64"\t%"PRIx64"\t%"PRIx64
+                    "\t%"PRIx64"\t%"PRIx64, set, pass[i], h32->count[i],
+                    h32->seq[i], h32->name[i], h32->qual[i], h32->aux[i]);
+            if (o->check_pos)
+                fprintf(o->fp, "\t%"PRIx64, h32->pos[i]);
+            if (o->check_cigar)
+                fprintf(o->fp, "\t%"PRIx64, h32->cigar[i]);
+            if (o->check_mate)
+                fprintf(o->fp, "\t%"PRIx64, h32->mate[i]);
+        } else {
+            fprintf(o->fp, "%-10s %-4s %12"PRIu64"  %08"PRIx64"  %08"PRIx64
+                    "  %08"PRIx64"  %08"PRIx64, set, pass[i], h32->count[i],
+                    h32->seq[i], h32->name[i], h32->qual[i], h32->aux[i]);
+            if (o->check_pos)
+                fprintf(o->fp, "  %08"PRIx64, h32->pos[i]);
+            if (o->check_cigar)
+                fprintf(o->fp, "  %08"PRIx64, h32->cigar[i]);
+            if (o->check_mate)
+                fprintf(o->fp, "  %08"PRIx64, h32->mate[i]);
+        }
 
         // Merge all
         hc = update_hash(hc, h32->count[i]>>32);
@@ -290,7 +303,10 @@ void sums_report(opts *o, sums_t *h32, const char *set) {
         if (o->check_mate)
             hc = update_hash(hc, h32->mate[i]);
 
-        fprintf(o->fp, "  %08"PRIx64"\n", hc);
+        if (o->tabs)
+            fprintf(o->fp, "\t%"PRIx64"\n", hc);
+        else
+            fprintf(o->fp, "  %08"PRIx64"\n", hc);
     }
 }
 
@@ -498,19 +514,26 @@ static int key_qsort(const void *t1, const void *t2) {
 int checksum_report(char *fn, opts *o,
                     sums_t *all, sums_t *noRG, khash_t(chk) *h) {
     // headers
-    fprintf(o->fp, "# Checksum for file: %s\n", fn);
-    fprintf(o->fp, "# Aux tags:          %s\n", o->tag_str);
+    fprintf(o->fp, "# Checksum for file:%s%s\n",
+            o->tabs ? "\t" : " ", fn);
+    fprintf(o->fp, "# Aux tags:%s%s\n",
+            o->tabs ? "\t" : "          ", o->tag_str);
     char *s=bam_flag2str(o->flag_mask);
-    fprintf(o->fp, "# BAM flags:         %s\n", s);
+    fprintf(o->fp, "# BAM flags:%s%s\n",
+            o->tabs ? "\t" : "         ", s);
     free(s);
-    fprintf(o->fp, "\n# Group    QC        count  flag+seq  +name     +qual     +aux    ");
+    if (o->tabs)
+        fprintf(o->fp, "\n# Group\tQC\tcount\tflag+seq\t+name\t+qual\t+aux");
+    else
+        fprintf(o->fp, "\n# Group    QC          count  flag+seq  +name"
+                "     +qual     +aux    ");
     if (o->check_pos)
-        fprintf(o->fp, "  +chr/pos");
+        fprintf(o->fp, o->tabs ? "\t+chr/pos" : "  +chr/pos");
     if (o->check_cigar)
-        fprintf(o->fp, "  +cigar  ");
+        fprintf(o->fp, o->tabs ? "\t+cigar" : "  +cigar  ");
     if (o->check_mate)
-        fprintf(o->fp, "  +mate   ");
-    fprintf(o->fp, "  combined\n");
+        fprintf(o->fp, o->tabs ? "\t+mate" : "  +mate   ");
+    fprintf(o->fp, o->tabs ? "\tcombined\n" : "  combined\n");
 
     // All and "-" (no RG) lines
     sums_report(o, all,  "all");
@@ -758,7 +781,8 @@ void usage_exit(FILE *fp, int ret) {
   -o, --output FILE           Write report to FILE [stdout]\n\
   -q, --show-qc               Also show QC pass/fail lines\n\
   -v, --verbose               Increase verbosity: show lines with 0 counts\n\
-  -a, --all                   Check all: -PCMOc -b 0xfff -f0 -F0 -z all,cigarx\n");
+  -a, --all                   Check all: -PCMOc -b 0xfff -f0 -F0 -z all,cigarx\n\
+  -T, --tabs                  Format output as tab delimited text\n");
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@--");
     exit(ret);
@@ -816,6 +840,7 @@ int main_checksum(int argc, char **argv) {
         .verbose      = 0,
         .show_qc      = 0,
         .fp           = stdout,
+        .tabs         = 0,
     };
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -836,6 +861,7 @@ int main_checksum(int argc, char **argv) {
         {"--show-qc",       no_argument,       NULL, 'q'},
         {"--verbose",       no_argument,       NULL, 'v'},
         {"--all",           no_argument,       NULL, 'a'},
+        {"--tabs",          no_argument,       NULL, 'T'},
         {NULL, 0, NULL, 0}
     };
 
@@ -843,7 +869,7 @@ int main_checksum(int argc, char **argv) {
         usage_exit(stdout, EXIT_SUCCESS);
 
     int c;
-    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:aN:vqo:",
+    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:aN:vqo:T",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 'O':
@@ -890,7 +916,10 @@ int main_checksum(int argc, char **argv) {
             opts.verbose++;
             break;
         case 'q':
-            opts.show_qc=1;
+            opts.show_qc = 1;
+            break;
+        case 'T':
+            opts.tabs = 1;
             break;
 
         case 'z':
