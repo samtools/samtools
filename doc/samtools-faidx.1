@@ -131,6 +131,10 @@ Print help message and exit.
 .BI --output-fmt-option\  OPT=VAL
 Set the output format options, level=0..9 for compression level 0 to 9.
 .TP
+.BI --write-index
+Create index for the output sequence data along with the output, in same path as
+<output name>.fai, <outputname>.gzi. This option is valid only for file output.
+.TP
 .BI "-@, --threads " N
 Set the number of extra threads for operations on compressed files.
 
