@@ -623,6 +623,22 @@ sub test_faidx
     cmd("$$opts{diff} $$opts{tmp}/faidx.fa.fai $$opts{tmp}/fa_test.fai");
     cmd("$$opts{diff} $$opts{tmp}/faidx.fa.gz.gzi $$opts{tmp}/fa_test.gzi");
 
+    #with write-index
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1 --write-index"); #ignores write-index
+    cmd("echo \"1\n2\n3\" > $$opts{tmp}/1.reg"); #create region file
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa --write-index -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fa"); #writes and indexes
+    cmd("$$opts{diff} $$opts{tmp}/faidx.fa.fai $$opts{tmp}/1.fa.fai");
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa -r $$opts{tmp}/1.reg -o $$opts{tmp}/out.fa.gz"); #create output for comparison
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/out.fa.gz");
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa --write-index -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fa.gz");  #write and index 1.fa.gz.fai and 1.fa.gz.gzi
+    cmd("$$opts{diff} $$opts{tmp}/out.fa.gz.fai $$opts{tmp}/1.fa.gz.fai");
+    cmd("$$opts{diff} $$opts{tmp}/out.fa.gz.gzi $$opts{tmp}/1.fa.gz.gzi");
+    cmd("$$opts{bin}/samtools faidx --fai-idx $$opts{tmp}/fa_test.fai --gzi-idx $$opts{tmp}/fa_test.gzi $$opts{tmp}/faidx.fa.gz -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fa");    #write and index 1.fa.fai
+    cmd("$$opts{diff} $$opts{tmp}/faidx.fa.fai $$opts{tmp}/1.fa.fai");
+    cmd("$$opts{bin}/samtools faidx --fai-idx $$opts{tmp}/fa_test.fai --gzi-idx $$opts{tmp}/fa_test.gzi $$opts{tmp}/faidx.fa.gz -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fa.gz"); #write and index 1.fa.gz.fai and 1.fa.gz.gzi
+    cmd("$$opts{diff} $$opts{tmp}/out.fa.gz.fai $$opts{tmp}/1.fa.gz.fai");
+    cmd("$$opts{diff} $$opts{tmp}/out.fa.gz.gzi $$opts{tmp}/1.fa.gz.gzi");
+
     # test continuing after an error
     cmd("$$opts{bin}/samtools faidx --output $$opts{tmp}/output_faidx.fa --continue $$opts{tmp}/faidx.fa 100 EEE FFF");
 
@@ -773,6 +789,22 @@ sub test_fqidx
     cmd("$$opts{bin}/samtools fqidx --fai-idx $$opts{tmp}/fq_test.fai --gzi-idx $$opts{tmp}/fq_test.gzi $$opts{tmp}/fqidx.fq.gz");
     cmd("$$opts{diff} $$opts{tmp}/fqidx.fq.fai $$opts{tmp}/fq_test.fai");
     cmd("$$opts{diff} $$opts{tmp}/fqidx.fq.gz.gzi $$opts{tmp}/fq_test.gzi");
+
+    #with write-index
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1 --write-index"); #ignores write-index
+    cmd("echo \"1\n2\n3\" > $$opts{tmp}/1.reg"); #create region file
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq --write-index -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fq"); #writes and indexes
+    cmd("$$opts{diff} $$opts{tmp}/fqidx.fq.fai $$opts{tmp}/1.fq.fai");
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq -r $$opts{tmp}/1.reg -o $$opts{tmp}/out.fq.gz"); #create output for comparison
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/out.fq.gz");
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq --write-index -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fq.gz");  #write and index 1.fq.gz.fai and 1.fq.gz.gzi
+    cmd("$$opts{diff} $$opts{tmp}/out.fq.gz.fai $$opts{tmp}/1.fq.gz.fai");
+    cmd("$$opts{diff} $$opts{tmp}/out.fq.gz.gzi $$opts{tmp}/1.fq.gz.gzi");
+    cmd("$$opts{bin}/samtools fqidx --fai-idx $$opts{tmp}/fq_test.fai --gzi-idx $$opts{tmp}/fq_test.gzi $$opts{tmp}/fqidx.fq.gz -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fq");    #write and index 1.fa.fai
+    cmd("$$opts{diff} $$opts{tmp}/fqidx.fq.fai $$opts{tmp}/1.fq.fai");
+    cmd("$$opts{bin}/samtools fqidx --fai-idx $$opts{tmp}/fq_test.fai --gzi-idx $$opts{tmp}/fq_test.gzi $$opts{tmp}/fqidx.fq.gz -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fq.gz"); #write and index 1.fa.gz.fai and 1.fa.gz.gzi
+    cmd("$$opts{diff} $$opts{tmp}/out.fq.gz.fai $$opts{tmp}/1.fq.gz.fai");
+    cmd("$$opts{diff} $$opts{tmp}/out.fq.gz.gzi $$opts{tmp}/1.fq.gz.gzi");
 
     # test continuing after an error
     cmd("$$opts{bin}/samtools fqidx --output $$opts{tmp}/output_fqidx.fq --continue $$opts{tmp}/fqidx.fq 100 EEE FFF");

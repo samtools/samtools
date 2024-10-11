@@ -1,9 +1,9 @@
 '\" t
 .TH samtools-fqidx 1 "12 September 2024" "samtools-1.21" "Bioinformatics tools"
 .SH NAME
-samtools fqidx \- Indexes or queries regions from a fastq file
+samtools fqidx \- indexes or queries regions from a fastq file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018, 2020 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018, 2020, 2024 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -56,9 +56,9 @@ will index the file and create
 on the disk. If regions are specified, the subsequences will be
 retrieved and printed to stdout in the FASTQ format.
 
-The input file can be compressed in the
+The input and output can be files compressed in the
 .B BGZF
-format.
+format. When output is compressed, the default compression level is 4.
 
 The sequences in the input file should all have different names.
 If they do not, indexing will emit a warning about duplicate sequences and
@@ -74,7 +74,10 @@ searches using the index will be very slow and use a lot of memory.
 .SH OPTIONS
 .TP 8
 .BI "-o, --output " FILE
-Write FASTQ to file rather than to stdout.
+Write FASTQ to file rather than to stdout. With .gz, .bgz, .bgzf file extensions
+the output will be
+.B BGZF
+compressed.
 .TP
 .BI "-n, --length " INT
 Length for FASTQ sequence line wrapping.  If zero, this means do not
@@ -122,6 +125,16 @@ Read/Write to specified compressed file index (used with .gz files).
 .TP
 .B -h, --help
 Print help message and exit.
+.TP
+.BI --output-fmt-option\  OPT=VAL
+Set the output format options, level=0..9 for compression level 0 to 9.
+.TP
+.BI --write-index
+Create index for the output sequence data along with the output, in same path as
+<output name>.fai, <outputname>.gzi. This option is valid only for file output.
+.TP
+.BI "-@, --threads " N
+Set the number of extra threads for operations on compressed files.
 
 .SH AUTHOR
 .PP
