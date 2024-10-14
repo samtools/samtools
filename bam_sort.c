@@ -470,7 +470,14 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, sam_hdr_t *translate,
     // Fill in the tid part of the translation table, adding new targets
     // to the merged header as we go.
 
-    for (i = 0; i < sam_hdr_nref(translate); ++i) {
+    tbl->n_targets = sam_hdr_nref(translate);
+    tbl->tid_trans = calloc(tbl->n_targets ? tbl->n_targets : 1, sizeof(int));
+    if (tbl->tid_trans == NULL) {
+        print_error_errno("merge", "failed to allocate @SQ translation table");
+        return -1;
+    }
+
+    for (i = 0; i < tbl->n_targets; ++i) {
         int trans_tid;
         sq_sn.l = 0;
         res = sam_hdr_find_tag_pos(translate, "SQ", i, "SN", &sq_sn);
@@ -797,11 +804,9 @@ static int trans_tbl_init(merged_header_t* merged_hdr, sam_hdr_t* translate,
     klist_t(hdrln) *rg_list = NULL;
     klist_t(hdrln) *pg_list = NULL;
 
-    tbl->n_targets = sam_hdr_nref(translate);
+    tbl->n_targets = 0;
+    tbl->tid_trans = NULL;
     tbl->rg_trans = tbl->pg_trans = NULL;
-    tbl->tid_trans = (int*)calloc(tbl->n_targets ? tbl->n_targets : 1,
-                                  sizeof(int));
-    if (tbl->tid_trans == NULL) goto memfail;
     tbl->rg_trans = kh_init(c2c);
     if (tbl->rg_trans == NULL) goto memfail;
     tbl->pg_trans = kh_init(c2c);
