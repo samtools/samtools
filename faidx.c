@@ -57,19 +57,20 @@ History:
 #endif
 
 /// holds the indexing info for each read name and offsets
-typedef struct idx_t {
+typedef struct idx_entry {
     char *name;                 //name
     uint64_t seq_offset;        //offset to sequence for given read/reference
     uint64_t seq_length;        //length of sequence
     uint64_t qual_offset;       //offset to qualify val for given read
     uint64_t line_length;       //line length with output is made
-} idx_t;
+} idx_entry;
 
 /// index information about output
 typedef struct idx {
     int n, m;                       //no of used and max items in index
     enum fai_format_options format; //fasta or fastq
-    idx_t *indx;                    //array of index info per read
+    idx_entry *indx;                //array of index info per sequence
+    uint64_t offset;                //accumulated offset
 } idx;
 
 //new params required for output creation
@@ -132,22 +133,21 @@ static void reverse(char *str, const hts_pos_t len) {
  returns unmodified input, if required size is already available
  returns updated input, if reallocation is required
 */
-static inline idx* allocidx(idx* in)
+static inline idx_entry* allocidx(idx* in)
 {
-    if ((in) && ((in->n + 1) >= in->m)) {                       //+1 to ensure space to save seq offset for next one
+    if (in && in->n >= in->m) {                       //+1 to ensure space to save seq offset for next one
         int newlen = in->m < 1 ? 16 : in->m << 1;               //doubles when reallocation needed
-        idx_t *tmp = realloc(in->indx, newlen * sizeof(idx_t));
+        idx_entry *tmp = realloc(in->indx, newlen * sizeof(*tmp));
         if (!tmp) {
             return NULL;
         }
-        int offset = in->n ? in->n + 1 : 0;
-        int count = newlen - offset;
-        memset(tmp + offset * sizeof(idx_t), 0, count * sizeof(idx_t));
+        int count = newlen - in->n;
+        memset(tmp + in->n * sizeof(*tmp), 0, count * sizeof(*tmp));
         in->indx = tmp;
         in->m = newlen;
     }
 
-    return in;
+    return &in->indx[in->n++];
 }
 
 /// writeindex - writes index data
@@ -173,31 +173,38 @@ int writeindex(output *out, char *output_file)
         goto end;
     }
 
-    //write fai index data / index on plain - uncompressed data
+    // Write fai index data / index on plain - uncompressed data.
+    // Note on Windows htslib's hfile_oflags() and hopen_fd_stdinout()
+    // functions guarantee we'll set O_BINARY so the line length is always
+    // sequence length +1 regardless of the system native line ending.
     for (int i = 0; i < idxdata->n; ++i) {
+        idx_entry *e = &idxdata->indx[i];
         ks_clear(&buffer);
         if (idxdata->format == FAI_FASTA) {
-            //name, seq length, offset to sequence, line length, line length + 1 (\n) - it is an existing format!
-            ksprintf(&buffer, "%s\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\n", idxdata->indx[i].name,
-                idxdata->indx[i].seq_length, idxdata->indx[i].seq_offset,
-                idxdata->indx[i].line_length, idxdata->indx[i].line_length + 1);
+            //name, seq leng, seq offset, seq per line, char per line
+            ksprintf(&buffer, "%s\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\t%"
+                     PRIu64"\n",
+                     e->name, e->seq_length, idxdata->indx[i].seq_offset,
+                     e->line_length, idxdata->indx[i].line_length + 1);
         } else {    //FAI_FASTQ
-            //name, seq length, offset to sequence, line length, line length + 1 (\n), offset to quality - it is an existing format!
-            ksprintf(&buffer, "%s\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\n",
-                idxdata->indx[i].name,
-                idxdata->indx[i].seq_length, idxdata->indx[i].seq_offset,
-                idxdata->indx[i].line_length, idxdata->indx[i].line_length + 1,
-                idxdata->indx[i].qual_offset);
+            //name, seq leng, seq offset, seq/line, char/line, qual offset
+            ksprintf(&buffer, "%s\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\t%"
+                     PRIu64"\t%"PRIu64"\n",
+                     e->name, e->seq_length, idxdata->indx[i].seq_offset,
+                     e->line_length, idxdata->indx[i].line_length + 1,
+                     e->qual_offset);
         }
         if (buffer.l != fwrite(buffer.s, 1, buffer.l, fp)) {
-            fprintf(stderr, "[faidx] Failed to create fai index file for output.\n");
+            fprintf(stderr, "[faidx] Failed to create fai index file for "
+                    "output.\n");
             ret = 1;
             goto end;
         }
     }
     //write gzi index data, index on compressed file
     if (out->isbgzip && bgzf_index_dump(out->bgzf_fp, output_file, ".gzi")) {
-        fprintf(stderr, "[faidx] Failed to create index gzi file for output.\n");
+        fprintf(stderr, "[faidx] Failed to create index gzi file for "
+                "output.\n");
         ret = 1;
     }
 end:
@@ -210,8 +217,9 @@ end:
     return ret;
 }
 
-static int write_line(faidx_t *faid, output *out, const char *line, const char *name,
-                      const int ignore, const hts_pos_t length, const hts_pos_t seq_len) {
+static int write_line(faidx_t *faid, output *out, const char *line,
+                      const char *name, const int ignore,
+                      const hts_pos_t length, const hts_pos_t seq_len) {
     int id;
     hts_pos_t beg, end;
 
@@ -219,9 +227,9 @@ static int write_line(faidx_t *faid, output *out, const char *line, const char *
         fprintf(stderr, "[faidx] Failed to fetch sequence in %s\n", name);
 
         if (ignore && seq_len == -2) {
-            return EXIT_SUCCESS;
+            return 0;
         } else {
-            return EXIT_FAILURE;
+            return -1;
         }
     } else if (seq_len == 0) {
         fprintf(stderr, "[faidx] Zero length sequence: %s\n", name);
@@ -238,21 +246,23 @@ static int write_line(faidx_t *faid, output *out, const char *line, const char *
         if (bgzf_write(out->bgzf_fp, line + i, len) < len ||
               bgzf_write(out->bgzf_fp, "\n", 1) < 1) {
             print_error_errno("faidx", "failed to write output");
-            return EXIT_FAILURE;
+            return -1;
         }
     }
 
-    return EXIT_SUCCESS;
+    return 0;
 }
 
 
-static int write_output(faidx_t *faid, output *out, const char *name, const int ignore,
-                        const hts_pos_t length, const int rev,
-                        const char *pos_strand_name, const char *neg_strand_name,
+static int write_output(faidx_t *faid, output *out, const char *name,
+                        const int ignore, const hts_pos_t length, const int rev,
+                        const char *pos_strand_name,
+                        const char *neg_strand_name,
                         enum fai_format_options format) {
     hts_pos_t seq_len, wrap_len = length, len = 0;
-    char *seq =  NULL, *qual = NULL, *tmp = NULL;
+    char *seq =  NULL, *qual = NULL;
     int ret = EXIT_FAILURE;
+    char *idx_name = NULL;
 
     if (wrap_len < 0)
         wrap_len = fai_line_length(faid, name);
@@ -264,84 +274,73 @@ static int write_output(faidx_t *faid, output *out, const char *name, const int 
         reverse_complement(seq, seq_len);
     }
 
-    if (out->gopt->write_index && !allocidx(out->idxdata)) {    //index data allocation
-        fprintf(stderr, "[faidx] Failed to allocate memory for indexing.\n");
-        goto end;
-    }
-
     //write the name
-    len = ksprintf(&out->buffer, "%c%s%s\n", format == FAI_FASTA ? '>' : '@', name, rev ? neg_strand_name : pos_strand_name);
+    ks_clear(&out->buffer);
+    len = ksprintf(&out->buffer, "%c%s%s\n",
+                   format == FAI_FASTA ? '>' : '@', name,
+                   rev ? neg_strand_name : pos_strand_name);
+    if (out->gopt->write_index) {
+        if (!(idx_name = strdup(out->buffer.s+1))) {
+            fprintf(stderr,"[faidx] Failed to allocate memory.\n");
+            goto end;
+        }
+        idx_name[out->buffer.l-2] = 0; // remove \n
+    }
     if (bgzf_write(out->bgzf_fp, out->buffer.s, out->buffer.l) < len) {
         fprintf(stderr,"[faidx] Failed to write buffer.\n");
         goto end;
     }
 
-    if (out->gopt->write_index) {                                   //index data for current sequence
-        if (!(tmp = malloc(len - 1))) {
-            fprintf(stderr, "[faidx] Failed to allocate memory.\n");
-            goto end;
-        }
-        strncpy(tmp, out->buffer.s + 1, len - 2);                   //copy name without start marker
-        tmp[len - 2] = '\0';
-        ks_clear(&out->buffer);
-
-        out->idxdata->indx[out->idxdata->n].name = tmp;
-        out->idxdata->indx[out->idxdata->n].seq_offset += len;      //last offset + length of name line
-        out->idxdata->indx[out->idxdata->n].seq_length = seq_len;
-    }
-
-    ks_clear(&out->buffer);
     //write bases
-    if ((ret = write_line(faid, out, seq, name, ignore, wrap_len, seq_len) == EXIT_FAILURE)) {
+    if (write_line(faid, out, seq, name, ignore, wrap_len, seq_len) < 0)
         goto end;
-    }
 
-    if (out->gopt->write_index) {
-        out->idxdata->indx[out->idxdata->n].line_length = seq_len < wrap_len ? seq_len : wrap_len;
-        if (out->idxdata->format != FAI_FASTA) {                    //fastq, sequence offset + seq len and '\n's
-            out->idxdata->indx[out->idxdata->n].qual_offset = out->idxdata->indx[out->idxdata->n].seq_offset +
-             seq_len + seq_len / wrap_len + ((seq_len % wrap_len) ? 1 : 0);
-        } else {                                                    //fasta, next sequence's temp offset
-            out->idxdata->indx[out->idxdata->n + 1].seq_offset = out->idxdata->indx[out->idxdata->n].seq_offset +
-             seq_len + seq_len / wrap_len + ((seq_len % wrap_len) ? 1 : 0);
-            ++out->idxdata->n;
-        }
-    }
+    uint64_t seq_sz;
+    seq_sz = seq_len + seq_len / wrap_len + ((seq_len % wrap_len) ? 1 : 0);
 
     if (format == FAI_FASTQ) {
         //write quality
         qual = fai_fetchqual64(faid, name, &seq_len);
-        if (rev && seq_len > 0) {
+        if (rev && seq_len > 0)
             reverse(qual, seq_len);
-        }
 
-        len = ksprintf(&out->buffer, "+\n");
-        if (bgzf_write(out->bgzf_fp, out->buffer.s, out->buffer.l) < len) {
+        if (bgzf_write(out->bgzf_fp, "+\n", 2) != 2) {
             fprintf(stderr,"[faidx] Failed to write buffer\n");
             goto end;
         }
-        ks_clear(&out->buffer);
-        if ((ret = write_line(faid, out, qual, name, ignore, wrap_len, seq_len) == EXIT_FAILURE)) {
+
+        if (write_line(faid, out, qual, name, ignore, wrap_len, seq_len) < 0)
+            goto end;
+    }
+
+    if (out->gopt->write_index) {
+        // On-the-fly index construction
+        idx_entry *e = NULL;
+        if (out->gopt->write_index && !(e = allocidx(out->idxdata))) {
+            fprintf(stderr, "[faidx] Failed to allocate memory.\n");
             goto end;
         }
 
-        if (out->gopt->write_index) {
-            out->idxdata->indx[out->idxdata->n].qual_offset += 2;   //fastq, quality offset + '+\n'
-            //next sequence's temp offset - quality offset + qual len + '\n's
-            out->idxdata->indx[out->idxdata->n + 1].seq_offset = out->idxdata->indx[out->idxdata->n].qual_offset +
-             seq_len + seq_len / wrap_len + ((seq_len % wrap_len) ? 1 : 0);
-            ++out->idxdata->n;
+        e->name = idx_name;
+        e->seq_offset = out->idxdata->offset + len;
+        e->seq_length = seq_len;
+        e->line_length = seq_len < wrap_len ? seq_len : wrap_len;
+        idx_name = NULL;
+        if (out->idxdata->format == FAI_FASTA) {
+            out->idxdata->offset = e->seq_offset + seq_sz;
+        } else { // FASTQ
+            e->qual_offset = e->seq_offset + seq_sz + 2; // "+\n"
+            out->idxdata->offset = e->qual_offset + seq_sz;
         }
     }
+
     ret = EXIT_SUCCESS;
 
 end:
-    if (seq) {
-        free(seq);
-    }
-    if (qual) {
-        free(qual);
-    }
+    free(seq);
+    free(qual);
+    free(idx_name);
+
     return ret;
 }
 
