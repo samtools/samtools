@@ -2355,7 +2355,14 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "                        hiseq, hifi, r10.4_sup, r10.4_dup and ultima\n");
 
     fprintf(fp, "\nGlobal options:\n");
-    sam_global_opt_help(fp, "-.---@-.");
+    // Edited sam_global_opt_help(fp, "-.---@-.") help to expand -@ description.
+    fprintf(fp, "      --input-fmt-option OPT[=VAL]\n");
+    fprintf(fp, "               Specify a single input file format option in the form\n");
+    fprintf(fp, "               of OPTION or OPTION=VALUE\n");
+    fprintf(fp, "  -@, --threads INT\n");
+    fprintf(fp, "               Number of additional decompression threads to use [0]\n");
+    fprintf(fp, "      --verbosity INT\n");
+    fprintf(fp, "               Set level of verbosity\n");
     exit(exit_status);
 }
 

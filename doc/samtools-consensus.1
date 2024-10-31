@@ -261,6 +261,12 @@ fraction of bases agreeing with the most likely consensus call to emit
 that base type.  This defaults to 0.75.  Failing this check will
 output "N".
 
+.TP
+.BI "-@ " NTHREADS
+Specify the number of additional threads to use for decompressing the
+data.  Note currently the algorithm is dominated by the main consensus
+computation so asking for more than 1 additional thread will likely
+have minimal benefit.
 
 .TP 0
 The following options apply only to Bayesian consensus mode enabled
