@@ -3683,11 +3683,55 @@ sub test_markdup
 sub test_bedcov
 {
     my ($opts,%args) = @_;
+    my $out;
 
     test_cmd($opts,out=>'bedcov/bedcov.expected',cmd=>"$$opts{bin}/samtools bedcov $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_j.expected',cmd=>"$$opts{bin}/samtools bedcov -j $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_gG.expected',cmd=>"$$opts{bin}/samtools bedcov -g512 -G2048 $$opts{path}/bedcov/bedcov_gG.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_c.expected',cmd=>"$$opts{bin}/samtools bedcov -c $$opts{path}/bedcov/bedcov_gG.bed $$opts{path}/bedcov/bedcov.bam");
+    #with header
+    cmd("echo \"#chrom\tchromStart\tchromEnd\t$$opts{path}/bedcov/bedcov.bam_cov\" > $$opts{tmp}/bedcovH1.expected");
+    cmd ("cat $$opts{path}/bedcov/bedcov.expected >> $$opts{tmp}/bedcovH1.expected");
+    cmd("$$opts{bin}/samtools bedcov -H $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam > $$opts{tmp}/out.H1");
+    $out = cmd("diff $$opts{tmp}/bedcovH1.expected $$opts{tmp}/out.H1");
+    if ( $out ne "" ) {
+        failed($opts,msg=>"coverage with header",reason=>"output does $out not match to expected\n");
+    } else {
+        passed($opts,msg=>"coverage with header success\n");
+    }
+    #with custom header
+    cmd("echo \"#chrom\tchromStart\tchromEnd\tT1\nchr1\t12209228\t12209246\t10\" > $$opts{tmp}/bedcovH2.bed");
+    cmd("echo \"#chrom\tchromStart\tchromEnd\tT1\t$$opts{path}/bedcov/bedcov.bam_cov\nchr1\t12209228\t12209246\t10\t24\" > $$opts{tmp}/bedcovH2.expected");
+    cmd("$$opts{bin}/samtools bedcov -H $$opts{tmp}/bedcovH2.bed $$opts{path}/bedcov/bedcov.bam > $$opts{tmp}/out.H2");
+    $out = cmd("diff $$opts{tmp}/bedcovH2.expected $$opts{tmp}/out.H2");
+    if ( $out ne "" ) {
+        failed($opts,msg=>"coverage with custom header",reason=>"output does not match to expected\n");
+    } else {
+        passed($opts,msg=>"coverage with custom header success\n");
+    }
+    #with empty source header
+    cmd("echo \"#chrom\tchromStart\tchromEnd\t\nchr1\t12209228\t12209246\t10\" > $$opts{tmp}/bedcovH3.bed");
+    cmd("echo \"#chrom\tchromStart\tchromEnd\t\t$$opts{path}/bedcov/bedcov.bam_cov\nchr1\t12209228\t12209246\t10\t24\" > $$opts{tmp}/bedcovH3.expected");
+    cmd("$$opts{bin}/samtools bedcov -H $$opts{tmp}/bedcovH3.bed $$opts{path}/bedcov/bedcov.bam > $$opts{tmp}/out.H3");
+    $out = cmd("diff $$opts{tmp}/bedcovH3.expected $$opts{tmp}/out.H3");
+    if ( $out ne "" ) {
+        failed($opts,msg=>"coverage with src empty header",reason=>"output does not match to expected\n");
+    } else {
+        passed($opts,msg=>"coverage with src empty header success\n");
+    }
+    #empty added header
+    #chrom\tchromStart\tchromEnd\tname\tscore\tstrand\tthickStart\t\
+    #    thickEnd\titemRgb\tblockCount\tblockSizes\tblockStarts
+    cmd("echo \"chr1\t12209228\t12209246\t4\t5\t6\t7\t8\t9\t10\t11\t12\t13\t14\" > $$opts{tmp}/bedcovH4.bed");
+    cmd("echo \"#chrom\tchromStart\tchromEnd\tname\tscore\tstrand\tthickStart\tthickEnd\titemRgb\tblockCount\tblockSizes\tblockStarts\t\t\t$$opts{path}/bedcov/bedcov.bam_cov\" > $$opts{tmp}/bedcovH4.expected");
+    cmd("echo \"chr1\t12209228\t12209246\t4\t5\t6\t7\t8\t9\t10\t11\t12\t13\t14\t24\" >> $$opts{tmp}/bedcovH4.expected");
+    cmd("$$opts{bin}/samtools bedcov -H $$opts{tmp}/bedcovH4.bed $$opts{path}/bedcov/bedcov.bam > $$opts{tmp}/out.H4");
+    $out = cmd("diff $$opts{tmp}/bedcovH4.expected $$opts{tmp}/out.H4");
+    if ( $out ne "" ) {
+        failed($opts,msg=>"coverage with empty header",reason=>"output does not match to expected\n");
+    } else {
+        passed($opts,msg=>"coverage with empty header success\n");
+    }
 }
 
 sub test_split
