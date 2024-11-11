@@ -74,10 +74,8 @@ searches using the index will be very slow and use a lot of memory.
 .SH OPTIONS
 .TP 8
 .BI "-o, --output " FILE
-Write FASTQ to file rather than to stdout. With .gz, .bgz, .bgzf file extensions
-the output will be
-.B BGZF
-compressed.
+.RI "Write FASTQ to file rather than to stdout. If " FILE " ends with .gz,"
+.RB ".bgz or .bgzf then it will be " BGZF " compressed."
 .TP
 .BI "-n, --length " INT
 Length for FASTQ sequence line wrapping.  If zero, this means do not

@@ -67,7 +67,7 @@ typedef struct idx_entry {
 
 /// index information about output
 typedef struct idx {
-    int n, m;                       //no of used and max items in index
+    size_t n, m;                    //no of used and max items in index
     enum fai_format_options format; //fasta or fastq
     idx_entry *indx;                //array of index info per sequence
     uint64_t offset;                //accumulated offset
@@ -130,13 +130,12 @@ static void reverse(char *str, const hts_pos_t len) {
 /// allocidx - allocates required index data buffers
 /** @param in - pointer to idx structure
  returns NULL on failure
- returns unmodified input, if required size is already available
- returns updated input, if reallocation is required
+ returns index data buffer on success
 */
 static inline idx_entry* allocidx(idx* in)
 {
-    if (in && in->n >= in->m) {                       //+1 to ensure space to save seq offset for next one
-        int newlen = in->m < 1 ? 16 : in->m << 1;               //doubles when reallocation needed
+    if (in && in->n >= in->m) {
+        size_t newlen = in->m < 1 ? 16 : in->m << 1;   //double on reallocation
         idx_entry *tmp = realloc(in->indx, newlen * sizeof(*tmp));
         if (!tmp) {
             return NULL;
@@ -153,10 +152,11 @@ static inline idx_entry* allocidx(idx* in)
 /// writeindex - writes index data
 /** @param out - pointer to output structure
  *  @param output_file - pointer to output file name
- returns non 0 on failure
+ returns non zero on failure
  returns 0 on success
- seq name and offsets are written on fai index, for both compressed and uncompressed outputs
- gzi index, dumped through bgzf api, gives the index of plain offsets in compressed file
+ seq name and offsets are written on fai index, for both compressed and
+ uncompressed outputs. gzi index, dumped through bgzf api, gives the index
+ of plain offsets in compressed file
 */
 int writeindex(output *out, char *output_file)
 {
@@ -164,6 +164,7 @@ int writeindex(output *out, char *output_file)
     kstring_t fainame = KS_INITIALIZE, buffer = KS_INITIALIZE;
     int ret = 0;
     FILE *fp = NULL;
+    size_t i = 0;
 
     ksprintf(&fainame, "%s.fai", output_file);
 
@@ -177,22 +178,21 @@ int writeindex(output *out, char *output_file)
     // Note on Windows htslib's hfile_oflags() and hopen_fd_stdinout()
     // functions guarantee we'll set O_BINARY so the line length is always
     // sequence length +1 regardless of the system native line ending.
-    for (int i = 0; i < idxdata->n; ++i) {
+    for (i = 0; i < idxdata->n; ++i) {
         idx_entry *e = &idxdata->indx[i];
         ks_clear(&buffer);
         if (idxdata->format == FAI_FASTA) {
             //name, seq leng, seq offset, seq per line, char per line
             ksprintf(&buffer, "%s\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\t%"
                      PRIu64"\n",
-                     e->name, e->seq_length, idxdata->indx[i].seq_offset,
-                     e->line_length, idxdata->indx[i].line_length + 1);
+                     e->name, e->seq_length, e->seq_offset, e->line_length,
+                     e->line_length + 1);
         } else {    //FAI_FASTQ
             //name, seq leng, seq offset, seq/line, char/line, qual offset
             ksprintf(&buffer, "%s\t%"PRIu64"\t%"PRIu64"\t%"PRIu64"\t%"
                      PRIu64"\t%"PRIu64"\n",
-                     e->name, e->seq_length, idxdata->indx[i].seq_offset,
-                     e->line_length, idxdata->indx[i].line_length + 1,
-                     e->qual_offset);
+                     e->name, e->seq_length, e->seq_offset, e->line_length,
+                     e->line_length + 1, e->qual_offset);
         }
         if (buffer.l != fwrite(buffer.s, 1, buffer.l, fp)) {
             fprintf(stderr, "[faidx] Failed to create fai index file for "
@@ -669,7 +669,8 @@ exit2:
         hts_tpool_destroy(pool);
     }
     if (out.idxdata) {
-        for (int i = 0; i < out.idxdata->n; ++i) {
+        int i;
+        for (i = 0; i < out.idxdata->n; ++i) {
             free(out.idxdata->indx[i].name);
         }
         free(out.idxdata->indx);
