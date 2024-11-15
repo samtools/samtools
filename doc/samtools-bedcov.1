@@ -110,12 +110,11 @@ samtools bedcov [options] -X <in.bed> </data_folder/in1.bam> [...]
 </index_folder/index1.bai> [...]
 .TP
 .B "-H"
-.R Print a comment/header describing columns. When a header is available in
-bed file, it is used in output, when it is not available, mandatory field's
-header and empty tab separated header for optional fields are used in output.
-.RI "Result headers, " in1.sam "_cov, " in1.sam "_depth and " in1.sam "_count"
-are appended to the header based on options.
-
+.R When a header starting in "#chrom" is available in the input bed file, it is
+copied to the output. When it is not available, a header is created with field
+names matching the fields listed in the GA4GH BED specification.
+The \fB-c\fR and \fB-d\fR options can add further per-file columns named
+.IR in1.sam "_count and " in1.sam "_depth along with " in1.sam "_count."
 
 .SH AUTHOR
 .PP

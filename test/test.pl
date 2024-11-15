@@ -3723,7 +3723,7 @@ sub test_bedcov
     #chrom\tchromStart\tchromEnd\tname\tscore\tstrand\tthickStart\t\
     #    thickEnd\titemRgb\tblockCount\tblockSizes\tblockStarts
     cmd("echo \"chr1\t12209228\t12209246\t4\t5\t6\t7\t8\t9\t10\t11\t12\t13\t14\" > $$opts{tmp}/bedcovH4.bed");
-    cmd("echo \"#chrom\tchromStart\tchromEnd\tname\tscore\tstrand\tthickStart\tthickEnd\titemRgb\tblockCount\tblockSizes\tblockStarts\t\t\t$$opts{path}/bedcov/bedcov.bam_cov\" > $$opts{tmp}/bedcovH4.expected");
+    cmd("echo \"#chrom\tchromStart\tchromEnd\tname\tscore\tstrand\tthickStart\tthickEnd\titemRgb\tblockCount\tblockSizes\tblockStarts\t.\t.\t$$opts{path}/bedcov/bedcov.bam_cov\" > $$opts{tmp}/bedcovH4.expected");
     cmd("echo \"chr1\t12209228\t12209246\t4\t5\t6\t7\t8\t9\t10\t11\t12\t13\t14\t24\" >> $$opts{tmp}/bedcovH4.expected");
     cmd("$$opts{bin}/samtools bedcov -H $$opts{tmp}/bedcovH4.bed $$opts{path}/bedcov/bedcov.bam > $$opts{tmp}/out.H4");
     $out = cmd("diff $$opts{tmp}/bedcovH4.expected $$opts{tmp}/out.H4");

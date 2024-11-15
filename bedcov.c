@@ -100,7 +100,7 @@ static void output_header(FILE *fp, char *hdr, int fields, int filecount,
             "blockSizes", "blockStarts"};
         for (i = 0; i < fields; ++i) {
             fprintf(fp, "%s%s", (i ? "\t" : "#"),
-                (i < sizeof(bedcols)/sizeof(bedcols[i]) ? bedcols[i] : ""));
+                (i < sizeof(bedcols)/sizeof(bedcols[i]) ? bedcols[i] : "."));
         }
     }
     for (i = 0; i < filecount; ++i) {   //coverage header
