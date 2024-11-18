@@ -715,7 +715,7 @@ sub plot_qualities
     # Average, mean and quality percentiles per cycle, forward and reverse reads in separate plots
     $args = get_defaults($opts,"$$opts{prefix}quals2.png",wh=>$is_paired ? '700,500' : '600,400');
     $fh = $$args{fh};
-    my $pos_size = $is_paired ? " set rmargin 0; set lmargin 0; set tmargin 0; set bmargin 0; set origin 0.1,0.1; set size 0.4,0.8" : '';
+    my $pos_size = " set rmargin 0; set lmargin 0; set tmargin 0; set bmargin 0; set origin 0.1,0.1; set size 0.4,0.8";
     print $fh qq[
             $$args{terminal}
             set output "$$args{img}"
@@ -812,7 +812,12 @@ sub plot_qualities
     $fh = $$args{fh};
     my $max = defined $lmax && $lmax > $fmax ? $lmax : $fmax;
     my $ytics = generate_ticks([ map { $_->[0] } @ffq ], $is_paired);
-    $pos_size = $is_paired ? " set origin 0.05,0.5\n set size 0.85,0.5" : '';
+    my $colorbox = "set colorbox vertical user origin first ($nquals+1),0 size screen 0.025,0.812";
+    $pos_size = $is_paired
+       ? " set origin 0.05,0.5\n set size 0.85,0.5" :
+         " set origin 0.05,0.05\n set size 0.85,1.0\n$colorbox" ;
+    my $set_xtics = $is_paired ? "unset" : "set";
+
     print $fh qq[
             $$args{terminal}
             set output "$$args{img}"
@@ -822,11 +827,12 @@ sub plot_qualities
             # Perceptually uniform heatmap "plasma" by Nathaniel J. Smith & Stefan van der Walt
             # used in Python's matplotlib:  https://github.com/BIDS/colormap/blob/master/colormaps.py
             # Values from:  https://github.com/Gnuplotting/gnuplot-palettes/blob/master/plasma.pal
-            # Dark end squished to make low values more distinguishable.
+            # Dark end squashed to make low values more distinguishable.
             set palette model RGB
             set palette defined ( \\
-                 0 '#0c0887' \\
-              ,  5 '#4b03a1' \\
+                 0 '#000000' \\
+              , .7 '#0c0847' \\
+              ,  4 '#4b0381' \\
               , 10 '#7d03a8' \\
               , 20 '#a82296' \\
               , 30 '#cb4679' \\
@@ -850,7 +856,7 @@ sub plot_qualities
             set ylabel "Cycle (fwd reads)" offset character -1,0
             unset ytics
             set ytics ($ytics)
-            unset xtics
+            $set_xtics xtics
             set title "$$args{title}" noenhanced
             splot '-' matrix with image
         ];
@@ -873,7 +879,7 @@ sub plot_qualities
                 set ytics ($ytics)
                 set xrange  [0:$nquals]
                 set xtics
-                set colorbox vertical user origin first ($nquals+1),0 size screen 0.025,0.812
+                $colorbox
                 set cblabel "Number of bases"
                 splot '-' matrix with image
             ];
@@ -892,8 +898,13 @@ sub generate_ticks {
     my ($cycles, $skip_even) = @_;
 
     my @marks;
+    my $div = 10;
+    while (scalar(@$cycles)/$div > 20) {
+       $div *= 2;
+    }
+    $div = nice_num($div);
     foreach my $v (@$cycles) {
-        if ($v % 10 == 0) {
+        if ($v % $div == 0) {
             if ($skip_even) {
                 my $label = $v % 20 ? $v : '';
                 push @marks, qq{"$label" $v};
