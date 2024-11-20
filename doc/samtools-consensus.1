@@ -85,7 +85,8 @@ gaps (either within an insertion or otherwise) are determined as the
 average of the surrounding non-gap bases.  The columns shown are the
 reference name, position, nth base at that position (zero if not an
 insertion), consensus call, consensus confidence, sequences and
-quality values.
+quality values.  Note even when a reference is supplied, the consensus
+base is always report (if non-zero depth) in the 5th column.
 
 Two consensus calling algorithms are offered.  The default computes a
 heterozygous consensus in a Bayesian manner, derived from the "Gap5"
@@ -218,6 +219,18 @@ The minimum depth required to make a call.  Defaults to 1.  Failing
 this depth check will produce consensus "N", or absent if it is an
 insertion.  Note this check is performed after filtering by flags
 and mapping/base quality.
+
+.TP
+.BI "-T " ref.fa ", --reference " ref.fa
+For base positions with zero coverage, use the supplied reference
+instead of "N".  Note this does not replace minimum depth or minimum
+quality filters as the base is known but considiered low quality so
+the ambiguity is retained.
+
+.TP
+.BI "--ref-qual " INT
+When \fB--reference\fR is given this specifies the quality value to
+use for reference-derived bases.  This defaults to zero.
 
 .TP 0
 The following options apply only to the simple consensus mode:

@@ -135,6 +135,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <htslib/sam.h>
 #include <htslib/hfile.h>
+#include <htslib/faidx.h>
 
 #include "samtools.h"
 #include "sam_opts.h"
@@ -224,6 +225,8 @@ typedef struct {
     double homopoly_fix;
     double homopoly_redux;
     qcal_t qcal;
+    char *ref_fn;
+    int ref_qual;
 
     // Internal state
     samFile *fp;
@@ -236,6 +239,9 @@ typedef struct {
     kstring_t ks_ins_qual;
     int last_tid;
     hts_pos_t last_pos;
+    char *ref;
+    int ref_tid;
+    faidx_t *fai;
 } consensus_opts;
 
 /* --------------------------------------------------------------------------
@@ -2008,14 +2014,55 @@ static int calculate_consensus_simple(const pileup_t *plp,
     return het[used_base];
 }
 
+/*
+ * Ensure opts->ref is up to date
+ * Returns 0 on success
+ *        -1 on failure
+ */
+static int update_ref(consensus_opts *opts, int tid) {
+    if (!opts->ref_fn)
+        return 0;
+
+    if (tid == opts->ref_tid && opts->ref)
+        return 0;
+
+    if (!opts->fai) {
+        if (!(opts->fai = fai_load(opts->ref_fn))) {
+            fprintf(stderr, "Failed to load fai for %s\n", opts->ref_fn);
+            return -1;
+        }
+    }
+
+    free(opts->ref);
+    hts_pos_t len;
+    const char *chr = sam_hdr_tid2name(opts->h, tid);
+    if (!chr)
+        return -1;
+
+    if (!(opts->ref = fai_fetch64(opts->fai, chr, &len)))
+        return -1;
+    opts->ref_tid = tid;
+
+    return 0;
+}
+
 static int empty_pileup2(consensus_opts *opts, sam_hdr_t *h, int tid,
                          hts_pos_t start, hts_pos_t end) {
     const char *name = sam_hdr_tid2name(h, tid);
     hts_pos_t i;
 
     int err = 0;
-    for (i = start; i < end; i++)
-        err |= fprintf(opts->fp_out, "%s\t%"PRIhts_pos"\t0\t0\tN\t0\t*\t*\n", name, i+1) < 0;
+
+    if (opts->ref_fn && update_ref(opts, tid) == 0) {
+        for (i = start; i < end; i++)
+            err |= fprintf(opts->fp_out, "%s\t%"PRIhts_pos
+                           "\t0\t0\t%c\t0\t*\t*\n",
+                           name, i+1, opts->ref[i]) < 0;
+    } else {
+        for (i = start; i < end; i++)
+            err |= fprintf(opts->fp_out, "%s\t%"PRIhts_pos
+                           "\t0\t0\tN\t0\t*\t*\n", name, i+1) < 0;
+    }
 
     return err ? -1 : 0;
 }
@@ -2103,9 +2150,20 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         }
     } else {
         cb = calculate_consensus_simple(p, opts, &cq);
+// Keep N as N.  If we want a base we can alter the consensus cutoff
+// However code to change this would be:
+//        if (cb == 'N') {
+//            if (opts->ref_fn && update_ref(opts, tid) == 0)
+//                cb = opts->ref[pos-1];
+//        }
     }
     if (cb < 0)
         return -1;
+
+// Keep N as N.  If we want a base we can alter the consensus cutoff.
+// However code to change this would be:
+//    if (cb == 'N' && opts->ref_fn && update_ref(opts, tid) == 0)
+//        cb = opts->ref[pos-1];
 
     if (!p)
         return 0;
@@ -2195,13 +2253,21 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
                 N = MIN(N, sam_hdr_tid2len(opts->h, opts->last_tid))
                     - opts->last_pos;
                 if (N > 0) {
+                    update_ref(opts, opts->last_tid);
                     if (ks_expand(seq, N+1) < 0)
                         return -1;
                     if (ks_expand(qual, N+1) < 0)
                         return -1;
-                    for (i = 0; i < N; i++) {
-                        seq->s[seq->l++] = 'N';
-                        qual->s[qual->l++] = '!';
+                    if (opts->ref) {
+                        for (i = 0; i < N; i++) {
+                            seq->s[seq->l++] = opts->ref[opts->last_pos+i];
+                            qual->s[qual->l++] = opts->ref_qual + '!';
+                        }
+                    } else {
+                        for (i = 0; i < N; i++) {
+                            seq->s[seq->l++] = 'N';
+                            qual->s[qual->l++] = '!';
+                        }
                     }
                     seq->s[seq->l] = 0;
                     qual->s[qual->l] = 0;
@@ -2210,6 +2276,7 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
             dump_fastq(opts, sam_hdr_tid2name(opts->h, opts->last_tid),
                        seq->s, seq->l, qual->s, qual->l);
         }
+        update_ref(opts, tid);
 
         seq->l = 0; qual->l = 0;
 
@@ -2276,13 +2343,23 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
 
     // Append consensus base/qual to seqs
     if (pos > opts->last_pos) {
-        if (opts->last_pos >= 0 || opts->all_bases) {
+        if (pos > opts->last_pos + 1 &&
+            (opts->last_pos >= 0 || opts->all_bases)) {
             // FIXME: don't expand qual if fasta
             if (ks_expand(seq,  pos - opts->last_pos) < 0 ||
                 ks_expand(qual, pos - opts->last_pos) < 0)
                 return -1;
-            memset(seq->s  + seq->l,  'N', pos - (opts->last_pos+1));
-            memset(qual->s + qual->l, '!', pos - (opts->last_pos+1));
+            update_ref(opts, tid);
+            if (opts->ref) {
+                // last bases of the previous reference
+                memcpy(seq->s + seq->l, opts->ref + opts->last_pos,
+                       pos - (opts->last_pos+1));
+                memset(qual->s + qual->l, opts->ref_qual + '!',
+                       pos - (opts->last_pos+1));
+            } else {
+                memset(seq->s + seq->l,  'N', pos - (opts->last_pos+1));
+                memset(qual->s + qual->l, '!', pos - (opts->last_pos+1));
+            }
             seq->l  += pos - (opts->last_pos+1);
             qual->l += pos - (opts->last_pos+1);
         }
@@ -2326,6 +2403,7 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "  --mark-ins            Add '+' before every inserted base/qual [off]\n");
     fprintf(fp, "  -A, --ambig           Enable IUPAC ambiguity codes [off]\n");
     fprintf(fp, "  -d, --min-depth INT   Minimum depth of INT [1]\n");
+    fprintf(fp, "      --ref-qual INT    QUAL to use for reference bases [0]\n");
     fprintf(fp, "\nFor simple consensus mode:\n");
     fprintf(fp, "  -q, --(no-)use-qual   Use quality values in calculation [off]\n");
     fprintf(fp, "  -c, --call-fract INT  At least INT portion of bases must agree [0.75]\n");
@@ -2359,6 +2437,8 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "      --input-fmt-option OPT[=VAL]\n");
     fprintf(fp, "               Specify a single input file format option in the form\n");
     fprintf(fp, "               of OPTION or OPTION=VALUE\n");
+    fprintf(fp, "  -T, --reference FILE\n");
+    fprintf(fp, "               Reference sequence FASTA FILE [null]\n");
     fprintf(fp, "  -@, --threads INT\n");
     fprintf(fp, "               Number of additional decompression threads to use [0]\n");
     fprintf(fp, "      --verbosity INT\n");
@@ -2403,6 +2483,7 @@ int main_consensus(int argc, char **argv) {
         .het_scale    = P_HET_SCALE,
         .homopoly_fix = 0,
         .homopoly_redux = 0.01,
+        .ref_qual     = 0,
 
         // Internal state
         .ks_line      = {0,0},
@@ -2420,7 +2501,7 @@ int main_consensus(int argc, char **argv) {
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', '-', '-', '@'),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', '-', 'T', '@'),
         {"use-qual",           no_argument,       NULL, 'q'},
         {"no-use-qual",        no_argument,       NULL, 'q'+1000},
         {"adj-qual",           no_argument,       NULL, 'q'+100},
@@ -2463,10 +2544,11 @@ int main_consensus(int argc, char **argv) {
         {"homopoly-redux",     required_argument, NULL, 'p'+200},
         {"qual-calibration",   required_argument, NULL, 't'},
         {"config",             required_argument, NULL, 'X'},
+        {"ref-qual",           required_argument, NULL, 20},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "@:qd:c:H:r:5f:C:aAl:o:m:pt:X:",
+    while ((c = getopt_long(argc, argv, "@:qd:c:H:r:5f:C:aAl:o:m:pt:X:T:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 'a': opts.all_bases++; break;
@@ -2637,7 +2719,14 @@ int main_consensus(int argc, char **argv) {
             }
             break;
 
-         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+        case 'T': // --reference
+            opts.ref_fn = optarg;
+            break;
+        case 20:
+            opts.ref_qual = atoi(optarg);
+            break;
+
+        default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
         case '?':
             usage_exit(stderr, EXIT_FAILURE);
@@ -2766,13 +2855,17 @@ int main_consensus(int argc, char **argv) {
                 opts.last_tid = opts.iter->tid;
             }
             if (pos < len) {
+                update_ref(&opts, opts.last_tid);
                 if (ks_expand(&opts.ks_ins_seq,  len-pos+1) < 0)
                     goto err;
                 if (ks_expand(&opts.ks_ins_qual, len-pos+1) < 0)
                     goto err;
                 while (pos++ < len) {
-                    opts.ks_ins_seq.s [opts.ks_ins_seq.l++] = 'N';
-                    opts.ks_ins_qual.s[opts.ks_ins_qual.l++] = '!';
+                    opts.ks_ins_seq.s [opts.ks_ins_seq.l++] = opts.ref
+                        ? opts.ref[pos-1]
+                        : 'N';
+                    opts.ks_ins_qual.s[opts.ks_ins_qual.l++] =
+                        opts.ref ? opts.ref_qual + '!' : '!';
                 }
                 opts.ks_ins_seq.s [opts.ks_ins_seq.l] = 0;
                 opts.ks_ins_qual.s[opts.ks_ins_qual.l] = 0;
@@ -2821,6 +2914,9 @@ int main_consensus(int argc, char **argv) {
     ks_free(&opts.ks_line);
     ks_free(&opts.ks_ins_seq);
     ks_free(&opts.ks_ins_qual);
+    free(opts.ref);
+    if (opts.fai)
+        fai_destroy(opts.fai);
 
     if (ret)
         print_error("consensus", "failed");
