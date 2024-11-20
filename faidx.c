@@ -140,8 +140,8 @@ static inline idx_entry* allocidx(idx* in)
         if (!tmp) {
             return NULL;
         }
-        int count = newlen - in->n;
-        memset(tmp + in->n * sizeof(*tmp), 0, count * sizeof(*tmp));
+        size_t count = newlen - in->n;
+        memset(tmp + in->n, 0, count * sizeof(*tmp));
         in->indx = tmp;
         in->m = newlen;
     }
