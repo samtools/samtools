@@ -59,6 +59,7 @@ typedef struct {
     int flag_mask, rev_comp, in_order, sanitize;
     int check_pos, check_cigar, check_mate;
     char *tag_str; // X,Y,Z or "*,X,Y,Z" for negation
+    char *tag_free;// copy of tag_str if non-literal
     char **tags;   // parsed and split tag_str
     int ntags;
     int64_t nrec;
@@ -253,7 +254,7 @@ void sums_update_row(int row, sums_t *h32, const crcs_t *c,
 
 // Updates a single group, with all/pass or all/fail rows.  Also handles the
 // in_order modes.
-void sums_update(int qcfail, sums_t *h32, const crcs_t *c, opts *o,
+void sums_update(int qcfail, sums_t *h32, const crcs_t *crcs, opts *o,
                  uint64_t count) {
     uint32_t count_crc = 0;
     if (o->in_order) {
@@ -262,11 +263,11 @@ void sums_update(int qcfail, sums_t *h32, const crcs_t *c, opts *o,
         count_crc = hts_crc32(0, c, 8);
     }
 
-    sums_update_row(0, h32, c, count_crc, 1);
+    sums_update_row(0, h32, crcs, count_crc, 1);
     if (o->show_pass && !qcfail)
-        sums_update_row(1, h32, c, count_crc, 1);
+        sums_update_row(1, h32, crcs, count_crc, 1);
     if (o->show_fail && qcfail)
-        sums_update_row(2, h32, c, count_crc, 1);
+        sums_update_row(2, h32, crcs, count_crc, 1);
 }
 
 // Report single group (all, pass, fail)
@@ -569,6 +570,8 @@ int checksum_report(char *fn, opts *o,
     fprintf(o->fp, "# Aux tags:%s%s\n",
             o->tabs ? "\t" : "          ", o->tag_str);
     char *s=bam_flag2str(o->flag_mask);
+    if (!s)
+        return -1;
     fprintf(o->fp, "# BAM flags:%s%s\n",
             o->tabs ? "\t" : "         ", s);
     free(s);
@@ -755,14 +758,14 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
             sums_t *h32p;
 
             // create func
-            int ret;
+            int kret;
             khiter_t k = kh_get(chk, h, (char *)RGZ);
             if (k == kh_end(h)) {
                 char *rgz_ = strdup((char *)RGZ);
                 if (!rgz_)
                     goto err;
-                k = kh_put(chk, h, rgz_, &ret);
-                if (ret < 0) {
+                k = kh_put(chk, h, rgz_, &kret);
+                if (kret < 0) {
                     free(rgz_);
                     goto err;
                 }
@@ -832,7 +835,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
  */
 
 // Process an individual file, aggregating to s, noRG and h
-static int sums_parse(opts *o, char *fn, sums_t *s, sums_t *noRG,
+static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
                       khash_t(chk) *h) {
     int ret = -1;
     FILE *fp;
@@ -847,7 +850,7 @@ static int sums_parse(opts *o, char *fn, sums_t *s, sums_t *noRG,
         H_GROUP, H_QC, H_COUNT, H_SEQ, H_NAME, H_QUAL, H_AUX,
         H_POS, H_CIGAR, H_MATE, H_COMBINED
     } header[11] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, -1};
-    crcs_t c = {1,1,1,1,1,1,1};
+    crcs_t crcs = {1,1,1,1,1,1,1};
 
     while (line.l = 0, kgetline(&line, (kgets_func *)fgets, fp) >= 0) {
         if (strncmp(line.s, "# Checksum", 10) == 0) {
@@ -907,7 +910,7 @@ static int sums_parse(opts *o, char *fn, sums_t *s, sums_t *noRG,
             char c;
             if (sscanf(line.s, "# Aux tags: %c%n", &c, &idx) == 1)
                 if (!o->tag_str)
-                    o->tag_str = strdup(line.s + idx-1);
+                    o->tag_free = o->tag_str = strdup(line.s + idx-1);
 
             continue;
         }
@@ -941,7 +944,7 @@ static int sums_parse(opts *o, char *fn, sums_t *s, sums_t *noRG,
                 fprintf(stderr, "Field too long\n");
                 goto err;
             }
-            ptr += n == 1 ? idx : 0;
+            ptr += idx;
         }
 
         // Sanity check that header and rows match
@@ -970,35 +973,35 @@ static int sums_parse(opts *o, char *fn, sums_t *s, sums_t *noRG,
                 break;
 
             case H_COUNT:
-                count = strtol(col[i], NULL, 10);
+                count = strtoull(col[i], NULL, 10);
                 break;
 
             case H_SEQ:
-                c.seq = strtol(col[i], NULL, 16);
+                crcs.seq = strtoul(col[i], NULL, 16);
                 break;
 
             case H_NAME:
-                c.name = strtol(col[i], NULL, 16);
+                crcs.name = strtoul(col[i], NULL, 16);
                 break;
 
             case H_QUAL:
-                c.qual = strtol(col[i], NULL, 16);
+                crcs.qual = strtoul(col[i], NULL, 16);
                 break;
 
             case H_AUX:
-                c.aux = strtol(col[i], NULL, 16);
+                crcs.aux = strtoul(col[i], NULL, 16);
                 break;
 
             case H_POS:
-                c.pos = strtol(col[i], NULL, 16);
+                crcs.pos = strtoul(col[i], NULL, 16);
                 break;
 
             case H_CIGAR:
-                c.cigar = strtol(col[i], NULL, 16);
+                crcs.cigar = strtoul(col[i], NULL, 16);
                 break;
 
             case H_MATE:
-                c.mate = strtol(col[i], NULL, 16);
+                crcs.mate = strtoul(col[i], NULL, 16);
                 break;
 
             default:
@@ -1008,24 +1011,26 @@ static int sums_parse(opts *o, char *fn, sums_t *s, sums_t *noRG,
 
         // Add group entry
         if (strcmp(col[0], "-") == 0) {
-            sums_update_row(qc, noRG, &c, 0, count);
+            sums_update_row(qc, noRG, &crcs, 0, count);
         } else {
-            int ret;
+            int kret;
             khiter_t k = kh_get(chk, h, col[0]);
             if (k == kh_end(h)) {
-                char *rgz_;
-                k = kh_put(chk, h, rgz_ = strdup(col[0]), &ret);
-                if (ret < 0) {
+                char *rgz_ = strdup(col[0]);
+                if (!rgz_)
+                    goto err;
+                k = kh_put(chk, h, rgz_, &kret);
+                if (kret < 0) {
                     free(rgz_);
                     goto err;
                 }
                 sums_init(&kh_value(h, k));
             }
-            sums_update_row(qc, &kh_value(h, k), &c, 0, count);
+            sums_update_row(qc, &kh_value(h, k), &crcs, 0, count);
         }
 
         // Add to global "all" stats
-        sums_update_row(qc, s, &c, 0, count);
+        sums_update_row(qc, sums, &crcs, 0, count);
     }
 
     ret = 0;
@@ -1043,8 +1048,11 @@ int combine(opts *o, int argc, char **argv) {
     sums_init(&s);
     sums_init(&noRG);
 
-    o->tag_str = NULL;
+    free(o->tag_free); // Probably NULL, but just incase
+    o->tag_free = o->tag_str = NULL;
     khash_t(chk) *h = kh_init(chk);
+    if (!h)
+        goto err;
     for (int i = 0; i < argc; i++) {
         if (sums_parse(o, argv[i], &s, &noRG, h) < 0) {
             fprintf(stderr, "Failed to parse checksum file '%s'\n", argv[i]);
@@ -1055,7 +1063,8 @@ int combine(opts *o, int argc, char **argv) {
 
     ret = 0;
  err:
-    free(o->tag_str);
+    free(o->tag_free);
+    o->tag_free = NULL;
 
     if (h) {
         for (khiter_t k = kh_begin(h); k != kh_end(h); k++) {
@@ -1142,6 +1151,7 @@ int main_checksum(int argc, char **argv) {
         .flag_mask    = BAM_FPAIRED | BAM_FREAD1 | BAM_FREAD2,
         .rev_comp     = 1,
         .tag_str      = "BC,FI,QT,RT,TC",
+        .tag_free     = NULL,
         .check_pos    = 0,
         .check_cigar  = 0,
         .check_mate   = 0,
@@ -1303,6 +1313,7 @@ int main_checksum(int argc, char **argv) {
         ret |= fclose(opts.fp) < 0;
 
     free(opts.tags);
+    free(opts.tag_free);
 
     if (ret)
         fprintf(stderr, "[checksum] Failed to process data\n");
