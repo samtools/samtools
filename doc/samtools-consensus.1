@@ -276,10 +276,19 @@ output "N".
 
 .TP
 .BI "-@ " NTHREADS
-Specify the number of additional threads to use for decompressing the
-data.  Note currently the algorithm is dominated by the main consensus
-computation so asking for more than 1 additional thread will likely
-have minimal benefit.
+Specify the number of additional threads to use for computing the
+consensus.  Note if no index is present threads will only be used for
+parallel decompression meaning asking for more than 2 threads is
+unlikely to speed up processing.  With an index the consensus is
+computed for multiple regions simultaneously, offering near linear
+speed ups.
+
+.TP
+.BI "-Z " BASE_COUNT
+When using multiple threads this specifies the number of bases per
+threading job.  The default is 500,000 bp for fasta/fastq output and
+100,000 for pileup output.  Larger blocks may yield improved threading
+performance at a cost of more memory.
 
 .TP 0
 The following options apply only to Bayesian consensus mode enabled

@@ -1,7 +1,7 @@
 /*  bam_consensus.c -- consensus subcommand.
 
     Copyright (C) 1998-2001,2003 Medical Research Council (Gap4/5 source)
-    Copyright (C) 2003-2005,2007-2024 Genome Research Ltd.
+    Copyright (C) 2003-2005,2007-2025 Genome Research Ltd.
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
@@ -132,10 +132,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <limits.h>
 #include <float.h>
 #include <ctype.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #include <htslib/sam.h>
 #include <htslib/hfile.h>
 #include <htslib/faidx.h>
+#include <htslib/thread_pool.h>
+#include <htslib/cram.h>
 
 #include "samtools.h"
 #include "sam_opts.h"
@@ -189,6 +193,20 @@ typedef struct {
     int omap[101]; // overcall    or INS
 } qcal_t;
 
+// Persistent data used per thread and reused in each job operating in
+// the same thread.  This is for things like file handles where we
+// can't share the same pointer due to read buffers.  We also have one
+// of these for the main thread for consistency in non-threaded
+// operation.  Index 0 is main, 1-N is threads.
+typedef struct {
+    samFile *fp;       // BAM files e.g.
+    hts_idx_t *idx;    // BAI index e.g.
+    faidx_t *fai;      // FAI index
+    int ref_tid;       // reference chr value
+    char *ref;         // reference sequence
+    hts_pos_t ref_len; // ref seq length
+} thread_data_t;
+
 typedef struct {
     // User options
     char *reg;
@@ -227,22 +245,55 @@ typedef struct {
     qcal_t qcal;
     char *ref_fn;
     int ref_qual;
+    int span; // base block size for threads
 
-    // Internal state
-    samFile *fp;
+    // Internal state, shared between threads
+    char *fn;
     FILE *fp_out;
+    sam_global_args ga_in;
     sam_hdr_t *h;
-    hts_idx_t *idx;
-    hts_itr_t *iter;
-    kstring_t ks_line;
+    int nthreads;
+    hts_tpool *pool;
+    thread_data_t *tdata; // one per thread + 1 for main
+} consensus_opts;
+
+// Thread specific state (or once only in main if not threaded)
+typedef struct {
+    // Both threaded and non-threaded
+    consensus_opts *opts;  // cached copy; FIXME
+    kstring_t ks_pileup;
     kstring_t ks_ins_seq;
     kstring_t ks_ins_qual;
+    hts_pos_t ks_ins_start;             // first real base, buffer index
+    hts_pos_t first_pos, last_pos;      // genomic coords of first/last base
     int last_tid;
-    hts_pos_t last_pos;
     char *ref;
+    hts_pos_t ref_len;
     int ref_tid;
-    faidx_t *fai;
-} consensus_opts;
+    hts_itr_t *iter;
+
+    // Threaded only
+    int counter; // block number
+    samFile *fp; // thread specific file pointer
+    sam_hdr_t *h;
+    pthread_t pid;
+    int tid;
+    hts_pos_t start, end; // region to process
+    int first, last;      // region is at start of contig or end of contig
+    int (*seq_column)(void *client_data,
+                      samFile *fp,
+                      sam_hdr_t *h,
+                      pileup_t *p,
+                      int depth,
+                      hts_pos_t pos,
+                      int nth,
+                      int is_insert);
+} ctx;
+
+// Returns the thread_data struct associated with this thread ID
+static thread_data_t *thread_data(consensus_opts *opts) {
+    return &opts->tdata[hts_tpool_worker_id(opts->pool)+1];
+}
 
 /* --------------------------------------------------------------------------
  * A bayesian consensus algorithm that analyses the data to work out
@@ -405,7 +456,8 @@ static qcal_t static_qcal[6] = {
          60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
          70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
          80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
-         90, 91, 92, 93, 94, 95, 96, 97, 98, 99},
+         90, 91, 92, 93, 94, 95, 96, 97, 98, 99
+        },
         {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
          10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
          20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
@@ -415,7 +467,8 @@ static qcal_t static_qcal[6] = {
          60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
          70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
          80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
-         90, 91, 92, 93, 94, 95, 96, 97, 98, 99},
+         90, 91, 92, 93, 94, 95, 96, 97, 98, 99
+        },
         {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
          10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
          20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
@@ -425,7 +478,8 @@ static qcal_t static_qcal[6] = {
          60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
          70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
          80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
-         90, 91, 92, 93, 94, 95, 96, 97, 98, 99}
+         90, 91, 92, 93, 94, 95, 96, 97, 98, 99
+        }
     },
 
     { // HiFi
@@ -438,29 +492,29 @@ static qcal_t static_qcal[6] = {
          44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
          44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
          44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
-         44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
-         },
+         44, 44, 44, 44, 44, 44, 44, 44, 44, 44
+        },
         {  4,  4,  4,  4,  5,  6,  6,  7,  8,  9,
-          10, 11, 11, 12, 13, 14, 15, 15, 16, 17,
-          18, 19, 19, 20, 20, 21, 22, 23, 23, 24,
-          25, 25, 25, 26, 26, 26, 27, 27, 28, 28,
-          28, 28, 27, 27, 27, 28, 28, 28, 28, 27,
-          27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
-          27, 27, 26, 26, 25, 26, 26, 27, 27, 27,
-          26, 26, 26, 26, 26, 26, 26, 26, 27, 27,
-          28, 29, 28, 28, 28, 27, 27, 27, 27, 27,
-          27, 28, 28, 30, 30, 30, 30, 30, 30, 30,
-          },
+           10, 11, 11, 12, 13, 14, 15, 15, 16, 17,
+           18, 19, 19, 20, 20, 21, 22, 23, 23, 24,
+           25, 25, 25, 26, 26, 26, 27, 27, 28, 28,
+           28, 28, 27, 27, 27, 28, 28, 28, 28, 27,
+           27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
+           27, 27, 26, 26, 25, 26, 26, 27, 27, 27,
+           26, 26, 26, 26, 26, 26, 26, 26, 27, 27,
+           28, 29, 28, 28, 28, 27, 27, 27, 27, 27,
+           27, 28, 28, 30, 30, 30, 30, 30, 30, 30,
+        },
         {  8,  8,  8,  8,  9, 10, 11, 12, 13, 14,
-          15, 15, 16, 17, 18, 19, 19, 20, 20, 21,
-          21, 22, 22, 23, 23, 23, 24, 24, 24, 25,
-          25, 25, 25, 25, 25, 26, 26, 26, 26, 27,
-          27, 27, 27, 27, 27, 28, 28, 28, 28, 28,
-          29, 29, 29, 29, 29, 29, 30, 30, 30, 30,
-          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
-          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
-          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
-          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+           15, 15, 16, 17, 18, 19, 19, 20, 20, 21,
+           21, 22, 22, 23, 23, 23, 24, 24, 24, 25,
+           25, 25, 25, 25, 25, 26, 26, 26, 26, 27,
+           27, 27, 27, 27, 27, 28, 28, 28, 28, 28,
+           29, 29, 29, 29, 29, 29, 30, 30, 30, 30,
+           30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+           30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+           30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+           30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
         }
     },
 
@@ -502,36 +556,36 @@ static qcal_t static_qcal[6] = {
     { // ONT R10.4 super
         {  0,  2,  2,  2,  3,  4,  4,  5,  6,  7,
            7,  8,  9, 12, 13, 14, 15, 15, 16, 17,
-          18, 19, 20, 22, 24, 25, 26, 27, 28, 29,
-          30, 31, 33, 34, 36, 37, 38, 38, 39, 39,
-          40, 40, 40, 40, 40, 40, 40, 41, 40, 40,
-          41, 41, 40, 40, 40, 40, 41, 40, 40, 40,
-          40, 41, 41, 40, 40, 41, 40, 40, 39, 41,
-          40, 41, 40, 40, 41, 41, 41, 40, 40, 40,
-          40, 40, 40, 40, 40, 40, 40, 40, 40, 40,
-          40, 40, 40, 40, 40, 40, 40, 40, 40, 40,
+           18, 19, 20, 22, 24, 25, 26, 27, 28, 29,
+           30, 31, 33, 34, 36, 37, 38, 38, 39, 39,
+           40, 40, 40, 40, 40, 40, 40, 41, 40, 40,
+           41, 41, 40, 40, 40, 40, 41, 40, 40, 40,
+           40, 41, 41, 40, 40, 41, 40, 40, 39, 41,
+           40, 41, 40, 40, 41, 41, 41, 40, 40, 40,
+           40, 40, 40, 40, 40, 40, 40, 40, 40, 40,
+           40, 40, 40, 40, 40, 40, 40, 40, 40, 40,
         },
         {  0,  2,  2,  2,  3,  4,  5,  6,  7,  8,
            8,  9,  9, 10, 10, 10, 11, 12, 12, 13,
-          13, 13, 14, 14, 15, 16, 16, 17, 18, 18,
-          19, 19, 20, 21, 22, 23, 24, 25, 25, 25,
-          25, 25, 25, 25, 25, 25, 26, 26, 26, 26,
-          26, 26, 26, 26, 27, 27, 27, 27, 27, 27,
-          27, 27, 27, 27, 27, 27, 27, 28, 28, 28,
-          28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
-          28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
-          28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
+           13, 13, 14, 14, 15, 16, 16, 17, 18, 18,
+           19, 19, 20, 21, 22, 23, 24, 25, 25, 25,
+           25, 25, 25, 25, 25, 25, 26, 26, 26, 26,
+           26, 26, 26, 26, 27, 27, 27, 27, 27, 27,
+           27, 27, 27, 27, 27, 27, 27, 28, 28, 28,
+           28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
+           28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
+           28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
         },
         {  0,  4,  6,  6,  6,  7,  7,  8,  9,  9,
            9, 10, 10, 11, 11, 12, 12, 13, 13, 14,
-          15, 15, 15, 16, 16, 17, 17, 18, 18, 19,
-          19, 20, 20, 21, 22, 22, 23, 23, 24, 24,
-          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-          24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+           15, 15, 15, 16, 16, 17, 17, 18, 18, 19,
+           19, 20, 20, 21, 22, 22, 23, 23, 24, 24,
+           24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+           24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+           24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+           24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+           24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+           24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
         }
     },
     { // ONT R10.4 duplex; just a copy of hifi for now
@@ -545,28 +599,28 @@ static qcal_t static_qcal[6] = {
          44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
          44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
          44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
-         },
+        },
         {  4,  4,  4,  4,  5,  6,  6,  7,  8,  9,
-          10, 11, 11, 12, 13, 14, 15, 15, 16, 17,
-          18, 19, 19, 20, 20, 21, 22, 23, 23, 24,
-          25, 25, 25, 26, 26, 26, 27, 27, 28, 28,
-          28, 28, 27, 27, 27, 28, 28, 28, 28, 27,
-          27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
-          27, 27, 26, 26, 25, 26, 26, 27, 27, 27,
-          26, 26, 26, 26, 26, 26, 26, 26, 27, 27,
-          28, 29, 28, 28, 28, 27, 27, 27, 27, 27,
-          27, 28, 28, 30, 30, 30, 30, 30, 30, 30,
-          },
+           10, 11, 11, 12, 13, 14, 15, 15, 16, 17,
+           18, 19, 19, 20, 20, 21, 22, 23, 23, 24,
+           25, 25, 25, 26, 26, 26, 27, 27, 28, 28,
+           28, 28, 27, 27, 27, 28, 28, 28, 28, 27,
+           27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
+           27, 27, 26, 26, 25, 26, 26, 27, 27, 27,
+           26, 26, 26, 26, 26, 26, 26, 26, 27, 27,
+           28, 29, 28, 28, 28, 27, 27, 27, 27, 27,
+           27, 28, 28, 30, 30, 30, 30, 30, 30, 30,
+        },
         {  8,  8,  8,  8,  9, 10, 11, 12, 13, 14,
-          15, 15, 16, 17, 18, 19, 19, 20, 20, 21,
-          21, 22, 22, 23, 23, 23, 24, 24, 24, 25,
-          25, 25, 25, 25, 25, 26, 26, 26, 26, 27,
-          27, 27, 27, 27, 27, 28, 28, 28, 28, 28,
-          29, 29, 29, 29, 29, 29, 30, 30, 30, 30,
-          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
-          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
-          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
-          30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+           15, 15, 16, 17, 18, 19, 19, 20, 20, 21,
+           21, 22, 22, 23, 23, 23, 24, 24, 24, 25,
+           25, 25, 25, 25, 25, 26, 26, 26, 26, 27,
+           27, 27, 27, 27, 27, 28, 28, 28, 28, 28,
+           29, 29, 29, 29, 29, 29, 30, 30, 30, 30,
+           30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+           30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+           30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+           30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
         }
     },
     { // Ultima Genomics
@@ -953,7 +1007,7 @@ int poly_len(const pileup_t *p, const bam1_t *b, hts_pos_t pos) {
  * Returns 0 (discard) or 1 (keep) on success, -1 on failure.
  */
 int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
-    consensus_opts *opts = (consensus_opts *)client_data;
+    consensus_opts *opts = ((ctx *)client_data)->opts;
     if (!opts->use_mqual)
         return 1;
 
@@ -1195,14 +1249,14 @@ double lnbinprobhalf(int n, double k) {
 }
 #endif
 
+#include "bam_consensus_tab.h"
+
 static
 int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
                              pileup_t *plp, consensus_opts *opts,
                              consensus_t *cons, int default_qual,
                              cons_probs *cp) {
-    int i, j;
-    static int init_done =0;
-    static double q2p[101], mqual_pow[256];
+    int j;
     double min_e_exp = DBL_MIN_EXP * log(2) + 1;
 
     double S[15] ALIGNED(16) = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
@@ -1231,23 +1285,6 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
                 12, 13, 14,
                     18, 19,
                         24};
-
-    if (!init_done) {
-        init_done = 1;
-
-        for (i = 0; i <= 100; i++) {
-            q2p[i] = pow(10, -i/10.0);
-        }
-
-        for (i = 0; i < 255; i++) {
-            //mqual_pow[i] = 1-pow(10, -(i+.01)/10.0);
-            mqual_pow[i] = 1-pow(10, -(i*.9)/10.0);
-            //mqual_pow[i] = 1-pow(10, -(i/3+.1)/10.0);
-            //mqual_pow[i] = 1-pow(10, -(i/2+.05)/10.0);
-        }
-        // unknown mqual
-        mqual_pow[255] = mqual_pow[10];
-    }
 
     /* Initialise */
     int counts[6] = {0};
@@ -1357,9 +1394,16 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
             if (mqual > opts->high_mqual)
                 mqual = opts->high_mqual;
 
-            double _p = 1-q2p[qual];
-            double _m = mqual_pow[mqual];
-            qual = ph_log(1-(_m * _p + (1 - _m)/4)); // CURRENT
+//            double _p = 1-q2p[qual];
+//            double _m = mqual_pow[mqual];
+//            qual = ph_log(1-(_m * _p + (1 - _m)/4)); // CURRENT
+
+            // Equivalent to the above, but avoiding numbers very close to 1
+            // This is also marginally faster.
+            double _P = q2p[qual];
+            double _M = mqual_pow_1m[mqual];
+            qual = ph_log(_P+.75*_M-_P*_M);
+
             //qual = ph_log(1-_p*_m); // testing
             //qual *= 6/sqrt(td);
         }
@@ -1825,58 +1869,6 @@ int calculate_consensus_gap5m(hts_pos_t pos, int flags, int depth,
 }
 
 /* --------------------------------------------------------------------------
- * Main processing logic
- */
-
-static void dump_fastq(consensus_opts *opts,
-                       const char *name,
-                       const char *seq, size_t seq_l,
-                       const char *qual, size_t qual_l) {
-    enum format fmt = opts->fmt;
-    int line_len = opts->line_len;
-    FILE *fp = opts->fp_out;
-
-    fprintf(fp, "%c%s\n", ">@"[fmt==FASTQ], name);
-    size_t i;
-    for (i = 0; i < seq_l; i += line_len)
-        fprintf(fp, "%.*s\n", (int)MIN(line_len, seq_l - i), seq+i);
-
-    if (fmt == FASTQ) {
-        fprintf(fp, "+\n");
-        for (i = 0; i < seq_l; i += line_len)
-            fprintf(fp, "%.*s\n", (int)MIN(line_len, seq_l - i), qual+i);
-    }
-}
-
-//---------------------------------------------------------------------------
-
-/*
- * Reads a single alignment record, using either the iterator
- * or a direct sam_read1 call.
- */
-static int readaln2(void *dat, samFile *fp, sam_hdr_t *h, bam1_t *b) {
-    consensus_opts *opts = (consensus_opts *)dat;
-
-    for (;;) {
-        int ret = opts->iter
-            ? sam_itr_next(fp, opts->iter, b)
-            : sam_read1(fp, h, b);
-        if (ret < 0)
-            return ret;
-
-        // Apply hard filters
-        if (opts->incl_flags && !(b->core.flag & opts->incl_flags))
-            continue;
-        if (opts->excl_flags &&  (b->core.flag & opts->excl_flags))
-            continue;
-        if (b->core.qual < opts->min_mqual)
-            continue;
-
-        return ret;
-    }
-}
-
-/* --------------------------------------------------------------------------
  * A simple summing algorithm, either pure base frequency, or by
  * weighting them according to their quality values.
  *
@@ -2014,118 +2006,135 @@ static int calculate_consensus_simple(const pileup_t *plp,
     return het[used_base];
 }
 
-/*
- * Ensure opts->ref is up to date
- * Returns 0 on success
- *        -1 on failure
+
+/* --------------------------------------------------------------------------
+ * Main processing logic
  */
-static int update_ref(consensus_opts *opts, int tid) {
+
+/*
+ * Ensure opts->ref is up to date.
+ * Returns >=0 on success (length)
+ *          -1 on failure
+ */
+static hts_pos_t update_ref(ctx *c, int tid) {
+    consensus_opts *opts = c->opts;
     if (!opts->ref_fn)
         return 0;
 
-    if (tid == opts->ref_tid && opts->ref)
-        return 0;
-
-    if (!opts->fai) {
-        if (!(opts->fai = fai_load(opts->ref_fn))) {
-            fprintf(stderr, "Failed to load fai for %s\n", opts->ref_fn);
-            return -1;
-        }
+    thread_data_t *tdata = thread_data(opts);
+    if (tid == tdata->ref_tid && tdata->ref) {
+        c->ref = tdata->ref;
+        return tdata->ref_len;
     }
 
-    free(opts->ref);
-    opts->ref = NULL;
+    free(tdata->ref);
+    tdata->ref = NULL;
+    tdata->ref_tid = tid;
 
-    hts_pos_t len;
+    c->ref = NULL;
+
     const char *chr = sam_hdr_tid2name(opts->h, tid);
     if (!chr)
         return -1;
 
-    if (!(opts->ref = fai_fetch64(opts->fai, chr, &len)))
+    if (!(tdata->ref = fai_fetch64(tdata->fai, chr, &tdata->ref_len)))
         return -1;
-    opts->ref_tid = tid;
+    c->ref = tdata->ref;
+    c->ref_tid = tid;
+    c->ref_len = tdata->ref_len;
 
-    return 0;
+    return c->ref_len;
+}
+// Outputs a FASTA or FASTQ consensus sequence
+static void dump_fastq(consensus_opts *opts,
+                       const char *name,
+                       const char *seq, size_t seq_l,
+                       const char *qual, size_t qual_l) {
+    enum format fmt = opts->fmt;
+    int line_len = opts->line_len;
+    FILE *fp = opts->fp_out;
+
+    if (!seq_l)
+        return;
+
+    fprintf(fp, "%c%s\n", ">@"[fmt==FASTQ], name);
+    size_t i;
+    for (i = 0; i < seq_l; i += line_len)
+        fprintf(fp, "%.*s\n", (int)MIN(line_len, seq_l - i), seq+i);
+
+    if (fmt == FASTQ) {
+        fprintf(fp, "+\n");
+        for (i = 0; i < seq_l; i += line_len)
+            fprintf(fp, "%.*s\n", (int)MIN(line_len, seq_l - i), qual+i);
+    }
 }
 
-static int empty_pileup2(consensus_opts *opts, sam_hdr_t *h, int tid,
+//---------------------------------------------------------------------------
+
+/*
+ * Reads a single alignment record, using either the iterator
+ * or a direct sam_read1 call.  This also applies the include/exclude filters.
+ */
+static int readaln2(void *dat, samFile *fp, sam_hdr_t *h, bam1_t *b) {
+    ctx *c = (ctx *)dat;
+    consensus_opts *opts = c->opts;
+
+    for (;;) {
+        int ret = c->iter
+            ? sam_itr_next(fp, c->iter, b)
+            : sam_read1(fp, h, b);
+        if (ret < 0)
+            return ret;
+
+        // Apply hard filters
+        if (opts->incl_flags && !(b->core.flag & opts->incl_flags))
+            continue;
+        if (opts->excl_flags &&  (b->core.flag & opts->excl_flags))
+            continue;
+        if (b->core.qual < opts->min_mqual)
+            continue;
+
+        return ret;
+    }
+}
+
+// Output/append a portion of empty pileup.  This may be N/0 or ref/qual.
+static int empty_pileup2(ctx *c, sam_hdr_t *h, int tid, int threaded,
                          hts_pos_t start, hts_pos_t end) {
+    consensus_opts *opts = c->opts;
     const char *name = sam_hdr_tid2name(h, tid);
     hts_pos_t i;
-
     int err = 0;
 
-    if (opts->ref_fn && (err |= update_ref(opts, tid)) == 0) {
+    char *rseq = NULL;
+    if (opts->ref_fn && (err |= (update_ref(c, tid) <= 0)) == 0)
+        rseq = c->ref;
+
+    if (threaded) {
+        kstring_t *ks = &c->ks_pileup;
         for (i = start; i < end; i++)
-            err |= fprintf(opts->fp_out, "%s\t%"PRIhts_pos
-                           "\t0\t0\t%c\t0\t*\t*\n",
-                           name, i+1, opts->ref[i]) < 0;
+            err |= ksprintf(ks,
+                            "%s\t%"PRIhts_pos"\t0\t0\t%c\t0\t*\t*\n",
+                            name, i+1, rseq ? rseq[i] : 'N') < 0;
     } else {
         for (i = start; i < end; i++)
-            err |= fprintf(opts->fp_out, "%s\t%"PRIhts_pos
-                           "\t0\t0\tN\t0\t*\t*\n", name, i+1) < 0;
+            err |= fprintf(opts->fp_out,
+                           "%s\t%"PRIhts_pos"\t0\t0\t%c\t0\t*\t*\n",
+                           name, i+1, rseq ? rseq[i] : 'N') < 0;
     }
 
     return err ? -1 : 0;
 }
 
 /*
- * Returns 0 on success
- *        -1 on failure
+ * Compute consensus for a specific base.  Fills out base and qual.
+ * Returns 0 on success,
+ *        -1 on failure.
  */
-static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
-                        int depth, hts_pos_t pos, int nth, int is_insert) {
-    unsigned char *qp, *cp;
-    char *rp;
-    int ref, cb, cq;
-    consensus_opts *opts = (consensus_opts *)cd;
-    int tid = p->b.core.tid;
-
-//    opts->show_ins=0;
-//    opts->show_del=1;
-    if (!opts->show_ins && nth)
-        return 0;
-
-    if (opts->iter) {
-        if (opts->iter->beg >= pos || opts->iter->end < pos)
-            return 0;
-    }
-
-    if (opts->all_bases) {
-        if (tid != opts->last_tid && opts->last_tid >= -1) {
-            if (opts->last_tid >= 0) {
-                // remainder of previous ref
-                hts_pos_t len = sam_hdr_tid2len(opts->h, opts->last_tid);
-                if (opts->iter)
-                    len =  MIN(opts->iter->end, len);
-                if (empty_pileup2(opts, opts->h, opts->last_tid,
-                                  opts->last_pos, len) < 0)
-                    return -1;
-            }
-
-            opts->last_pos = opts->iter ? opts->iter->beg : 0;
-        }
-
-        // Any refs between last_tid and tid
-        if (!opts->iter && tid > opts->last_tid && opts->all_bases > 1) {
-            while (++opts->last_tid < tid) {
-                hts_pos_t len = sam_hdr_tid2len(opts->h, opts->last_tid);
-                if (empty_pileup2(opts, opts->h, opts->last_tid, 0, len) < 0)
-                    return -1;
-            }
-        }
-
-        // Any gaps in this ref (same tid) or at start of this new tid
-        if (opts->last_pos >= 0 && pos > opts->last_pos+1) {
-            if (empty_pileup2(opts, opts->h, p->b.core.tid, opts->last_pos,
-                              pos-1) < 0)
-                return -1;
-        } else if (opts->last_pos < 0) {
-            if (empty_pileup2(opts, opts->h, p->b.core.tid,
-                              opts->iter ? opts->iter->beg : 0, pos-1) < 0)
-                return -1;
-        }
-    }
+int consensus_base(consensus_opts *opts,
+                   pileup_t *p, hts_pos_t  pos, int depth,
+                   int *base, int *qual) {
+    int cb, cq;
 
     if (opts->mode != MODE_SIMPLE) {
         consensus_t cons;
@@ -2133,6 +2142,7 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
                                   depth, p, opts, &cons, opts->default_qual,
                                   &cons_prob_recall, &cons_prob_precise);
         if (cons.depth < opts->min_depth) {
+            //  && cons.call != 4.  See #2167
             cb = 'N';
             cq = 0;
         } else if (cons.het_logodd > 0 && opts->ambig) {
@@ -2142,30 +2152,92 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
                  "WYKTt"
                  "acgt*"[cons.het_call];
             cq = cons.het_logodd;
-        } else{
+        } else {
             cb = "ACGT*"[cons.call];
             cq = cons.phred;
         }
-        if (cq < opts->cons_cutoff && cb != '*') {
+        if (cq < opts->cons_cutoff && cb != '*' &&
+            cons.het_call % 5 != 4 && cons.het_call / 5 != 4) {
+            // het base/* keeps base or * as most likely pure call, else N.
+            // We still set quality to zero however as this is more useful
+            // than simply changing the base to N.
             cb = 'N';
             cq = 0;
         }
     } else {
         cb = calculate_consensus_simple(p, opts, &cq);
-// Keep N as N.  If we want a base we can alter the consensus cutoff
-// However code to change this would be:
-//        if (cb == 'N') {
-//            if (opts->ref_fn && update_ref(opts, tid) == 0)
-//                cb = opts->ref[pos-1];
-//        }
     }
     if (cb < 0)
         return -1;
 
-// Keep N as N.  If we want a base we can alter the consensus cutoff.
-// However code to change this would be:
-//    if (cb == 'N' && opts->ref_fn && update_ref(opts, tid) == 0)
-//        cb = opts->ref[pos-1];
+    *base = cb;
+    *qual = cq;
+
+    return 0;
+}
+
+/*
+ * Callback from the pileup algorithm.
+ * Adds pileup format consensus for a specific column.
+ *
+ * Returns 0 on success
+ *        -1 on failure
+ */
+static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
+                        int depth, hts_pos_t pos, int nth, int is_insert) {
+    unsigned char *qp, *cp;
+    char *rp;
+    int ref, cb, cq;
+    ctx *c = (ctx *)cd;
+    consensus_opts *opts = c->opts;
+    int tid = p->b.core.tid;
+
+    if (!opts->show_ins && nth)
+        return 0;
+
+    if (c->iter) {
+        if (c->iter->beg >= pos || c->iter->end < pos)
+            return 0;
+    }
+
+    if (opts->all_bases) {
+        if (tid != c->last_tid && c->last_tid >= -1) {
+            if (c->last_tid >= 0) {
+                // remainder of previous ref
+                hts_pos_t len = sam_hdr_tid2len(opts->h, c->last_tid);
+                if (c->iter)
+                    len =  MIN(c->iter->end, len);
+                if (empty_pileup2(c, opts->h, c->last_tid, opts->nthreads,
+                                  c->last_pos, len) < 0)
+                    return -1;
+            }
+
+            c->last_pos = c->iter ? c->iter->beg : 0;
+        }
+
+        // Any refs between last_tid and tid
+        if (!c->iter && tid > c->last_tid && opts->all_bases > 1) {
+            while (++c->last_tid < tid) {
+                hts_pos_t len = sam_hdr_tid2len(opts->h, c->last_tid);
+                if (empty_pileup2(c, opts->h, c->last_tid, 0, 0, len) < 0)
+                    return -1;
+            }
+        }
+
+        // Any gaps in this ref (same tid) or at start of this new tid
+        if (c->last_pos >= 0 && pos > c->last_pos+1) {
+            if (empty_pileup2(c, opts->h, p->b.core.tid, opts->nthreads,
+                              c->last_pos, pos-1) < 0)
+                return -1;
+        } else if (c->last_pos < 0) {
+            if (empty_pileup2(c, opts->h, p->b.core.tid, opts->nthreads,
+                              c->iter ? c->iter->beg : 0, pos-1) < 0)
+                return -1;
+        }
+    }
+
+    if (consensus_base(opts, p, pos, depth, &cb, &cq) < 0)
+        return -1;
 
     if (!p)
         return 0;
@@ -2174,8 +2246,7 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         return 0;
 
     /* Ref, pos, nth, score, seq, qual */
-    kstring_t *ks = &opts->ks_line;
-    ks->l = 0;
+    kstring_t *ks = &c->ks_pileup;
     ref = p->b.core.tid;
     rp = (char *)sam_hdr_tid2name(h, ref);
 
@@ -2215,55 +2286,83 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
     }
     *cp++ = '\t';
     *qp++ = '\n';
-    if (fwrite(ks->s, 1, ks->l, opts->fp_out) != ks->l)
-        return -1;
 
-    opts->last_pos = pos;
-    opts->last_tid = tid;
+    if (!opts->nthreads) {
+        if (fwrite(ks->s, 1, ks->l, opts->fp_out) != ks->l)
+            return -1;
+        ks->l = 0;
+    }
+
+    c->last_pos = pos;
+    c->last_tid = tid;
 
     return 0;
 }
 
+/*
+ * Callback from the pileup algorithm.
+ * Adds fastq/fasta format consensus for a specific column.
+ *
+ * We either call this for a single thread with the entire region (c->iter)
+ * or entire file (no iterator), or it gets called repeatedly from threads
+ * with sub-regions.  When we're dealing with the latter we need to track
+ * which bases we're filling out with Ns so we can trim if needed.
+ *
+ * This updates c->ks_ins_{seq,qual}    seq and qual
+ *              c->ks_ins_start         index to seq/qual for 1st non-N
+ *              c->first_pos            first non-N in genome coords
+ *              c->last_pos             last genome position processed
+ *              c->last_tid             last genome chr processed
+ * (Amongst other variables)
+ *
+ * Returns 0 on success,
+ *        -1 on failure.
+ */
 static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
                        int depth, hts_pos_t pos, int nth, int is_insert) {
     int cb, cq;
-    consensus_opts *opts = (consensus_opts *)cd;
+    ctx *c = (ctx *)cd;
+    consensus_opts *opts = c->opts;
     int tid = p->b.core.tid;
-    kstring_t *seq  = &opts->ks_ins_seq;
-    kstring_t *qual = &opts->ks_ins_qual;
+    kstring_t *seq  = &c->ks_ins_seq;
+    kstring_t *qual = &c->ks_ins_qual;
 
     if (!opts->show_ins && nth)
         return 0;
 
-    if (opts->iter) {
-        if (opts->iter->beg >= pos || opts->iter->end < pos)
+    if (c->iter) {
+        if (c->iter->beg >= pos || c->iter->end < pos)
             return 0;
     }
 
+    if (c->first_pos > pos)
+        c->first_pos = pos;
+
  next_ref:
-    if (tid != opts->last_tid) {
-        if (opts->last_tid != -1) {
+    if (tid != c->last_tid) {
+        if (c->last_tid != -1) {
             if (opts->all_bases) {
                 // Fill in remainder of previous reference
                 int i, N;
-                if (opts->iter) {
-                    opts->last_pos = MAX(opts->last_pos, opts->iter->beg-1);
-                    N = opts->iter->end;
+                if (c->iter) {
+                    c->last_pos = MAX(c->last_pos, c->iter->beg-1);
+                    N = c->iter->end;
                 } else {
                     N = INT_MAX;
                 }
-                N = MIN(N, sam_hdr_tid2len(opts->h, opts->last_tid))
-                    - opts->last_pos;
+                N = MIN(N, sam_hdr_tid2len(opts->h, c->last_tid))
+                    - c->last_pos;
                 if (N > 0) {
-                    if (update_ref(opts, opts->last_tid) < 0)
-                        return -1;
                     if (ks_expand(seq, N+1) < 0)
                         return -1;
                     if (ks_expand(qual, N+1) < 0)
                         return -1;
-                    if (opts->ref) {
+                    if (c->ref) {
+                        hts_pos_t rlen;
+                        if ((rlen = update_ref(c, c->last_tid)) < 0)
+                            return -1;
                         for (i = 0; i < N; i++) {
-                            seq->s[seq->l++] = opts->ref[opts->last_pos+i];
+                            seq->s[seq->l++] = c->ref[c->last_pos+i];
                             qual->s[qual->l++] = opts->ref_qual + '!';
                         }
                     } else {
@@ -2276,101 +2375,72 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
                     qual->s[qual->l] = 0;
                 }
             }
-            dump_fastq(opts, sam_hdr_tid2name(opts->h, opts->last_tid),
+            dump_fastq(opts, sam_hdr_tid2name(opts->h, c->last_tid),
                        seq->s, seq->l, qual->s, qual->l);
         }
-        if (update_ref(opts, tid) < 0)
+        if (update_ref(c, tid) < 0)
             return -1;
 
         seq->l = 0; qual->l = 0;
 
-        if (!opts->iter && opts->all_bases > 1 && ++opts->last_tid < tid) {
-            opts->last_pos = 0;
+        if (!c->iter && opts->all_bases > 1 && ++c->last_tid < tid) {
+            c->last_pos = 0;
             goto next_ref;
         }
 
-        opts->last_tid = tid;
-        if (opts->iter)
-            opts->last_pos = opts->iter->beg;
+        c->last_tid = tid;
+        if (c->iter)
+            c->last_pos = opts->all_bases ? c->iter->beg : pos-1;
         else
-            opts->last_pos = opts->all_bases ? 0 : pos-1;
+            c->last_pos = opts->all_bases ? 0 : pos-1;
     }
 
-    // share this with basic_pileup
-    if (opts->mode != MODE_SIMPLE) {
-        consensus_t cons;
-        calculate_consensus_gap5m(pos, opts->use_mqual ? CONS_MQUAL : 0,
-                                  depth, p, opts, &cons, opts->default_qual,
-                                  &cons_prob_recall, &cons_prob_precise);
-        if (cons.depth < opts->min_depth) {
-            cb = 'N';
-            cq = 0;
-        } else if (cons.het_logodd > 0 && opts->ambig) {
-            cb = "AMRWa" // 5x5 matrix with ACGT* per row / col
-                 "MCSYc"
-                 "RSGKg"
-                 "WYKTt"
-                 "acgt*"[cons.het_call];
-            cq = cons.het_logodd;
-        } else {
-            cb = "ACGT*"[cons.call];
-            cq = cons.phred;
-        }
-        if (cq < opts->cons_cutoff && cb != '*' &&
-            cons.het_call % 5 != 4 && cons.het_call / 5 != 4) {
-            // het base/* keeps base or * as most likely pure call, else N.
-            // This is because we don't have a traditional way of representing
-            // base or not-base ambiguity.
-            cb = 'N';
-            cq = 0;
-        }
-    } else {
-        cb = calculate_consensus_simple(p, opts, &cq);
-    }
-    if (cb < 0)
+    if (consensus_base(opts, p, pos, depth, &cb, &cq) < 0)
         return -1;
 
     if (!p)
         return 0;
 
     if (!opts->show_del && cb == '*') {
-        opts->last_pos = pos;
-        opts->last_tid = tid;
+        c->last_pos = pos;
+        c->last_tid = tid;
         return 0;
     }
+
     if (opts->mark_ins && nth && cb != '*') {
         kputc('_', seq);
         kputc('_', qual);
     }
 
-    // end of share
-
     // Append consensus base/qual to seqs
-    if (pos > opts->last_pos) {
-        if (pos > opts->last_pos + 1 &&
-            (opts->last_pos >= 0 || opts->all_bases)) {
-            // FIXME: don't expand qual if fasta
-            if (ks_expand(seq,  pos - opts->last_pos) < 0 ||
-                ks_expand(qual, pos - opts->last_pos) < 0)
+    if (pos > c->last_pos) {
+        if (c->last_pos > 0 || opts->all_bases) {
+            if (ks_expand(seq,  pos - c->last_pos) < 0 ||
+                (opts->fmt == FASTQ &&
+                 ks_expand(qual, pos - c->last_pos) < 0))
                 return -1;
-            if (update_ref(opts, tid) < 0)
+            if (update_ref(c, tid) < 0)
                 return -1;
-            if (opts->ref) {
+            if (c->ref) {
                 // last bases of the previous reference
-                memcpy(seq->s + seq->l, opts->ref + opts->last_pos,
-                       pos - (opts->last_pos+1));
-                memset(qual->s + qual->l, opts->ref_qual + '!',
-                       pos - (opts->last_pos+1));
+                memcpy(seq->s + seq->l, c->ref + c->last_pos,
+                       pos - (c->last_pos+1));
+                if (opts->fmt == FASTQ)
+                    memset(qual->s + qual->l, opts->ref_qual + '!',
+                           pos - (c->last_pos+1));
             } else {
-                memset(seq->s + seq->l,  'N', pos - (opts->last_pos+1));
-                memset(qual->s + qual->l, '!', pos - (opts->last_pos+1));
+                memset(seq->s + seq->l,  'N', pos - (c->last_pos+1));
+                if (opts->fmt == FASTQ)
+                    memset(qual->s + qual->l, '!', pos - (c->last_pos+1));
             }
-            seq->l  += pos - (opts->last_pos+1);
-            qual->l += pos - (opts->last_pos+1);
+            seq->l  += pos - (c->last_pos+1);
+            qual->l += pos - (c->last_pos+1);
         }
     }
     if ((nth && opts->show_ins && cb != '*')
-        || cb != '*' || (pos > opts->last_pos && opts->show_del)) {
+        || cb != '*' || (pos > c->last_pos && opts->show_del)) {
+        if (c->ks_ins_start == -1)
+            c->ks_ins_start = seq->l;
         int err = 0;
         err |= kputc(cb, seq) < 0;
         err |= kputc(MIN(cq, '~'-'!')+'!', qual) < 0;
@@ -2378,10 +2448,459 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
             return -1;
     }
 
-    opts->last_pos = pos;
-    opts->last_tid = tid;
+    c->last_pos = pos;
+    c->last_tid = tid;
 
     return 0;
+}
+
+/*
+ * Computes pileup or fasta/q consensus for a given region. This is executed
+ * within a worker thread.
+ */
+void *pileup_job(void *data) {
+    // A local copy of consensus_opts, per pileup context
+    ctx *c = (ctx *)data;
+    consensus_opts *opts = c->opts;
+
+    thread_data_t *tdata = thread_data(opts);
+    samFile *fp = tdata->fp;
+
+    // Do the pileup job on our local iterator region
+    c->iter = sam_itr_queryi(tdata->idx, c->tid, c->start, c->end);
+    pileup_loop(fp, c->h, readaln2,
+                opts->mode != MODE_SIMPLE ? nm_init : NULL,
+                c->seq_column, nm_free, c);
+
+    if (opts->fmt == PILEUP && c->last_pos < c->end && opts->all_bases) {
+        hts_pos_t beg = MAX(c->iter ?  c->iter->beg : 0, c->last_pos);
+        empty_pileup2(c, opts->h, c->tid, 1, beg, c->end);
+    }
+
+    sam_itr_destroy(c->iter);
+
+    return c;
+}
+
+
+// Copy the reference to fastq if known, or fill out Ns.
+// Returns 0 on success, -1 on failure
+int ref_or_Ns(ctx *c, kstring_t *seq, kstring_t *qual,
+              hts_pos_t pos, hts_pos_t Nlen) {
+    consensus_opts *opts = c->opts;
+
+    if (ks_resize(seq, seq->l + Nlen+1) < 0)
+        return -1;
+    if (opts->fmt == FASTQ)
+        if (ks_resize(qual, qual->l + Nlen+1) < 0)
+            return -1;
+
+    if (opts->ref_fn) {
+        hts_pos_t rlen;
+        if ((rlen = update_ref(c, c->tid)) < 0)
+            return -1;
+        memcpy(seq->s + seq->l, &c->ref[pos], Nlen);
+        seq->s[seq->l += Nlen] = 0;
+        if (opts->fmt == FASTQ) {
+            memset(qual->s + qual->l, opts->ref_qual + '!', Nlen);
+            qual->s[qual->l += Nlen] = 0;
+        }
+    } else {
+        memset(seq->s + seq->l, 'N', Nlen);
+        seq->s[seq->l += Nlen] = 0;
+        if (opts->fmt == FASTQ) {
+            memset(qual->s + qual->l, '!', Nlen);
+            qual->s[qual->l += Nlen] = 0;
+        }
+    }
+
+    return 0;
+}
+
+// Append a chunk of sequence data in seq/qual to ks.
+// If we're in the middle of the requestion range then we need to pad
+// any starting and ending locations with Ns.  Otherwise we can omit them
+// iff the -a option wasn't specified.
+int append_cons(ctx *c, kstring_t *seq, kstring_t *qual,
+                hts_pos_t *used_start, hts_pos_t *used_end) {
+    consensus_opts *opts = c->opts;
+
+    // Our block returned is based on first..last covered within that block.
+    // With -a we expand that to start..end of region.  Similarly if the block
+    // is internal (not the first or last chunk) we also have to expand.
+    if (opts->all_bases || *used_start >= 0) {
+        hts_pos_t Nlen = c->ks_ins_start == -1
+            ? c->end - c->start               // entire block is missing
+            : c->first_pos - c->start - 1; // first covered base
+        if (Nlen) {
+            if (ks_resize(seq, seq->l + Nlen+1) < 0)
+                return -1;
+            if (ref_or_Ns(c, seq, qual, c->start, Nlen) < 0)
+                return -1;
+
+            if (*used_start == -1)
+                *used_start = 0; // we now count the Ns.
+            if (opts->all_bases)
+                *used_end = seq->l;
+        }
+    }
+
+    // Seq may start with Ns and we may wish to trim them if we've not emitted
+    // any sequence yet.  This is dealt with already in *used_start >= 0 above,
+    // so we don't want to add twice.
+    char   *ks_seq   = c->ks_ins_seq.s, *ks_qual   = c->ks_ins_qual.s;
+    int64_t ks_seq_l = c->ks_ins_seq.l,  ks_qual_l = c->ks_ins_qual.l;
+    if (c->ks_ins_start >= 0) {
+        ks_seq    += c->ks_ins_start;
+        ks_qual   += c->ks_ins_start;
+        ks_seq_l  -= c->ks_ins_start;
+        ks_qual_l -= c->ks_ins_start;
+    }
+
+    // The real sequence
+    if (ks_seq_l) {
+        kputsn(ks_seq,  ks_seq_l,  seq);
+        kputsn(ks_qual, ks_qual_l, qual);
+
+        // Any post Ns
+        int Nlen = c->end - c->last_pos;
+        *used_end = seq->l;
+        *used_start = 0;
+        if (Nlen) {
+            if (ref_or_Ns(c, seq, qual, c->last_pos, Nlen) < 0)
+                return -1;
+
+            if (opts->all_bases) {
+                *used_end = seq->l;
+            }
+        }
+    }
+
+    return  0;
+}
+
+// Parallel consensus generation.
+//
+// Executes in the main thread but despatches jobs to the worker thread to
+// do the bulk of the pileup/fastq creation.
+int pileup_loop_parallel(consensus_opts *opts) {
+    int chr = 0, err = -1;
+    hts_pos_t start;
+    hts_pos_t end;
+    hts_tpool *pool = NULL;
+    hts_tpool_process *q = NULL;
+
+    hts_pos_t used_start, used_end;
+
+    //printf("Reg %s:%ld-%ld\n", opts->h->target_name[chr], start, end);
+    int counter = 0, received = 0;
+
+    thread_data_t *tdata = opts->tdata;
+    for (int i = 1; i <= opts->nthreads; i++) {
+        tdata[i].fp = sam_open_format(opts->fn, "r",
+                                      (htsFormat *)&opts->ga_in);
+        if (!tdata[i].fp)
+            goto err;
+        if (opts->ref_fn) {
+            if (!(tdata[i].fai = fai_load(opts->ref_fn)))
+                goto err;
+        }
+        if (tdata[i].fp->format.format == cram) {
+            // For CRAM, as indices are tied to a file descriptor
+            tdata[i].idx = sam_index_load(tdata[i].fp, opts->fn);
+        } else {
+            tdata[i].idx = tdata[0].idx;
+        }
+    }
+
+    pool = hts_tpool_init(opts->nthreads);
+    q = hts_tpool_process_init(pool, opts->nthreads*2, 0);
+    hts_tpool_result *r;
+    opts->pool = pool;
+
+    do {
+        // next chromosome
+        used_start = -1;
+        used_end = 0;
+
+        if (opts->reg) {
+            sam_parse_region(opts->h, opts->reg, &chr, &start, &end, 0);
+            if (start < 0)
+                start = 0;
+            if (end > opts->h->target_len[chr])
+                end = opts->h->target_len[chr];
+        } else {
+            for (; chr < sam_hdr_nref(opts->h); chr++) {
+                hts_itr_t *itr = sam_itr_queryi(tdata[0].idx, chr, 0,
+                                                HTS_POS_MAX);
+                int finished = itr->finished;
+                if (finished && opts->all_bases > 1) {
+                    // empty chr
+                    kstring_t seq  = KS_INITIALIZE;
+                    kstring_t qual = KS_INITIALIZE;
+                    hts_pos_t rlen = sam_hdr_tid2len(opts->h, chr);
+                    ctx c;
+                    memset(&c, 0, sizeof(c));
+                    c.h = opts->h;
+                    c.opts = opts;
+                    c.tid = chr;
+                    c.start = 0;
+                    c.end = rlen;
+                    c.ks_ins_start = -1;
+
+                    if (opts->fmt == PILEUP) {
+                        if (empty_pileup2(&c, opts->h, chr, 0, 0, rlen) < 0)
+                            return -1;
+                    } else {
+                        hts_pos_t used_start = -1, used_end = 0;
+                        append_cons(&c, &seq, &qual, &used_start, &used_end);
+                        dump_fastq(opts, sam_hdr_tid2name(opts->h, chr),
+                                   seq.s, rlen, qual.s, rlen);
+                    }
+                    ks_free(&seq);
+                    ks_free(&qual);
+                }
+                sam_itr_destroy(itr);
+                if (!finished)
+                    break;
+            }
+            if (chr == sam_hdr_nref(opts->h))
+                goto ret_0;
+
+            start = 0;
+            end = opts->h->target_len[chr];
+        }
+
+        hts_pos_t sub_start = start;
+        hts_pos_t sub_end = start + opts->span -1;
+
+        ctx *c = NULL;
+        kstring_t seq  = KS_INITIALIZE;
+        kstring_t qual = KS_INITIALIZE;
+        while (sub_start < end) {
+            if (!c) {
+                c = calloc(1, sizeof(*c));
+                c->h  = opts->h;
+                c->tid = chr;
+                c->start = sub_start;
+                c->end = sub_end = MIN(sub_start + opts->span, end);
+                c->counter = counter++;
+                c->opts = opts; // FIXME: we don't need to copy most of this
+                c->last_tid = -1;
+                c->last_pos = -1;
+                c->first_pos = HTS_POS_MAX;
+                c->ks_ins_start = -1;
+                c->seq_column = opts->fmt == PILEUP
+                    ? basic_pileup
+                    : basic_fasta;
+                c->first = c->start == start;
+                c->last  = c->end == end;
+            }
+
+            int blk = hts_tpool_dispatch2(pool, q, pileup_job, c, 1);
+
+            // Check for results
+            while ((r = hts_tpool_next_result(q))) {
+                ctx *c = (ctx *)hts_tpool_result_data(r);
+                if (opts->fmt == PILEUP) {
+                    kstring_t *ks = &c->ks_pileup;
+                    if (fwrite(ks->s, 1, ks->l, opts->fp_out) != ks->l)
+                        goto err;
+                    ks_free(ks);
+                } else {
+                    append_cons(c, &seq, &qual, &used_start, &used_end);
+                    ks_free(&c->ks_ins_seq);
+                    ks_free(&c->ks_ins_qual);
+                }
+                hts_tpool_delete_result(r, 1);
+                received++;
+            }
+
+            if (blk == -1) {
+                usleep(1000);
+            } else {
+                c = NULL;
+                sub_start += opts->span;
+                sub_end   += opts->span;
+            }
+        }
+
+        while (received < counter) {
+            while (!(r = hts_tpool_next_result(q)))
+                usleep(1000);
+            ctx *c = (ctx *)hts_tpool_result_data(r);
+            if (opts->fmt == PILEUP) {
+                kstring_t *ks = &c->ks_pileup;
+                if (ks->l && fwrite(ks->s, 1, ks->l, opts->fp_out) != ks->l)
+                    goto err;
+                ks_free(ks);
+            } else {
+                append_cons(c, &seq, &qual, &used_start, &used_end);
+                ks_free(&c->ks_ins_seq);
+                ks_free(&c->ks_ins_qual);
+            }
+            hts_tpool_delete_result(r, 1);
+            received++;
+        }
+
+        if (opts->fmt != PILEUP)
+            dump_fastq(opts, sam_hdr_tid2name(opts->h, chr),
+                       seq.s, used_end, qual.s, used_end);
+
+        ks_free(&seq);
+        ks_free(&qual);
+
+    } while (!opts->reg && ++chr < sam_hdr_nref(opts->h));
+
+ ret_0:
+    err = 0;
+ err:
+
+    // Discard any inflight jobs.  Can this happen?  Perhaps on error.
+    while (received < counter) {
+        while (!(r = hts_tpool_next_result(q)))
+            usleep(1000);
+        ctx *c = (ctx *)hts_tpool_result_data(r);
+        ks_free(&c->ks_pileup);
+        ks_free(&c->ks_ins_seq);
+        ks_free(&c->ks_ins_qual);
+        hts_tpool_delete_result(r, 1);
+
+        received++;
+    }
+
+    for (int i = 1; i <= opts->nthreads; i++) {
+        if (tdata[i].idx && tdata[i].idx != tdata[0].idx)
+            hts_idx_destroy(tdata[i].idx);
+
+        err |= sam_close(tdata[i].fp)<0;
+        fai_destroy(tdata[i].fai);
+        free(tdata[i].ref);
+    }
+
+    if (q)
+        hts_tpool_process_destroy(q);
+    if (pool)
+        hts_tpool_destroy(pool);
+
+    return err;
+}
+
+/*
+ * Non-threaded implementation.
+ * Returns 0 on success
+ *        -1 on failure
+ */
+int pileup_loop_serial(consensus_opts *opts) {
+    int ret = -1;
+    thread_data_t *tdata = &opts->tdata[0];
+
+    // Serial mode uses a single job rather than breaking the task down into
+    // regions, but we still need to create a job context for it.
+    ctx c = {
+        .ks_pileup   = {0,0},
+        .ks_ins_seq  = {0,0},
+        .ks_ins_qual = {0,0},
+        .opts        = opts,
+        .last_tid    = -1,
+        .last_pos    = -1,
+        .ref_tid     = -1,
+        .iter        = NULL
+    };
+
+    if (opts->reg) {
+        c.iter = sam_itr_querys(opts->tdata[0].idx, opts->h, opts->reg);
+        if (!c.iter) {
+            print_error("consensus", "Failed to parse region \"%s\"",
+                        opts->reg);
+            goto err;
+        }
+    }
+
+    if (opts->fmt == PILEUP) {
+        if (pileup_loop(tdata->fp, opts->h, readaln2,
+                        opts->mode != MODE_SIMPLE ? nm_init : NULL,
+                        basic_pileup,
+                        opts->mode != MODE_SIMPLE ? nm_free : NULL,
+                        &c) < 0)
+            goto err;
+
+        if (opts->all_bases) {
+            int tid = c.iter ? c.iter->tid : c.last_tid;
+            int len = sam_hdr_tid2len(opts->h, tid);
+            int pos = c.last_pos;
+            if (c.iter) {
+                len = MIN(c.iter->end, len);
+                pos = MAX(c.iter->beg, pos);
+            }
+            if (empty_pileup2(&c, opts->h, tid, 0, pos, len) < 0)
+                goto err;
+        }
+        while (!c.iter && opts->all_bases > 1 &&
+               ++c.last_tid < opts->h->n_targets) {
+            int len = sam_hdr_tid2len(opts->h, c.last_tid);
+            if (empty_pileup2(&c, opts->h, c.last_tid, 0, 0, len) < 0)
+                goto err;
+        }
+    } else {
+        if (pileup_loop(tdata->fp, opts->h, readaln2,
+                        opts->mode != MODE_SIMPLE ? nm_init : NULL,
+                        basic_fasta,
+                        opts->mode != MODE_SIMPLE ? nm_free : NULL,
+                        &c) < 0)
+            goto err;
+
+    next_ref_q:
+        if (opts->all_bases) {
+            // fill out terminator
+            int tid = c.iter ? c.iter->tid : c.last_tid;
+            int len = sam_hdr_tid2len(opts->h, tid);
+            int pos = c.last_pos;
+            if (c.iter) {
+                len = MIN(c.iter->end, len);
+                pos = MAX(c.iter->beg, pos);
+                c.last_tid = c.iter->tid;
+            }
+            if (pos < len) {
+                if (update_ref(&c, c.last_tid) < 0)
+                    goto err;
+                if (ks_expand(&c.ks_ins_seq,  len-pos+1) < 0)
+                    goto err;
+                if (ks_expand(&c.ks_ins_qual, len-pos+1) < 0)
+                    goto err;
+                while (pos++ < len) {
+                    c.ks_ins_seq.s [c.ks_ins_seq.l++]  =
+                        c.ref ? c.ref[pos-1] : 'N';
+                    c.ks_ins_qual.s[c.ks_ins_qual.l++] =
+                        (c.ref ? opts->ref_qual : 0) + '!';
+                }
+                c.ks_ins_seq.s [c.ks_ins_seq.l] = 0;
+                c.ks_ins_qual.s[c.ks_ins_qual.l] = 0;
+            }
+        }
+        if (c.last_tid >= 0)
+            dump_fastq(opts, sam_hdr_tid2name(opts->h, c.last_tid),
+                       c.ks_ins_seq.s,  c.ks_ins_seq.l,
+                       c.ks_ins_qual.s, c.ks_ins_qual.l);
+
+        if (!c.iter && opts->all_bases > 1 &&
+            ++c.last_tid < opts->h->n_targets) {
+            c.last_pos = 0;
+            c.ks_ins_seq.l = c.ks_ins_qual.l = 0;
+            goto next_ref_q;
+        }
+    }
+
+    ret = 0;
+ err:
+
+    ks_free(&c.ks_pileup);
+    ks_free(&c.ks_ins_seq);
+    ks_free(&c.ks_ins_qual);
+    if (c.iter)
+        hts_itr_destroy(c.iter);
+
+    return ret;
 }
 
 // END OF NEW PILEUP
@@ -2408,6 +2927,7 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "  --mark-ins            Add '+' before every inserted base/qual [off]\n");
     fprintf(fp, "  -A, --ambig           Enable IUPAC ambiguity codes [off]\n");
     fprintf(fp, "  -d, --min-depth INT   Minimum depth of INT [1]\n");
+    fprintf(fp, "  -Z, --block-size INT  Size of chromosome block (bp) when threading [100000]\n");
     fprintf(fp, "      --ref-qual INT    QUAL to use for reference bases [0]\n");
     fprintf(fp, "\nFor simple consensus mode:\n");
     fprintf(fp, "  -q, --(no-)use-qual   Use quality values in calculation [off]\n");
@@ -2489,23 +3009,15 @@ int main_consensus(int argc, char **argv) {
         .homopoly_fix = 0,
         .homopoly_redux = 0.01,
         .ref_qual     = 0,
+        .span         = 500000,
 
         // Internal state
-        .ks_line      = {0,0},
-        .ks_ins_seq   = {0,0},
-        .ks_ins_qual  = {0,0},
-        .fp           = NULL,
         .fp_out       = stdout,
-        .iter         = NULL,
-        .idx          = NULL,
-        .ref_tid      = -1,
-        .last_tid     = -1,
-        .last_pos     = -1,
+        .ga_in        = SAM_GLOBAL_ARGS_INIT
     };
 
     set_qcal(&opts.qcal, QCAL_FLAT);
 
-    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', '-', 'T', '@'),
         {"use-qual",           no_argument,       NULL, 'q'},
@@ -2551,10 +3063,11 @@ int main_consensus(int argc, char **argv) {
         {"qual-calibration",   required_argument, NULL, 't'},
         {"config",             required_argument, NULL, 'X'},
         {"ref-qual",           required_argument, NULL, 20},
+        {"block-size",         required_argument, NULL, 'Z'},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "@:qd:c:H:r:5f:C:aAl:o:m:pt:X:T:",
+    while ((c = getopt_long(argc, argv, "@:qd:c:H:r:5f:C:aAl:o:m:pt:X:T:Z:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 'a': opts.all_bases++; break;
@@ -2592,6 +3105,11 @@ int main_consensus(int argc, char **argv) {
         case 'm'+101: opts.nm_adjust = 0; break;
         case 'h'+100: opts.nm_halo = atoi(optarg); break;
         case 'h'+101: opts.sc_cost = atoi(optarg); break;
+        case 'Z':
+            opts.span = atoi(optarg);
+            if (opts.span < 2)
+                opts.span = 2;
+            break;
 
         case 'm': // mode
             if (strcasecmp(optarg, "simple") == 0) {
@@ -2629,6 +3147,9 @@ int main_consensus(int argc, char **argv) {
                 opts.fmt = FASTQ;
             } else if (strcasecmp(optarg, "pileup") == 0) {
                 opts.fmt = PILEUP;
+                // Pileup uses much more memory so reduce default span size
+                if (opts.span == 500000)
+                    opts.span = 100000;
             } else {
                 fprintf(stderr, "Unknown format %s\n", optarg);
                 return 1;
@@ -2721,18 +3242,21 @@ int main_consensus(int argc, char **argv) {
                 print_error("consensus",
                             "failed to load quality calibration '%s'",
                             optarg);
-                return -1;
+                return 1;
             }
             break;
 
         case 'T': // --reference
             opts.ref_fn = optarg;
             break;
+
         case 20:
             opts.ref_qual = atoi(optarg);
             break;
 
-        default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+        default:
+            if (parse_sam_global_opt(c, optarg, lopts, &opts.ga_in) == 0)
+                break;
             /* else fall-through */
         case '?':
             usage_exit(stderr, EXIT_FAILURE);
@@ -2781,124 +3305,68 @@ int main_consensus(int argc, char **argv) {
         if (argc == optind) usage_exit(stdout, EXIT_SUCCESS);
         else usage_exit(stderr, EXIT_FAILURE);
     }
-    opts.fp = sam_open_format(argv[optind], "r", &ga.in);
-    if (opts.fp == NULL) {
+
+    opts.nthreads = opts.ga_in.nthreads;
+    opts.tdata = calloc(opts.nthreads+1, sizeof(*opts.tdata));
+    opts.tdata[0].fp = sam_open_format(argv[optind], "r",
+                                       (htsFormat *)&opts.ga_in);
+    opts.tdata[0].ref_tid = -1;
+    opts.fn = argv[optind];
+    if (opts.tdata[0].fp == NULL) {
         print_error_errno("consensus", "Cannot open input file \"%s\"",
                           argv[optind]);
         goto err;
     }
-    if (ga.nthreads > 0)
-        hts_set_threads(opts.fp, ga.nthreads);
 
-    if (!(opts.h = sam_hdr_read(opts.fp))) {
+    if (opts.ref_fn) {
+        if (!(opts.tdata[0].fai = fai_load(opts.ref_fn))) {
+            fprintf(stderr, "Failed to load fai for %s\n", optarg);
+            return 1;
+        }
+    }
+
+
+    if (!(opts.h = sam_hdr_read(opts.tdata[0].fp))) {
         fprintf(stderr, "Failed to read header for \"%s\"\n", argv[optind]);
         goto err;
     }
 
     if (opts.reg) {
-        opts.idx = sam_index_load(opts.fp, argv[optind]);
-        if (!opts.idx) {
+        opts.tdata[0].idx = sam_index_load(opts.tdata[0].fp, argv[optind]);
+        if (!opts.tdata[0].idx) {
             print_error("consensus", "Cannot load index for input file \"%s\"",
                         argv[optind]);
             goto err;
         }
-        opts.iter = sam_itr_querys(opts.idx, opts.h, opts.reg);
-        if (!opts.iter) {
-            print_error("consensus", "Failed to parse region \"%s\"",
-                        opts.reg);
-            goto err;
+    } else if (opts.nthreads) {
+        // This is acceptable to fail.  It just means threads are decompression
+        opts.tdata[0].idx = sam_index_load(opts.tdata[0].fp, argv[optind]);
+        if (!opts.tdata[0].idx) {
+            fprintf(stderr, "No index: multi-threading is limited to decompression only\n");
+            // always consider doing this?
+            hts_set_threads(opts.tdata[0].fp, opts.nthreads);
         }
     }
 
-    if (opts.fmt == PILEUP) {
-        if (pileup_loop(opts.fp, opts.h, readaln2,
-                        opts.mode != MODE_SIMPLE ? nm_init : NULL,
-                        basic_pileup,
-                        opts.mode != MODE_SIMPLE ? nm_free : NULL,
-                        &opts) < 0)
+    if (opts.nthreads && opts.tdata[0].idx) {
+        if (pileup_loop_parallel(&opts) < 0)
             goto err;
-
-        if (opts.all_bases) {
-            int tid = opts.iter ? opts.iter->tid : opts.last_tid;
-            int len = sam_hdr_tid2len(opts.h, tid);
-            int pos = opts.last_pos;
-            if (opts.iter) {
-                len = MIN(opts.iter->end, len);
-                pos = MAX(opts.iter->beg, pos);
-            }
-            if (empty_pileup2(&opts, opts.h, tid, pos, len) < 0)
-                goto err;
-        }
-        while (!opts.iter && opts.all_bases > 1 &&
-               ++opts.last_tid < opts.h->n_targets) {
-            int len = sam_hdr_tid2len(opts.h, opts.last_tid);
-            if (empty_pileup2(&opts, opts.h, opts.last_tid, 0, len) < 0)
-                goto err;
-        }
-
     } else {
-        if (pileup_loop(opts.fp, opts.h, readaln2,
-                        opts.mode != MODE_SIMPLE ? nm_init : NULL,
-                        basic_fasta,
-                        opts.mode != MODE_SIMPLE ? nm_free : NULL,
-                        &opts) < 0)
+        if (pileup_loop_serial(&opts) < 0)
             goto err;
-
-    next_ref_q:
-        if (opts.all_bases) {
-            // fill out terminator
-            int tid = opts.iter ? opts.iter->tid : opts.last_tid;
-            int len = sam_hdr_tid2len(opts.h, tid);
-            int pos = opts.last_pos;
-            if (opts.iter) {
-                len = MIN(opts.iter->end, len);
-                pos = MAX(opts.iter->beg, pos);
-                opts.last_tid = opts.iter->tid;
-            }
-            if (pos < len) {
-                if (update_ref(&opts, opts.last_tid) < 0)
-                    return -1;
-                if (ks_expand(&opts.ks_ins_seq,  len-pos+1) < 0)
-                    goto err;
-                if (ks_expand(&opts.ks_ins_qual, len-pos+1) < 0)
-                    goto err;
-                while (pos++ < len) {
-                    opts.ks_ins_seq.s [opts.ks_ins_seq.l++] = opts.ref
-                        ? opts.ref[pos-1]
-                        : 'N';
-                    opts.ks_ins_qual.s[opts.ks_ins_qual.l++] =
-                        opts.ref ? opts.ref_qual + '!' : '!';
-                }
-                opts.ks_ins_seq.s [opts.ks_ins_seq.l] = 0;
-                opts.ks_ins_qual.s[opts.ks_ins_qual.l] = 0;
-            }
-        }
-        if (opts.last_tid >= 0)
-            dump_fastq(&opts, sam_hdr_tid2name(opts.h, opts.last_tid),
-                       opts.ks_ins_seq.s,  opts.ks_ins_seq.l,
-                       opts.ks_ins_qual.s, opts.ks_ins_qual.l);
-
-        if (!opts.iter && opts.all_bases > 1 &&
-            ++opts.last_tid < opts.h->n_targets) {
-            opts.last_pos = 0;
-            opts.ks_ins_seq.l = opts.ks_ins_qual.l = 0;
-            goto next_ref_q;
-        }
-//        if (consensus_loop(&opts) < 0) {
-//            print_error_errno("consensus", "Failed");
-//            goto err;
-//        }
     }
 
     ret = 0;
 
  err:
-    if (opts.iter)
-        hts_itr_destroy(opts.iter);
-    if (opts.idx)
-        hts_idx_destroy(opts.idx);
+    if (opts.tdata[0].fai)
+        fai_destroy(opts.tdata[0].fai);
+    free(opts.tdata[0].ref);
 
-    if (opts.fp && sam_close(opts.fp) < 0) {
+    if (opts.tdata[0].idx)
+        hts_idx_destroy(opts.tdata[0].idx);
+
+    if (opts.tdata[0].fp && sam_close(opts.tdata[0].fp) < 0) {
         print_error_errno("consensus", "Closing input file \"%s\"",
                           argv[optind]);
         ret = 1;
@@ -2906,22 +3374,17 @@ int main_consensus(int argc, char **argv) {
 
     if (opts.h)
         sam_hdr_destroy(opts.h);
-    sam_global_args_free(&ga);
+    sam_global_args_free(&opts.ga_in);
 
     if (opts.fp_out && opts.fp_out != stdout)
         ret |= fclose(opts.fp_out) != 0;
     else
         ret |= fflush(stdout) != 0;
 
-    ks_free(&opts.ks_line);
-    ks_free(&opts.ks_ins_seq);
-    ks_free(&opts.ks_ins_qual);
-    free(opts.ref);
-    if (opts.fai)
-        fai_destroy(opts.fai);
-
     if (ret)
         print_error("consensus", "failed");
+
+    free(opts.tdata);
 
     return ret;
 }
