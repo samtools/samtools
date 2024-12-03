@@ -563,6 +563,8 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
         else
             rf |= SAM_AUX;
     }
+    if (opts->illumina_tag || opts->copy_tags)
+        rf |= SAM_AUX;
     if (hts_set_opt(state->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
         fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
         free(state);
