@@ -2695,11 +2695,6 @@ int main_consensus(int argc, char **argv) {
     if (ga.nthreads > 0)
         hts_set_threads(opts.fp, ga.nthreads);
 
-    if (hts_set_opt(opts.fp, CRAM_OPT_DECODE_MD, 0)) {
-        fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
-        goto err;
-    }
-
     if (!(opts.h = sam_hdr_read(opts.fp))) {
         fprintf(stderr, "Failed to read header for \"%s\"\n", argv[optind]);
         goto err;
