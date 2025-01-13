@@ -2034,6 +2034,8 @@ static int update_ref(consensus_opts *opts, int tid) {
     }
 
     free(opts->ref);
+    opts->ref = NULL;
+
     hts_pos_t len;
     const char *chr = sam_hdr_tid2name(opts->h, tid);
     if (!chr)
@@ -2053,7 +2055,7 @@ static int empty_pileup2(consensus_opts *opts, sam_hdr_t *h, int tid,
 
     int err = 0;
 
-    if (opts->ref_fn && update_ref(opts, tid) == 0) {
+    if (opts->ref_fn && (err |= update_ref(opts, tid)) == 0) {
         for (i = start; i < end; i++)
             err |= fprintf(opts->fp_out, "%s\t%"PRIhts_pos
                            "\t0\t0\t%c\t0\t*\t*\n",
@@ -2253,7 +2255,8 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
                 N = MIN(N, sam_hdr_tid2len(opts->h, opts->last_tid))
                     - opts->last_pos;
                 if (N > 0) {
-                    update_ref(opts, opts->last_tid);
+                    if (update_ref(opts, opts->last_tid) < 0)
+                        return -1;
                     if (ks_expand(seq, N+1) < 0)
                         return -1;
                     if (ks_expand(qual, N+1) < 0)
@@ -2276,7 +2279,8 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
             dump_fastq(opts, sam_hdr_tid2name(opts->h, opts->last_tid),
                        seq->s, seq->l, qual->s, qual->l);
         }
-        update_ref(opts, tid);
+        if (update_ref(opts, tid) < 0)
+            return -1;
 
         seq->l = 0; qual->l = 0;
 
@@ -2349,7 +2353,8 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
             if (ks_expand(seq,  pos - opts->last_pos) < 0 ||
                 ks_expand(qual, pos - opts->last_pos) < 0)
                 return -1;
-            update_ref(opts, tid);
+            if (update_ref(opts, tid) < 0)
+                return -1;
             if (opts->ref) {
                 // last bases of the previous reference
                 memcpy(seq->s + seq->l, opts->ref + opts->last_pos,
@@ -2493,6 +2498,7 @@ int main_consensus(int argc, char **argv) {
         .fp_out       = stdout,
         .iter         = NULL,
         .idx          = NULL,
+        .ref_tid      = -1,
         .last_tid     = -1,
         .last_pos     = -1,
     };
@@ -2855,7 +2861,8 @@ int main_consensus(int argc, char **argv) {
                 opts.last_tid = opts.iter->tid;
             }
             if (pos < len) {
-                update_ref(&opts, opts.last_tid);
+                if (update_ref(&opts, opts.last_tid) < 0)
+                    return -1;
                 if (ks_expand(&opts.ks_ins_seq,  len-pos+1) < 0)
                     goto err;
                 if (ks_expand(&opts.ks_ins_qual, len-pos+1) < 0)
