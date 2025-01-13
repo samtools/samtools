@@ -134,3 +134,22 @@ P 19p.out $samtools consensus -f pileup --no-use-MQ consen1.sam -C 19
 # Ambiguity codes in insertions
 P 20p.out $samtools consensus -f pileup --no-use-MQ consen1.sam -C 30 -A
 P 21p.out $samtools consensus -f pileup --no-use-MQ consen1.sam -C 31 -A
+
+
+#-----------------------------------------------------------------------------
+# Using a reference to fill in uncovered bases
+
+P 30.out $samtools consensus -f fastq --show-del yes --show-ins no  -m bayesian -C0 consen1c.sam
+P 30T.out $samtools consensus -f fastq --show-del yes --show-ins no  -m bayesian -C0 --ref-qual 20 consen1c.sam -T consen1c.fa
+P 31.out $samtools consensus -a -f fastq --show-del yes --show-ins no  -m bayesian -C0 consen1c.sam
+P 31T.out $samtools consensus -a -f fastq --show-del yes --show-ins no  -m bayesian -C0 --ref-qual 20 consen1c.sam -T consen1c.fa
+P 32.out $samtools consensus -aa -f fastq --show-del yes --show-ins no  -m bayesian -C0 consen1c.sam
+P 32T.out $samtools consensus -aa -f fastq --show-del yes --show-ins no  -m bayesian -C0 --ref-qual 20 consen1c.sam -T consen1c.fa
+
+P 40.out $samtools consensus -f pileup --show-del yes --show-ins no  -m bayesian -C0 consen1c.sam
+P 40T.out $samtools consensus -f pileup --show-del yes --show-ins no  -m bayesian -C0 --ref-qual 20 consen1c.sam -T consen1c.fa
+P 41.out $samtools consensus -a -f pileup --show-del yes --show-ins no  -m bayesian -C0 consen1c.sam
+P 41T.out $samtools consensus -a -f pileup --show-del yes --show-ins no  -m bayesian -C0 --ref-qual 20 consen1c.sam -T consen1c.fa
+P 42.out $samtools consensus -aa -f pileup --show-del yes --show-ins no  -m bayesian -C0 consen1c.sam
+P 42T.out $samtools consensus -aa -f pileup --show-del yes --show-ins no  -m bayesian -C0 --ref-qual 20 consen1c.sam -T consen1c.fa
+
