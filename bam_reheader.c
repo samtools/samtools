@@ -30,6 +30,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include <assert.h>
 #include <getopt.h>
 #include <unistd.h>
+#ifdef _WIN32
+#include <windows.h> // GetTempPath
+#endif
 
 #include "htslib/bgzf.h"
 #include "htslib/sam.h"
@@ -458,7 +461,21 @@ static sam_hdr_t* external_reheader(samFile* in, const char* external) {
         fprintf(stderr, "[%s] failed to read the header for '%s'.\n", __func__, in->fn);
         return NULL;
     }
-    char tmp_fn[] = "reheaderXXXXXX";
+    char tmp_fn[1024+15];
+    char *env = getenv("TMPDIR");
+#ifdef _WIN32
+    char tmp_path[MAX_PATH];
+    if (!env) {
+        int ret = GetTempPath(MAX_PATH, tmp_path);
+        if (!ret || ret > MAX_PATH)
+            strcpy(tmp_path, "./");
+        env = tmp_path;
+    }
+#else
+    if (!env)
+        env = "/tmp";
+#endif
+    snprintf(tmp_fn, sizeof(tmp_fn), "%s/reheaderXXXXXX", env);
     int tmp_fd = mkstemp(tmp_fn);
     if (tmp_fd < 0) {
         print_error_errno("reheader", "fail to open temp file '%s'", tmp_fn);
