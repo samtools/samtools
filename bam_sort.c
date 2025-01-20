@@ -872,7 +872,20 @@ static int trans_tbl_init(merged_header_t* merged_hdr, sam_hdr_t* translate,
     return -1;
 }
 
-static int finish_merged_header(merged_header_t *merged_hdr) {
+static int finish_merged_header(merged_header_t *merged_hdr, int resetorder) {
+    if (resetorder && merged_hdr->have_hd) {
+        //reset sort order to unsorted and remove GO, SS
+        if (sam_hdr_remove_tag_id(merged_hdr->hdr, "HD", NULL, NULL, "SS") < 0) {
+            return -1;
+        }
+        if (sam_hdr_remove_tag_id(merged_hdr->hdr, "HD", NULL, NULL, "GO") < 0) {
+            return -1;
+        }
+        if (sam_hdr_update_hd(merged_hdr->hdr, "SO", "unsorted") < 0) {
+            return -1;
+        }
+    }
+
     if (sam_hdr_add_lines(merged_hdr->hdr, ks_c_str(&merged_hdr->out_rg),
                           ks_len(&merged_hdr->out_rg)) < 0)
         return -1;
@@ -1114,7 +1127,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     hts_itr_t **iter = NULL;
     sam_hdr_t **hdr = NULL;
     trans_tbl_t *translation_tbl = NULL;
-    int *rtrans = NULL;
+    int *rtrans = NULL, resetorder = 0;
     char *out_idx_fn = NULL;
     void *hreg = NULL;
     hts_reglist_t *lreg = NULL;
@@ -1213,6 +1226,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         if ((translation_tbl+i)->lost_coord_sort && (sam_order == Coordinate || sam_order == MinHash)) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
             order_ok = 0;
+            resetorder = 1;
         }
 
         if (!refs)
@@ -1234,7 +1248,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     }
 
     // Transform the header into standard form
-    if (finish_merged_header(merged_hdr) < 0)
+    if (finish_merged_header(merged_hdr, resetorder) < 0)
         goto fail;
 
     hout = merged_hdr->hdr;
