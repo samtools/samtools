@@ -3592,9 +3592,12 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             goto err;
         }
     } else { // then merge
-        fprintf(stderr,
+        if (hts_get_log_level() >= 2) { // 2 is between the WARNING (default) and ERROR levels
+            fprintf(stderr,
                 "[bam_sort_core] merging from %d files and %d in-memory blocks...\n",
                 n_files, num_in_mem);
+        }
+
         // Paranoia check - all temporary files should have a name
         for (i = 0; i < n_files; ++i) {
             if (!fns[i]) {
