@@ -1,6 +1,6 @@
 # CHK, Checksum	[2]Read Names	[3]Sequences	[4]Qualities
 # CHK, CRC32 of reads which passed filtering followed by addition (32bit overflow)
-CHK	343826c4	53884d5c	f7568bb4
+CHK	343826c4	53884d5c	e975613c
 # Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.
 SN	raw total sequences:	4	# excluding supplementary and secondary reads
 SN	filtered sequences:	0
