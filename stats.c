@@ -1,6 +1,6 @@
 /*  stats.c -- This is the former bamcheck integrated into samtools/htslib.
 
-    Copyright (C) 2012-2024 Genome Research Ltd.
+    Copyright (C) 2012-2025 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
     Author: Sam Nicholls <sam@samnicholls.net>
@@ -745,7 +745,7 @@ void update_checksum(bam1_t *bam_line, stats_t *stats)
     stats->checksum.reads += crc32(0L, seq, (seq_len+1)/2);
 
     uint8_t *qual = bam_get_qual(bam_line);
-    stats->checksum.quals += crc32(0L, qual, (seq_len+1)/2);
+    stats->checksum.quals += crc32(0L, qual, seq_len);
 }
 
 // Collect statistics about the barcode tags specified by init_barcode_tags method
