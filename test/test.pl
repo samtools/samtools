@@ -114,7 +114,7 @@ sub error
 sub tempfile {
     my ($fh, $name) = File::Temp::tempfile(@_);
     if (wantarray) {
-        if ($^O =~ /^(?:msys|MSWin32)/) {
+        if ($^O =~ /^(?:cygwin|msys|MSWin32)/) {
             $name = abs_path($name);
         }
         return ($fh, $name);
@@ -132,7 +132,7 @@ sub cygpath {
 sub tempdir
 {
     my $dir = File::Temp::tempdir(@_);
-    if ($^O =~ /^msys/) {
+    if ($^O =~ /^(cygwin|msys)/) {
         $dir = cygpath($dir);
     } elsif ($^O eq 'MSWin32') {
         $dir =~ s/\\/\//g;
@@ -161,7 +161,7 @@ sub parse_params
     $$opts{tmp}  = $$opts{keep_files} ? $$opts{keep_files} : tempdir(CLEANUP => 1);
     $$opts{path} = $FindBin::RealBin;
     $$opts{bin}  = $FindBin::RealBin;
-    if ($^O =~ /^msys/) {
+    if ($^O =~ /^(cygwin|msys)/) {
         $$opts{path} = cygpath($$opts{path});
         $$opts{bin}  = cygpath($$opts{bin});
     }
@@ -171,7 +171,7 @@ sub parse_params
     {
         $SIG{TERM} = $SIG{INT} = sub { clean_files($opts); };
     }
-    $$opts{diff} = "diff" . ($^O =~ /^(?:msys|MSWin32)/ ? " -b":"");
+    $$opts{diff} = "diff" . ($^O =~ /^(?:cygwin|msys|MSWin32)/ ? " -b":"");
     return $opts;
 }
 sub clean_files
@@ -941,7 +941,7 @@ sub test_mpileup
         cmd("$$opts{bin}/samtools index $$opts{tmp}/$file.cram");
         print $fh1 "$$opts{tmp}/$file.bam\n";
         print $fh2 "$$opts{tmp}/$file.cram\n";
-        my $atmp = $^O =~ /^msys/ ? cygpath($$opts{tmp}) : abs_path($$opts{tmp});
+        my $atmp = $^O =~ /^(cygwin|msys)/ ? cygpath($$opts{tmp}) : abs_path($$opts{tmp});
         unless ($atmp =~ /^\//) { $atmp = "/$atmp"; }
         print $fh3 "file://$atmp/$file.bam\n";
         print $fh4 "file://$atmp/$file.cram\n";
@@ -1030,7 +1030,7 @@ sub test_usage
         next if ($subcommand =~ /^(help|version)$/);
         # Under msys the isatty function fails to recognise the terminal.
         # Skip these tests for now.
-        next if ($^O =~ /^msys/ && $subcommand =~ /^(dict|sort|stats|view|fasta|fastq|samples|reference|head)$/);
+        next if ($^O =~ /^(cygwin|msys)/ && $subcommand =~ /^(dict|sort|stats|view|fasta|fastq|samples|reference|head)$/);
         test_usage_subcommand($opts,%args,subcmd=>$subcommand);
     }
 }
@@ -3284,7 +3284,7 @@ sub test_stats
 {
     my ($opts,%args) = @_;
 
-    my $efix = ($^O =~ /^(?:msys|MSWin32)$/) ? 1 : 0;
+    my $efix = ($^O =~ /^(?:cygwin|msys|MSWin32)$/) ? 1 : 0;
 
     test_cmd($opts,out=>'stat/1.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/1.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/1_map_cigar_large.sam | tail -n+4", exp_fix=>$efix);
