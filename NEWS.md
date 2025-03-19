@@ -6,6 +6,9 @@ New work and changes:
 * `samtools consensus` now supports proper multi-threading.  Previously
   this was restricted to decompression only, but it should now scale better.
 
+* Added fish shell completions. For full functionality they require
+  Python3.5+ and installed samtools manpages.
+
 Bug fixes:
 
 * `samtools consensus` previously could give different results for BAM and

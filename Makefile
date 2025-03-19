@@ -54,6 +54,7 @@ bindir      = $(exec_prefix)/bin
 datarootdir = $(prefix)/share
 mandir      = $(datarootdir)/man
 man1dir     = $(mandir)/man1
+fishcompdir = $(datarootdir)/fish/vendor_completions.d
 
 # Installation location for $(MISC_PROGRAMS) and $(MISC_SCRIPTS)
 misc_bindir = $(bindir)
@@ -325,11 +326,12 @@ misc/maq2sam-long.o: misc/maq2sam.c config.h version.h
 
 
 install: $(PROGRAMS) $(MISC_PROGRAMS)
-	$(INSTALL_DIR) $(DESTDIR)$(bindir) $(DESTDIR)$(misc_bindir) $(DESTDIR)$(man1dir)
+	$(INSTALL_DIR) $(DESTDIR)$(bindir) $(DESTDIR)$(misc_bindir) $(DESTDIR)$(man1dir) $(DESTDIR)$(fishcompdir)
 	$(INSTALL_PROGRAM) $(PROGRAMS) $(DESTDIR)$(bindir)
 	$(INSTALL_PROGRAM) $(MISC_PROGRAMS) $(DESTDIR)$(misc_bindir)
 	$(INSTALL_SCRIPT) $(MISC_SCRIPTS) $(DESTDIR)$(misc_bindir)
 	$(INSTALL_MAN) doc/samtools*.1 misc/wgsim.1 $(DESTDIR)$(man1dir)
+	$(INSTALL_DATA) misc/samtools_tab_completion.fish $(DESTDIR)$(fishcompdir)/samtools.fish
 
 
 testclean:
