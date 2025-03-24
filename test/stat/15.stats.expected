@@ -5,7 +5,7 @@ CHK	0d0e09b1	c6b1072c	6e349efa
 SN	raw total sequences:	1	# excluding supplementary and secondary reads
 SN	filtered sequences:	0
 SN	sequences:	1
-SN	is sorted:	1
+SN	is sorted:	1	# sorted by coordinate
 SN	1st fragments:	1
 SN	last fragments:	0
 SN	reads mapped:	1
