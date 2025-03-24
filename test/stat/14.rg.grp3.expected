@@ -5,7 +5,7 @@ CHK	00000000	00000000	00000000
 SN	raw total sequences:	0	# excluding supplementary and secondary reads
 SN	filtered sequences:	0
 SN	sequences:	0
-SN	is sorted:	1
+SN	is sorted:	1	# sorted by coordinate
 SN	1st fragments:	0
 SN	last fragments:	0
 SN	reads mapped:	0
