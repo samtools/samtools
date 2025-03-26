@@ -2141,7 +2141,7 @@ int consensus_base(consensus_opts *opts,
         calculate_consensus_gap5m(pos, opts->use_mqual ? CONS_MQUAL : 0,
                                   depth, p, opts, &cons, opts->default_qual,
                                   &cons_prob_recall, &cons_prob_precise);
-        if (cons.depth < opts->min_depth) {
+        if (cons.depth < opts->min_depth && cons.call != 4) {
             //  && cons.call != 4.  See #2167
             cb = 'N';
             cq = 0;
