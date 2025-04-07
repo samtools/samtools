@@ -1,10 +1,91 @@
 Release a.b
 -----------
 
-New work and changes:
+Note this release changes the default output CRAM version from 3.0 to 3.1.
+HTSlib and SAMtools have been able to read CRAM 3.1 since version 1.12,
+however other tools may not yet be able to cope.  We know Noodles reads CRAM
+3.1 and htsjdk has a draft implementation, but not yet released.
+
+HTSlib has options for modifying the output formats, which are exposed in
+SAMtools.  When specifying an output format you can explicitly change the
+version via e.g. `samtools view -O cram,version=3.0 ...`.
+
+Further documentation on this change can be found at
+https://www.htslib.org/benchmarks/CRAM.htmlNew work and changes:
+
+* New `samtools checksum` command.  This checksums sequence, name, quality and
+  barcode tags in an order and orientation agnostic manner, to facilitate
+  validation of no data loss between raw fastq (or unmapped crams) through
+  alignment, markdup, sorting, and other processing operations to get to the
+  final aligned bam/cram.
+  (PR#2122)
+
+* Extend `samtools sort -M` to distinguish between mapped and unmapped files.
+  (PR#2110, fixes #2105.  Reported by Armin Töpfer)
+
+* Add --save-counts option to `samtools view`.  Adds an option to store counts
+  of records processed, accepted and rejected by filtering to a file.
+  (PR#2120, resolves #2038.  Requested by Chang Y)
+
+* `samtools fasta` and `fastq` can now make faidx/fqidx indexes while writing
+  using the --write-index option.
+  (PR#2125, resolves #2118.  Requested by Filipe G. Vieira)
+
+* Add a warning for `samtools fastq` on coordinate sorted data.
+  (PR#2176, fixes #2169 and #2161.  Reported by wook2014)
+
+* `samtools tview` add -i to hide inserts.
+  (PR#2123.  Thanks to Benjamin Bræstrup Sayoc)
+
+* Show optional headers with `samtools bedcov -H`.
+  (PR#2140, fixes #2126.  Reported by biounix)
 
 * `samtools consensus` now supports proper multi-threading.  Previously
   this was restricted to decompression only, but it should now scale better.
+  (PR#2174, supersedes PR#2141)
+
+* Add `samtools consensus -T ref.fa` functionality.  This reports the reference
+  value if a consensus value cannot be calculated.
+  (PR#2153, fixes an additional request in #1915)
+
+* Do not use consensus N for "*" (absent) calls that are of insufficient depth.
+  (PR#2204, fixes #2167.  Reported by sanschiffre)
+
+* Improve `plot-bamstats` quality plots.
+  (PR#2143 combined with PR#2116 (thanks to James Gilbert))
+
+* Make `reheader -h` use /tmp and honour TMPDIR.
+  (PR#2168, related to #2165.  Reported by Zhang Yuanfeng)
+
+* Set sort order to unsorted when ordering is lost during merge.
+  (PR#2173, fixes #2159.  Reported by Filipe G. Vieira)
+
+* `samtools stats` correction to checksum calculation for quality values.  This
+  corrects the checksum calculations but in turn makes them different to
+  previous versions.
+  (PR#2193, fixes #2187)
+
+* Clarification for `samtools stats` when used on files with different sort
+  orders.
+  (PR#2198, fixes #2177.  Reported by Filipe G. Vieira)
+
+* Allow the `sort` merge message to be silenced.  Setting the verbosity to
+  0 or 1 will now silence the merge message.
+  (PR#2197, resolves #2185.  Requested by Alex Predeus)
+
+Documentation:
+
+* Correct the example for 1:1 `samtools consensus` coords.
+  (PR#2113, fixes #2111.  Reported by schorlton-bugseq)
+
+* Documents the fastq format options used in SAMtools and HTSlib.
+  (PR#2123, fixes #2121)
+
+* Remove mention of threads from `samtools cat` man page.
+  (PR#2162, fixes #2160.  Reported by Brandon Pickett)
+
+* Update `samtools merge` man page to include `--template-coordinate`.
+  (PR#2164.  Thanks to Nils Homer)
 
 * Added fish shell completion and renamed completion for bash shell.  These
   files can be copied to appropriate directories by user.  For full
@@ -16,14 +97,39 @@ Bug fixes:
   CRAM files with the same content.  This was because MD/NM tag generation
   was disabled in CRAM, but the decode_md=0 option did nothing with BAM.
   Note with `--no-adj-MQ` both BAM and CRAM gave identical results.
-
   Now use `--input-fmt-option decode_md=0` to get the old CRAM behaviour.
   Otherwise, both BAM and CRAM will be utilising MD/NM to locally modify
   mapping quality.
+  (PR#2156)
 
   Without "consensus -a" we previously still padded with leading Ns in
   some cases.  We now consistency remove both leading and trailing Ns.
   Use "-a" if you want all reference bases displayed.
+  (Part of PR#2174 above)
+
+* Change how `markdup` looks for single reads.  Due to changes to `fixmate` in
+  1.21 `markdup` no longer recognised single reads that would have normally have
+  been part of a pair.
+  (PR#2117, fixes #2117.  Reported by Kristy Horan)
+
+* Fix `samtools merge` crash on BAM files with malformed headers.
+  (PR#2128, fixes #2127.  Reported by Frostb1te)
+
+* Fix `faidx --write-index` invalid free.
+  (PR#2147, fixes 2142.  Reported by Alex Leonard)
+
+* Fix `samtools fastq -i` to force CRAM aux tag decoding.
+  (PR#2155, fixes #2155.  Reported by Alex Leonard)
+
+Non user-visible changes and build improvements:
+
+* Improve htslib#PRnum support for Cirrus-CI and GitHub Actions.
+  (PR#2115)
+
+* Fix broken tests due to MSYS2 changes. Due to changes in how MSYS2 perl
+  reported the identity of the OS it was built for, our tests were failing to
+  adapt to the Windows style file locations.
+  (PR #2196)
 
 
 Release 1.21 (12th September 2024)
