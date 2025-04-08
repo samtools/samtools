@@ -18,8 +18,8 @@ New work and changes:
 * New `samtools checksum` command.  This checksums sequence, name, quality and
   barcode tags in an order and orientation agnostic manner, to facilitate
   validation of no data loss between raw fastq (or unmapped crams) through
-  alignment, markdup, sorting, and other processing operations to get to the
-  final aligned bam/cram.
+  alignment, duplication marking, sorting, and other processing operations to
+  get to the final aligned bam/cram.
   (PR#2122)
 
 * Extend `samtools sort -M` to distinguish between mapped and unmapped files.
