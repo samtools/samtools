@@ -11,7 +11,9 @@ SAMtools.  When specifying an output format you can explicitly change the
 version via e.g. `samtools view -O cram,version=3.0 ...`.
 
 Further documentation on this change can be found at
-https://www.htslib.org/benchmarks/CRAM.htmlNew work and changes:
+https://www.htslib.org/benchmarks/CRAM.html
+
+New work and changes:
 
 * New `samtools checksum` command.  This checksums sequence, name, quality and
   barcode tags in an order and orientation agnostic manner, to facilitate
@@ -23,18 +25,18 @@ https://www.htslib.org/benchmarks/CRAM.htmlNew work and changes:
 * Extend `samtools sort -M` to distinguish between mapped and unmapped files.
   (PR#2110, fixes #2105.  Reported by Armin Töpfer)
 
-* Add --save-counts option to `samtools view`.  Adds an option to store counts
+* Add `--save-counts` option to `samtools view`.  Adds an option to store counts
   of records processed, accepted and rejected by filtering to a file.
   (PR#2120, resolves #2038.  Requested by Chang Y)
 
 * `samtools fasta` and `fastq` can now make faidx/fqidx indexes while writing
-  using the --write-index option.
+  using the `--write-index` option.
   (PR#2125, resolves #2118.  Requested by Filipe G. Vieira)
 
 * Add a warning for `samtools fastq` on coordinate sorted data.
   (PR#2176, fixes #2169 and #2161.  Reported by wook2014)
 
-* `samtools tview` add -i to hide inserts.
+* `samtools tview` add `-i` to hide inserts.
   (PR#2123.  Thanks to Benjamin Bræstrup Sayoc)
 
 * Show optional headers with `samtools bedcov -H`.
@@ -102,7 +104,7 @@ Bug fixes:
   mapping quality.
   (PR#2156)
 
-  Without "consensus -a" we previously still padded with leading Ns in
+  Without `consensus -a` we previously still padded with leading Ns in
   some cases.  We now consistency remove both leading and trailing Ns.
   Use "-a" if you want all reference bases displayed.
   (Part of PR#2174 above)
