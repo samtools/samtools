@@ -1,6 +1,6 @@
 /*  test/merge/test_trans_tbl_init.c -- merge test harness.
 
-    Copyright (C) 2013-2016, 2019 Genome Research Ltd.
+    Copyright (C) 2013-2016, 2019, 2025 Genome Research Ltd.
 
     Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
