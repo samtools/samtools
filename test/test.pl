@@ -3955,16 +3955,16 @@ sub test_checksum
 
     # Splits and merging.
     # Basic mode
-    cmd("$$opts{bin}/samtools split -f '$$opts{path}/checksum/%!.tmp' $$opts{path}/checksum/chk1.bam");
+    cmd("$$opts{bin}/samtools split -f '$$opts{path}/checksum/chk1-%!.tmp' $$opts{path}/checksum/chk1.bam");
     foreach my $rg (qw/ERR013140 ERR016352 ERR156632/) {
-        cmd("$$opts{bin}/samtools checksum $$opts{path}/checksum/$rg.tmp -o $$opts{path}/checksum/$rg.chk");
+        cmd("$$opts{bin}/samtools checksum $$opts{path}/checksum/chk1-$rg.tmp -o $$opts{path}/checksum/chk1-$rg.tmp.chk");
     }
-    test_cmd($opts, out=>"checksum/chk1.1.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/ERR*chk | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+    test_cmd($opts, out=>"checksum/chk1.1.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk1-ERR*.tmp.chk | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
 
     # Full alignment mode
-    cmd("$$opts{bin}/samtools split -u $$opts{path}/checksum/noRG.tmp2 -f '$$opts{path}/checksum/%!.tmp2' $$opts{path}/checksum/chk2.cram");
+    cmd("$$opts{bin}/samtools split -u $$opts{path}/checksum/chk2-noRG.tmp -f '$$opts{path}/checksum/chk2-%!.tmp' $$opts{path}/checksum/chk2.cram");
     foreach my $rg (qw/ERR013140 ERR156632 noRG/) {
-        cmd("$$opts{bin}/samtools checksum -a $$opts{path}/checksum/$rg.tmp2 -o $$opts{path}/checksum/$rg.chk2");
+        cmd("$$opts{bin}/samtools checksum -a $$opts{path}/checksum/chk2-$rg.tmp -o $$opts{path}/checksum/chk2-$rg.tmp.chk");
     }
-    test_cmd($opts, out=>"checksum/chk2.2.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/*.chk2 | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+    test_cmd($opts, out=>"checksum/chk2.2.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk2-*.tmp.chk | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
 }
