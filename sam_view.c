@@ -1628,6 +1628,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -B, --remove-B             Collapse the backward CIGAR operation\n"
 "  -z, --sanitize FLAGS       Perform sanitity checking and fixing on records.\n"
 "                             FLAGS is comma separated (see manual). [off]\n"
+"\n"
 "General options:\n"
 "  -?, --help   Print long help, including note about region specification\n"
 "  -S           Ignored (input format is auto-detected)\n"
