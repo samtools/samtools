@@ -1589,6 +1589,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -p, --unmap                Set flag to UNMAP on reads not selected\n"
 "                             then write to output file.\n"
 "  -P, --fetch-pairs          Retrieve complete pairs even when outside of region\n"
+"\n"
 "Input options:\n"
 "  -t, --fai-reference FILE   FILE listing reference names and lengths\n"
 "  -M, --use-index            Use index and multi-region iterator for regions\n"

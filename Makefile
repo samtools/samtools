@@ -181,8 +181,8 @@ bam_lpileup.o: bam_lpileup.c config.h $(bam_plbuf_h) $(bam_lpileup_h) splaysort.
 bam_mate.o: bam_mate.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_kstring_h) $(htslib_sam_h) $(samtools_h)
 bam_md.o: bam_md.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_kstring_h) $(htslib_thread_pool_h) $(sam_opts_h) $(samtools_h)
 bam_plbuf.o: bam_plbuf.c config.h $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
-bam_checksum.o: bam_checksum.c config.h $(htslib_sam_h) $(htslib_khash_h) $(htslib_kstring_h) $(htslib_hts_endian_h) $(sam_opts_h) $(sam_utils_h)
-bam_consensus.o: bam_consensus.c bam_consensus_tab.h config.h $(htslib_sam_h) $(htslib_hfile_h) $(samtools_h) $(sam_opts_h) $(bam_plbuf_h) $(consensus_pileup_h)
+bam_checksum.o: bam_checksum.c config.h $(htslib_sam_h) $(htslib_khash_h) $(htslib_kstring_h) $(htslib_hts_endian_h) $(sam_opts_h) $(sam_utils_h) $(samtools_h)
+bam_consensus.o: bam_consensus.c bam_consensus_tab.h config.h $(htslib_sam_h) $(htslib_hfile_h) $(htslib_faidx_h) $(htslib_thread_pool_h) $(htslib_cram_h) $(samtools_h) $(sam_opts_h) $(bam_plbuf_h) $(consensus_pileup_h)
 bam_plcmd.o: bam_plcmd.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstring_h) $(htslib_klist_h) $(htslib_khash_str2int_h) $(samtools_h) $(bedidx_h) $(sam_opts_h) $(sample_h) $(htslib_cram_h) $(bam_plbuf_h)
 bam_quickcheck.o: bam_quickcheck.c config.h $(htslib_hts_h) $(htslib_sam_h)
 bam_reheader.o: bam_reheader.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_cram_h) $(samtools_h)
@@ -334,6 +334,7 @@ install: $(PROGRAMS) $(MISC_PROGRAMS)
 
 testclean:
 	-rm -f test/*.new test/*.tmp test/*/*.new test/*/*.tmp test/*/*.tmp.*
+	-cd test/consensus && rm -f *.bam *.bam.csi
 	-cd test/dat && rm -f test_input_*.bam.bai view.*.bam.bai
 	-cd test/mpileup && rm -f FAIL-*.out* PASS-*.out* *.fa.fai anomalous.[bc]*am indels.[bc]*am mpileup.*.[cs]*am mpileup.*.crai overlap50.[bc]*am expected/1.out xx#depth*.bam*
 	-cd test/reference && rm -f mpileup.*.fai

@@ -415,7 +415,7 @@ static cons_probs cons_prob_recall, cons_prob_precise;
  *
  * The heterozygosity weight though is a per column calculation as we're
  * trying to model whether the column is pure or mixed. Hence this is done
- * once via a prior and has no affect on the individual matrix cells.
+ * once via a prior and has no effect on the individual matrix cells.
  *
  * We have a generic indel probability, but it's a catch all for overcall,
  * undercall, alignment artifacts, homopolymer issues, etc.  So we can set
