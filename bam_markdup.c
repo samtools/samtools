@@ -1,7 +1,7 @@
 /*  bam_markdup.c -- Mark duplicates from a coord sorted file that has gone
                      through fixmates with the mate scoring option on.
 
-    Copyright (C) 2017-2023 Genome Research Ltd.
+    Copyright (C) 2017-2024 Genome Research Ltd.
 
     Author: Andrew Whitwham <aw7@sanger.ac.uk>
 
