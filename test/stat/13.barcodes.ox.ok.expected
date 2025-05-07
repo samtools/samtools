@@ -36,8 +36,8 @@ SN	maximum last fragment length:	11
 SN	average quality:	34.4
 SN	insert size average:	10.9
 SN	insert size standard deviation:	0.3
-SN	inward oriented pairs:	74
-SN	outward oriented pairs:	84
+SN	inward oriented pairs:	158
+SN	outward oriented pairs:	0
 SN	pairs with other orientation:	0
 SN	pairs on different chromosomes:	0
 SN	percentage of properly paired reads (%):	0.0
@@ -223,8 +223,8 @@ IS	6	0	0	0	0
 IS	7	0	0	0	0
 IS	8	0	0	0	0
 IS	9	0	0	0	0
-IS	10	14	0	14	0
-IS	11	144	74	70	0
+IS	10	14	14	0	0
+IS	11	144	144	0	0
 # Read lengths. Use `grep ^RL | cut -f 2-` to extract this part. The columns are: read length, count
 RL	11	2696
 # Read lengths - first fragments. Use `grep ^FRL | cut -f 2-` to extract this part. The columns are: read length, count
