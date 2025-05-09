@@ -1254,7 +1254,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
 
             if ( is_fwd*is_mfwd>0 )
                 stats->isize->inc_other(stats->isize->data, isize);
-            else if ( is_fst*pos_fst>=0 )
+            else if ( is_fst*pos_fst>0 )
             {
                 if ( is_fst*is_fwd>0 )
                     stats->isize->inc_inward(stats->isize->data, isize);
@@ -1267,6 +1267,9 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
                     stats->isize->inc_outward(stats->isize->data, isize);
                 else
                     stats->isize->inc_inward(stats->isize->data, isize);
+            } else {
+                // assume that exactly overlapping reads are inwards
+                stats->isize->inc_inward(stats->isize->data, isize);
             }
         }
     }
