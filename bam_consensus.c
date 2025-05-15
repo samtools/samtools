@@ -2717,7 +2717,8 @@ int pileup_loop_parallel(consensus_opts *opts) {
             }
 
             if (blk == -1) {
-                usleep(1000);
+                struct timespec req = { 0, 1000000 };
+                nanosleep(&req, NULL);
             } else {
                 c = NULL;
                 sub_start += opts->span;
@@ -2726,8 +2727,10 @@ int pileup_loop_parallel(consensus_opts *opts) {
         }
 
         while (received < counter) {
-            while (!(r = hts_tpool_next_result(q)))
-                usleep(1000);
+            while (!(r = hts_tpool_next_result(q))) {
+                struct timespec req = { 0, 1000000 };
+                nanosleep(&req, NULL);
+            }
             ctx *c = (ctx *)hts_tpool_result_data(r);
             if (opts->fmt == PILEUP) {
                 kstring_t *ks = &c->ks_pileup;
@@ -2758,8 +2761,10 @@ int pileup_loop_parallel(consensus_opts *opts) {
 
     // Discard any inflight jobs.  Can this happen?  Perhaps on error.
     while (received < counter) {
-        while (!(r = hts_tpool_next_result(q)))
-            usleep(1000);
+        while (!(r = hts_tpool_next_result(q))) {
+            struct timespec req = { 0, 1000000 };
+            nanosleep(&req, NULL);
+        }
         ctx *c = (ctx *)hts_tpool_result_data(r);
         ks_free(&c->ks_pileup);
         ks_free(&c->ks_ins_seq);
