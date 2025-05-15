@@ -1133,9 +1133,10 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     hts_reglist_t *lreg = NULL;
     merged_header_t *merged_hdr = init_merged_header();
     if (!merged_hdr) return -1;
-    refs_t *refs = NULL;
+    refs_t *refs = NULL, *refs_out = NULL;
     template_coordinate_keys_t *keys = NULL;
     khash_t(const_c2c) *lib_lookup = NULL;
+    int refs_out_shared = 1;
 
     // Is there a specified pre-prepared header to use for output?
     if (headers) {
@@ -1225,16 +1226,37 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         int order_ok = 1;
         if ((translation_tbl+i)->lost_coord_sort && (sam_order == Coordinate || sam_order == MinHash)) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
-            order_ok = 0;
+            refs_out_shared = order_ok = 0;
             resetorder = 1;
         }
 
-        if (!refs)
-            refs = cram_get_refs(fp[i]);
+        // Check our translated TIDs for fp[i] and fp[0] match.
+        if (i > 0) {
+            if (translation_tbl[i].n_targets != translation_tbl[0].n_targets
+                || memcmp(translation_tbl[0].tid_trans,
+                          translation_tbl[i].tid_trans,
+                          translation_tbl[0].n_targets *
+                          sizeof(*translation_tbl[0].tid_trans)) != 0)
+                refs_out_shared = order_ok = 0;
+        }
 
-        if (order_ok && refs && hts_set_opt(fp[i], CRAM_OPT_SHARED_REF, refs))
-            goto fail;
+        if (order_ok) {
+            if (!refs)
+                refs = cram_get_refs(fp[i]);
+            if (!refs_out)
+                refs_out = refs;
+
+            if (refs && hts_set_opt(fp[i], CRAM_OPT_SHARED_REF, refs))
+                goto fail;
+        } else {
+            refs = NULL;
+        }
     }
+
+    // We can share refs between compatible input files, but if any input is
+    // incompatible then so will sharing a ref with the output.
+    if (!refs_out_shared)
+        refs_out = NULL;
 
     // Did we get an @HD line?
     if (!merged_hdr->have_hd) {
@@ -1429,7 +1451,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     }
     if (!(flag & MERGE_UNCOMP)) hts_set_threads(fpout, n_threads);
 
-    if (refs && hts_set_opt(fpout, CRAM_OPT_SHARED_REF, refs))
+    if (refs_out && hts_set_opt(fpout, CRAM_OPT_SHARED_REF, refs_out))
         goto fail;
 
     // Begin the actual merge
