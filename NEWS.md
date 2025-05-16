@@ -23,7 +23,7 @@ New work and changes:
   (PR#2122)
 
 * Extend `samtools sort -M` to distinguish between mapped and unmapped files.
-  (PR#2110, fixes #2105.  Reported by Armin Töpfer)
+  (PR#2110, fixes #2105.  Reported by Armin TÃ¶pfer)
 
 * Add `--save-counts` option to `samtools view`.  Adds an option to store counts
   of records processed, accepted and rejected by filtering to a file.
@@ -37,7 +37,7 @@ New work and changes:
   (PR#2176, fixes #2169 and #2161.  Reported by wook2014)
 
 * `samtools tview` add `-i` to hide inserts.
-  (PR#2123.  Thanks to Benjamin Bræstrup Sayoc)
+  (PR#2123.  Thanks to Benjamin BrÃ¦strup Sayoc)
 
 * Show optional headers with `samtools bedcov -H`.
   (PR#2140, fixes #2126.  Reported by biounix)
@@ -74,6 +74,11 @@ New work and changes:
 * Allow the `sort` merge message to be silenced.  Setting the verbosity to
   0 or 1 will now silence the merge message.
   (PR#2197, resolves #2185.  Requested by Alex Predeus)
+
+* Dovetailed read pairs always have inward-oriantation.  Previously it could
+  have been inwards or outwards depending on read ordering.
+  (PR#2216, resolves #2210.  Requested by Pontus HÃ¼er)
+
 
 Documentation:
 
@@ -132,6 +137,10 @@ Non user-visible changes and build improvements:
   reported the identity of the OS it was built for, our tests were failing to
   adapt to the Windows style file locations.
   (PR #2196)
+
+* Upgrade to _XOPEN_SOURCE=700, to match HTSlib.  Also replaces `usleep()` with
+  `nanosleep()`.
+  (PR#2221)
 
 
 Release 1.21 (12th September 2024)
