@@ -13,6 +13,14 @@ version via e.g. `samtools view -O cram,version=3.0 ...`.
 Further documentation on this change can be found at
 https://www.htslib.org/benchmarks/CRAM.html
 
+
+HTSlib no longer fetches CRAM reference data from EBI's server by default. Your
+organisation may wish to set up local infrastructure to supply reference
+sequences, e.g., using the new ref-cache tool included in this HTSlib release.
+You can use REF_PATH and/or REF_CACHE environment variables to etc etc.
+See https://www.htslib.org/doc/reference_seqs.html for details.
+
+
 New work and changes:
 
 * New `samtools checksum` command.  This checksums sequence, name, quality and
