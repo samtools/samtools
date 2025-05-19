@@ -1136,34 +1136,6 @@ and 0 or 1 also reduces some error messages, while values greater than 3
 produce increasing numbers of additional warnings and logging messages.
 
 .PP
-.SH REFERENCE SEQUENCES
-.PP
-The CRAM format requires use of a reference sequence for both reading
-and writing.
-.PP
-When reading a CRAM the \fB@SQ\fR headers are interrogated to identify
-the reference sequence MD5sum (\fBM5:\fR tag) and the local reference
-sequence filename (\fBUR:\fR tag).  Note that \fIhttp://\fR and
-\fIftp://\fR based URLs in the UR: field are not used, but local fasta
-filenames (with or without \fIfile://\fR) can be used.
-.PP
-To create a CRAM the \fB@SQ\fR headers will also be read to identify
-the reference sequences, but M5: and UR: tags may not be present. In
-this case the \fB-T\fR and \fB-t\fR options of samtools view may be
-used to specify the fasta or fasta.fai filenames respectively
-(provided the .fasta.fai file is also backed up by a .fasta file).
-.PP
-The search order to obtain a reference is:
-.IP 1. 3
-Use any local file specified by the command line options (eg -T).
-.IP 2. 3
-Look for MD5 via REF_CACHE environment variable.
-.IP 3. 3
-Look for MD5 in each element of the REF_PATH environment variable.
-.IP 4. 3
-Look for a local file listed in the UR: header tag.
-
-.PP
 .SH FILTER EXPRESSIONS
 .PP
 Filter expressions are used as an on-the-fly checking of incoming SAM,
@@ -1351,31 +1323,45 @@ to look for sequences identified by their MD5sums.  This can be either
 a list of directories or URLs. Note that if a URL is included then the
 colon in http:// and ftp:// and the optional port number will be
 treated as part of the URL and not a PATH field separator.
-For URLs, the text \fB%s\fR will be replaced by the MD5sum being
-read.
+Alternatively a double colon may be used to indicate a single colon
+character. If REF_PATH includes \fB%\fR\fInum\fR\fBs\fR then it is
+replaced with the next \fInum\fR elements of the md5sum.  An implicit
+\fB/%s\fR is also added to each path element if any md5sum digits are
+unused.  For example "REF_PATH=/some/dir/%4s/%s" or
+"REF_PATH=/some/dir/%4s" will search a directory structure with the
+first 4 characters of the md5sum as a subdirectory and the remaining
+28 as the filename within that directory.
 
-If no REF_PATH has been specified it will default to
-\fBhttp://www.ebi.ac.uk/ena/cram/md5/%s\fR and if REF_CACHE is also unset,
-it will be set to \fB$XDG_CACHE_HOME/hts-ref/%2s/%2s/%s\fR.
-If \fB$XDG_CACHE_HOME\fR is unset, \fB$HOME/.cache\fR (or a local system
-temporary directory if no home directory is found) will be used similarly.
+Version 1.21 and earlier defaulted to using the EBI's CRAM reference
+server if no REF_PATH was specified.
+This default has been removed to reduce load on the EBI's service.
+It is recommended that a site-wide proxy is set up to allow better sharing
+of downloaded references,
+for example the
+.I ref-cache
+server provided with HTSlib.
+The original behaviour can be restored by including
+\fBhttp://www.ebi.ac.uk/ena/cram/md5/%s\fR in your REF_PATH.
+If that is done,
+it is strongly encouraged you also specify a local REF_CACHE directory.
+
+See <https://www.htslib.org/doc/reference_seqs.html> and
+.B REFERENCE SEQUENCES
+below for more information.
 
 .TP
 .B REF_CACHE
 This can be defined to a single location housing a local cache of
-references.  Upon downloading a reference it will be stored in the
-location pointed to by REF_CACHE.  REF_CACHE will be searched
-before attempting to load via the REF_PATH search list.  If no
-REF_PATH is defined, both REF_PATH and REF_CACHE will be automatically
-set (see above), but if REF_PATH is defined and REF_CACHE not then no
-local cache is used.
+references.  When REF_CACHE is set any non-local reference will create
+a file in the local REF_CACHE named after the sequence md5sum.  This
+cache will be searched prior to REF_PATH.  If you wish to search
+REF_CACHE but not to further populate it, add the directory to the
+start of REF_PATH instead.
 
-To avoid many files being stored in the same directory, REF_CACHE may
-be defined as a pattern using \fB%\fR\fInum\fR\fBs\fR to consume \fInum\fR
-characters of the MD5sum and \fB%s\fR to consume all remaining characters.
-If REF_CACHE lacks \fB%s\fR then it will get an implicit \fB/%s\fR appended.
+As per REF_PATH, the percent notation (e.g. "dir/%2s/%2s/%s") may be
+used to avoid too many files within a single directory.
 
-To aid population of the REF_CACHE directory a script
+To pre-populate the REF_CACHE a script
 \fBmisc/seq_cache_populate.pl\fR is provided in the Samtools
 distribution. This takes a fasta file or a directory of fasta files
 and generates the MD5sum named files.
@@ -1384,6 +1370,35 @@ For example if you use \fBseq_cache_populate -subdirs 2 -root
 /local/ref_cache\fR to create 2 nested subdirectories (the default),
 each consuming 2 characters of the MD5sum, then REF_CACHE must be set
 to \fB/local/ref_cache/%2s/%2s/%s\fR.
+
+.PP
+.SH REFERENCE SEQUENCES
+.PP
+The CRAM format requires use of a reference sequence for both reading
+and writing.
+.PP
+When reading a CRAM the \fB@SQ\fR headers are interrogated to identify
+the reference sequence MD5sum (\fBM5:\fR tag) and the local reference
+sequence filename (\fBUR:\fR tag).  Note that non-local URIs in the UR
+tag are not used, but \fIfile://\fR is supported.  This is a change in
+behaviour, but not documentation, to htslib 1.21.
+.PP
+To create a CRAM the \fB@SQ\fR headers will also be read to identify
+the reference sequences, but M5: and UR: tags may not be present. In
+this case the \fB-T\fR and \fB-t\fR options of samtools view may be
+used to specify the fasta or fasta.fai filenames respectively
+(provided the .fasta.fai file is also backed up by a .fasta file).
+.PP
+The search order to obtain a reference is:
+.IP 1. 3
+Use any local file specified by the command line options (eg -T).
+.IP 2. 3
+Look for MD5 via REF_CACHE environment variable.
+.IP 3. 3
+Look for MD5 in each element of the REF_PATH environment variable.
+.IP 4. 3
+Look for a local file listed in the UR: header tag.
+
 .PP
 .SH EXAMPLES
 .IP o 2
@@ -1469,6 +1484,7 @@ for further authorship.
 .IR bcftools (1),
 .IR sam (5),
 .IR tabix (1)
+.IR ref-cache(1)
 .PP
 Samtools website: <http://www.htslib.org/>
 .br
