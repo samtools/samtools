@@ -1332,12 +1332,20 @@ unused.  For example "REF_PATH=/some/dir/%4s/%s" or
 first 4 characters of the md5sum as a subdirectory and the remaining
 28 as the filename within that directory.
 
-Version 1.21 and earlier defaulted to using the EBI refget server if no
-REF_PATH was specified.  This has been removed due to insufficient
-bandwidth, but it can be explicitly added by including
-\fBhttp://www.ebi.ac.uk/ena/cram/md5/%s\fR in your REF_PATH.  If that
-is done, it is strongly encouraged you also specify a local REF_CACHE
-directory.
+Version 1.21 and earlier defaulted to using the EBI's CRAM reference
+server if no REF_PATH was specified.
+This default has been removed to reduce load on the EBI's service.
+It is recommended that a site-wide proxy is set up to allow better sharing
+of downloaded references,
+for example the
+.I ref-cache
+server provided with HTSlib.
+The original behaviour can be restored by including
+\fBhttp://www.ebi.ac.uk/ena/cram/md5/%s\fR in your REF_PATH.
+If that is done,
+it is strongly encouraged you also specify a local REF_CACHE directory.
+
+See <https://www.htslib.org/doc/reference_seqs.html> for more information.
 
 .TP
 .B REF_CACHE
@@ -1474,6 +1482,7 @@ for further authorship.
 .IR bcftools (1),
 .IR sam (5),
 .IR tabix (1)
+.IR ref-cache(1)
 .PP
 Samtools website: <http://www.htslib.org/>
 .br
