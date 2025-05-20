@@ -59,7 +59,8 @@ New work and changes:
   value if a consensus value cannot be calculated.
   (PR#2153, fixes an additional request in #1915)
 
-* Do not use consensus N for "*" (absent) calls that are of insufficient depth.
+* In `samtools consensus`, do not use consensus N for "*" (absent) calls that
+  are masked due to insufficient depth.
   (PR#2204, fixes #2167.  Reported by sanschiffre)
 
 * Improve `plot-bamstats` quality plots.
@@ -68,24 +69,26 @@ New work and changes:
 * Make `reheader -h` use /tmp and honour TMPDIR.
   (PR#2168, related to #2165.  Reported by Zhang Yuanfeng)
 
-* Set sort order to unsorted when ordering is lost during merge.
+* Set sort order header tag to unsorted when ordering is lost during
+  `samtools merge`.
   (PR#2173, fixes #2159.  Reported by Filipe G. Vieira)
 
-* `samtools stats` correction to checksum calculation for quality values.  This
-  corrects the checksum calculations but in turn makes them different to
-  previous versions.
+* `samtools stats` bug-fix to checksum calculation for quality values.  This
+  corrects the checksums but in turn makes the calculated value different to
+  that reported by previous samtools versions.
   (PR#2193, fixes #2187)
 
 * Clarification for `samtools stats` when used on files with different sort
   orders.
   (PR#2198, fixes #2177.  Reported by Filipe G. Vieira)
 
-* Allow the `sort` merge message to be silenced.  Setting the verbosity to
-  0 or 1 will now silence the merge message.
+* Allow the `samtools sort` "merging from..." message to be silenced.
+  Setting the verbosity to 0 or 1 will now silence this message.
   (PR#2197, resolves #2185.  Requested by Alex Predeus)
 
-* Dovetailed read pairs always have inward-oriantation.  Previously it could
-  have been inwards or outwards depending on read ordering.
+* In `samtools stats`, dovetailed (completely overlapping) read pairs are
+  now always counted as inward-oriented.  Previously they could have been
+  inwards or outwards depending on read ordering.
   (PR#2216, resolves #2210.  Requested by Pontus Hüer)
 
 
@@ -103,23 +106,30 @@ Documentation:
 * Update `samtools merge` man page to include `--template-coordinate`.
   (PR#2164.  Thanks to Nils Homer)
 
+* Revised CRAM reference sequence documentation in the samtools man page.
+  (PR#2178)
+
 * Added fish shell completion and renamed completion for bash shell.  These
-  files can be copied to appropriate directories by user.  For full
+  files can be copied to appropriate directories by the user.  For full
   functionality it requires Python3.5+ and installed samtools manpages.
+  (PR#2203.  Thanks to LunarEclipse363)
+
+* Fix URL printed by the `seq_cache_populate.pl` script.
+  (PR#2222.  Thanks to Charles Plessy)
 
 Bug fixes:
 
 * `samtools consensus` previously could give different results for BAM and
   CRAM files with the same content.  This was because MD/NM tag generation
-  was disabled in CRAM, but the decode_md=0 option did nothing with BAM.
+  was disabled in CRAM, but the `decode_md=0` option did nothing with BAM.
   Note with `--no-adj-MQ` both BAM and CRAM gave identical results.
   Now use `--input-fmt-option decode_md=0` to get the old CRAM behaviour.
   Otherwise, both BAM and CRAM will be utilising MD/NM to locally modify
   mapping quality.
   (PR#2156)
 
-  Without `consensus -a` we previously still padded with leading Ns in
-  some cases.  We now consistency remove both leading and trailing Ns.
+* `samtools consensus` without `-a` previously still padded with leading Ns in
+  some cases.  It now consistently removes both leading and trailing Ns.
   Use "-a" if you want all reference bases displayed.
   (Part of PR#2174 above)
 
@@ -147,7 +157,7 @@ Non user-visible changes and build improvements:
   adapt to the Windows style file locations.
   (PR #2196)
 
-* Upgrade to _XOPEN_SOURCE=700, to match HTSlib.  Also replaces `usleep()` with
+* Upgrade to `_XOPEN_SOURCE=700`, to match HTSlib.  Also replace `usleep()` with
   `nanosleep()`.
   (PR#2221)
 
