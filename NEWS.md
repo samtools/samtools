@@ -34,6 +34,10 @@ New work and changes:
 * Extend `samtools sort -M` to distinguish between mapped and unmapped files.
   (PR#2110, fixes #2105.  Reported by Armin Töpfer)
 
+* Allow the `samtools sort` "merging from..." message to be silenced.
+  Setting the verbosity to 0 or 1 will now silence this message.
+  (PR#2197, resolves #2185.  Requested by Alex Predeus)
+
 * Add `--save-counts` option to `samtools view`.  Adds an option to store counts
   of records processed, accepted and rejected by filtering to a file.
   (PR#2120, resolves #2038.  Requested by Chang Y)
@@ -73,6 +77,9 @@ New work and changes:
   `samtools merge`.
   (PR#2173, fixes #2159.  Reported by Filipe G. Vieira)
 
+* Protect against merging CRAM files with different headers.
+  (PR#2220, fixes #2218.  Reported by Kevin Lewis)
+
 * `samtools stats` bug-fix to checksum calculation for quality values.  This
   corrects the checksums but in turn makes the calculated value different to
   that reported by previous samtools versions.
@@ -81,10 +88,6 @@ New work and changes:
 * Clarification for `samtools stats` when used on files with different sort
   orders.
   (PR#2198, fixes #2177.  Reported by Filipe G. Vieira)
-
-* Allow the `samtools sort` "merging from..." message to be silenced.
-  Setting the verbosity to 0 or 1 will now silence this message.
-  (PR#2197, resolves #2185.  Requested by Alex Predeus)
 
 * In `samtools stats`, dovetailed (completely overlapping) read pairs are
   now always counted as inward-oriented.  Previously they could have been
