@@ -159,8 +159,25 @@ typedef struct
     char *split_prefix;   // Path or string prefix for filenames created when splitting
     int remove_overlaps;
     int cov_threshold;
+    int ref_stats;      // have statistics on reference data or not, 1 - yes, 0 - no
+    int ref_chunksz;    // size of ref base chunks to retrieve, in bytes
 }
 stats_info_t;
+
+//statistics on reference data
+typedef struct {
+    int32_t refseq_total_count; // total seq count
+    int32_t refseq_count;       // relevant seq count
+    int64_t combinedlen;        // combined length
+    int64_t minlen;             // min length
+    int64_t maxlen;             // max length
+    float avglen;               // avg length
+    float avggc;                // avg GC contents
+    char **refseq_name;         // names of sequences
+    int64_t *reflen;            // ref lengths
+    float *refgc;               // GC contents
+    int64_t *refN;              // undetermined on each
+} refstats;
 
 typedef struct
 {
@@ -260,6 +277,8 @@ typedef struct
     barcode_info_t *tags_barcode;
     uint32_t ntags;
     uint32_t error_number;
+
+    refstats *rstat;                // Reference statistics
 }
 stats_t;
 KHASH_MAP_INIT_STR(c2stats, stats_t*)
@@ -277,6 +296,7 @@ KHASH_SET_INIT_STR(rg)
 static void HTS_NORETURN error(const char *format, ...);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
 void realloc_buffers(stats_t *stats, int seq_len);
+void destroy_refstats(stats_t *stats);
 
 static int regions_lt(const void *r1, const void *r2) {
     int64_t from_diff = ((hts_pair_pos_t *)r1)->beg - ((hts_pair_pos_t *)r2)->beg;
@@ -1869,6 +1889,29 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
             igcd += nbins;
         }
     }
+    //reference stats
+    if (stats->rstat) {
+        int i, j, pos = 0;
+        refstats *rs = stats->rstat;
+        fprintf(to, "# Reference statistics. Use `grep ^RFS | cut -f 2-` to extract this part.\n");
+        fprintf(to, "# Total count, Output count, Average GC, Min length, Max length, Average length, Total length in first row.\n");
+        fprintf(to, "# Sequence name, Length, GC content, Unknown count in following rows.\n");
+
+        fprintf(to, "RFS\t%d\t%d\t%.2f\t%"PRId64"\t%"PRId64"\t%.2f\t%"PRId64"\n",
+            rs->refseq_total_count, rs->refseq_count, rs->avggc, rs->minlen,
+            rs->maxlen, rs->avglen, rs->combinedlen);
+        for (i = 0; i < stats->nregions; ++i) {
+            for(j = 0; j < stats->regions[i].npos; ++j) {
+                if (!rs->refseq_name[pos]) {
+                    ++pos;
+                    continue;   //Invalid / empty region, ignore
+                }
+                fprintf(to, "RFS\t%s\t%"PRId64"\t%.2f\t%"PRId64"\n", rs->refseq_name[pos],
+                    rs->reflen[pos], rs->refgc[pos], rs->refN[pos]);
+                ++pos;
+            }
+        }
+    }
 }
 
 static void init_regions(stats_t *stats, const char *file, stats_info_t* info)
@@ -1973,6 +2016,8 @@ void destroy_regions(stats_t *stats)
     }
     if ( stats->regions ) free(stats->regions);
     if ( stats->chunks ) free(stats->chunks);
+    stats->regions = NULL;
+    stats->chunks = NULL;
 }
 
 void reset_regions(stats_t *stats)
@@ -2124,6 +2169,8 @@ error(const char *format, ...)
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
         printf("    -p, --remove-overlaps               Remove overlaps of paired-end reads from coverage and base count computations.\n");
         printf("    -g, --cov-threshold <int>           Only bases with coverage above this value will be included in the target percentage computation [0]\n");
+        printf("        --ref-stats <int>               Create statistics on reference data, 0 to disable and 1 to enable [0]\n");
+        printf("        --ref-stats-chunk <int>         Reference retrival chunk size, in Mbs [1]\n");
         sam_global_opt_help(stdout, "-.--.@-.");
         printf("\n");
     }
@@ -2168,6 +2215,9 @@ void cleanup_stats(stats_t* stats)
     if (stats->acgtno_barcode) free(stats->acgtno_barcode);
     if (stats->quals_barcode) free(stats->quals_barcode);
     free(stats->tags_barcode);
+    if (stats->info->ref_stats) {
+        destroy_refstats(stats);
+    }
     destroy_regions(stats);
     if ( stats->rg_hash ) kh_destroy(rg, stats->rg_hash);
     free(stats->split_name);
@@ -2238,6 +2288,7 @@ stats_info_t* stats_info_init(int argc, char *argv[])
     info->argv = argv;
     info->remove_overlaps = 0;
     info->cov_threshold = 0;
+    info->ref_chunksz = 1024 * 1024;    //1MB
 
     return info;
 }
@@ -2407,6 +2458,216 @@ static stats_t* get_curr_split_stats(bam1_t* bam_line, khash_t(c2stats)* split_h
     return curr_stats;
 }
 
+/// destroy_refstats - cleanup ref stats
+/** @param stats - pointer to stats data
+ * returns nothing
+*/
+void destroy_refstats(stats_t *stats)
+{
+    int i, j, regcnt = 0;
+    refstats *rstat = NULL;
+    if (!stats || !stats->rstat) {
+        return;
+    }
+    rstat = stats->rstat;
+    if (stats->regions && rstat->refseq_name) {
+        for (i = 0; i < stats->nregions; ++i) {
+            for (j = 0; j < stats->regions[i].npos; ++j) {
+                free(rstat->refseq_name[regcnt++]);
+            }
+        }
+        free(rstat->refseq_name);
+    }
+    free(rstat->reflen);
+    free(rstat->refgc);
+    free(rstat->refN);
+    free(rstat);
+}
+
+/// collect_refstats - reference statistics collection
+/** @param stats - pointer to stats data
+ * returns nothing
+ * uses region data when region or targets specified and populates and reuses
+ * the fields when whole file is considered.
+ * stats kept against each region and when ref file not present, uses -1 to
+ * show lack of data.
+ * stats created is about specified target if given, regions if specified or
+ * the whole file
+*/
+void collect_refstats(stats_t *stats)
+{
+    int i, j, k, alltrgts = 0, regcnt = 0, warned = 0;
+    hts_pos_t tmp, start, end, tmpend, rem;
+    refstats *rstat = NULL;
+    char *buf = NULL;
+    const char *name = NULL;
+    float gcsum = 0;
+    int64_t gc, at, cntN;
+    kstring_t regname = KS_INITIALIZE;
+    if (!stats || !stats->info->ref_stats)
+        return;             //nothing to do here
+
+    /*expects this to be called after all processing made as this reuses the
+     regions buffer*/
+    if (!(rstat = calloc(1, sizeof(refstats)))) {
+        error("Failed to allocate memory for reference stats.\n");
+    }
+
+    rstat->refseq_total_count = sam_hdr_nref(stats->info->sam_header);
+    if (!stats->nregions) {
+        //statistics for all seq. in input file
+        alltrgts = 1;
+        regcnt = rstat->refseq_total_count;
+        destroy_regions(stats); //to rebuild region data for all seqs
+        if (!(stats->regions = calloc(regcnt, sizeof(regions_t)))) {
+           error("Failed to allocate memory for reference regions.\n");
+        }
+        stats->nregions = regcnt;
+        for (i = 0; i < stats->nregions; ++i) {
+            stats->regions[i].npos = stats->regions[i].mpos = 1;
+            if (!(stats->regions[i].pos = malloc(sizeof(hts_pair_pos_t)))) {
+                destroy_refstats(stats);
+                destroy_regions(stats); //failed, exit
+                error("Failed to allocate memory for reference pos.\n");
+            }
+            stats->regions[i].pos[0].beg = 1;
+            stats->regions[i].pos[0].end = HTS_POS_MAX;
+        }
+    } else {
+        //statistics matching to these regions, from target file or commandline
+        for (i = 0; i < stats->nregions; ++i) {
+            for (j = 0; j < stats->regions[i].npos; ++j) {
+                ++regcnt;  //count relevant targets
+            }
+        }
+    }
+    if (!(rstat->refseq_name = calloc(regcnt, sizeof(char*))) ||
+        !(rstat->reflen = calloc(regcnt, sizeof(int64_t))) ||
+        !(rstat->refgc = calloc(regcnt, sizeof(float))) ||
+        !(rstat->refN = calloc(regcnt, sizeof(int64_t)))) {
+        destroy_refstats(stats);
+        if (alltrgts) {     //locally allocated regions
+            destroy_regions(stats);
+        }
+        error("Failed to allocate memory for reference data.\n");
+    }
+    regcnt = 0;
+    for (i = 0; i < stats->nregions; ++i) {
+        if (!stats->regions[i].npos) { // empty / non-interested
+            continue;
+        }
+        if (!(name = sam_hdr_tid2name(stats->info->sam_header,  i))) {
+            continue;   //invalid
+        }
+        for (j = 0; j < stats->regions[i].npos; ++j) {
+            //get data for each region
+            start = stats->regions[i].pos[j].beg;
+            end = stats->regions[i].pos[j].end;
+            if (end == HTS_POS_MAX) {
+                end = sam_hdr_tid2len(stats->info->sam_header, i);
+            }
+            if (end < start) {
+                ++regcnt;
+                continue;       //invalid range, ignore
+            }
+
+            ++rstat->refseq_count;
+            if (!alltrgts) {    //given regions alone
+                ks_clear(&regname);
+                tmp = sam_hdr_tid2len(stats->info->sam_header,  i);
+                if (stats->regions[i].pos[j].beg == 1 && stats->regions[i].pos[j].end == HTS_POS_MAX) {
+                    //full seq, use name
+                    ksprintf(&regname, "%s", name);
+                } else {    //range, use name:start-end
+                    ksprintf(&regname, "%s:%"PRIhts_pos"-%"PRIhts_pos, name, start, end);
+                }
+                rstat->refseq_name[regcnt] = regname.l ? strdup(regname.s) : NULL;
+                rstat->reflen[regcnt] = end - start + 1;   //both included
+                rstat->reflen[regcnt] = rstat->reflen[regcnt] < tmp ?
+                                            rstat->reflen[regcnt] : tmp;
+            } else {    //all targets in file
+                rstat->refseq_name[regcnt] = name ? strdup(name) : NULL;
+                rstat->reflen[regcnt] = sam_hdr_tid2len(stats->info->sam_header, i);
+            }
+
+            rstat->combinedlen += rstat->reflen[regcnt];
+            if (!rstat->minlen) rstat->minlen = rstat->reflen[regcnt];
+            if (rstat->minlen > rstat->reflen[regcnt])
+                rstat->minlen = rstat->reflen[regcnt];
+            if (rstat->maxlen < rstat->reflen[regcnt])
+                rstat->maxlen = rstat->reflen[regcnt];
+
+            rstat->refgc[regcnt] = -1;
+            rstat->refN[regcnt] = -1;
+            if (!stats->info->fai) {
+                gcsum = -1;
+                ++regcnt;
+                continue;   //no ref file, ignore
+            }
+
+            --start;        //0 based position
+            gc = 0; at = 0; cntN = 0;
+            for (rem = end - start; rem > 0; rem -= tmp) {
+                tmp = 0;
+                tmpend = rem > stats->info->ref_chunksz ? stats->info->ref_chunksz
+                             : rem;
+                buf = faidx_fetch_seq64(stats->info->fai, sam_hdr_tid2name(stats->info->sam_header, i),
+                    start, start + tmpend - 1, &tmp);   //-1 to make 0 based pos
+                if (tmp < 0 || !buf) {
+                    if (tmp == -2) { //target not found
+                        if (!warned) {
+                            fprintf(stderr,"Warning: Some sequences not present in the reference, e.g. \"%s\".\
+                             This message is printed only once.\n", sam_hdr_tid2name(stats->info->sam_header, i));
+                            warned = 1;
+                        }
+                        break;
+                    }
+                    error("Failed to fetch the sequence \"%s\"\n", sam_hdr_tid2name(stats->info->sam_header, i));
+                }
+                for (k = 0; k < tmp; ++k) {
+                    switch(buf[k]) {
+                        case 'G': case 'g':
+                        case 'C': case 'c':
+                            ++gc;
+                        break;
+                        case 'A': case 'a':
+                        case 'T': case 't':
+                            ++at;
+                        break;
+                        case 'N': case 'n':
+                            ++cntN;
+                        break;
+                        default: ; //ignore
+                    }
+                }
+                free(buf);
+                if (tmp < tmpend) {
+                    //asked and didnt get whole --> nothing more
+                    break;
+                }
+                start += tmp;
+            }
+            if ((tmp = gc + at)) {
+                rstat->refgc[regcnt] = (float)gc / tmp;
+            } else {
+                rstat->refgc[regcnt] = 0;
+            }
+            gcsum += rstat->refgc[regcnt];
+            rstat->refN[regcnt++] = cntN;
+        }
+    }
+    if (rstat->refseq_count) {
+        rstat->avglen = (float)rstat->combinedlen / rstat->refseq_count;
+        rstat->avggc = gcsum < 0 ? -1 : gcsum / rstat->refseq_count;
+    } else {
+        rstat->avglen = -1;
+        rstat->avggc = -1;
+    }
+    stats->rstat = rstat;
+
+    ks_free(&regname);
+}
+
 int main_stats(int argc, char *argv[])
 {
     char *targets = NULL;
@@ -2445,6 +2706,8 @@ int main_stats(int argc, char *argv[])
         {"split-prefix", required_argument, NULL, 'P'},
         {"remove-overlaps", no_argument, NULL, 'p'},
         {"cov-threshold", required_argument, NULL, 'g'},
+        {"ref-stats", required_argument, NULL, 2},
+        {"ref-stats-chunk", required_argument, NULL, 3},
         {NULL, 0, NULL, 0}
     };
     int opt, tmp_flag;
@@ -2500,6 +2763,14 @@ int main_stats(int argc, char *argv[])
                       if ( info->cov_threshold < 0 || info->cov_threshold == INT_MAX )
                           error("Unsupported value for coverage threshold %d\n", info->cov_threshold);
                       break;
+            case   2: info->ref_stats = atoi(optarg); break;    //ref stats
+            case   3: info->ref_chunksz = atoi(optarg);         //in Mbs
+                if (info->ref_chunksz <= 0) {
+                    info->ref_chunksz = 1;
+                }
+                //ref retrieval buffer size in bytes
+                info->ref_chunksz = info->ref_chunksz * 1024 * 1024;
+            break;
             case '?':
             case 'h': error(NULL);
             /* no break */
@@ -2621,6 +2892,9 @@ int main_stats(int argc, char *argv[])
         }
     }
 
+    if (info->ref_stats) {
+        collect_refstats(all_stats);
+    }
     round_buffer_flush(all_stats, -1);
     output_stats(stdout, all_stats, sparse);
     if (info->split_tag)

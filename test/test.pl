@@ -3322,6 +3322,24 @@ sub test_stats
     test_cmd($opts,out=>'stat/14.rg.grp3.expected',cmd=>"$$opts{bin}/samtools stats -I grp3 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/14.rg.Sample.expected',cmd=>"$$opts{bin}/samtools stats -I Sample $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/15.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/mpileup/ce.fa $$opts{path}/stat/15.big_del.sam | tail -n+4", exp_fix=>$efix);
+
+    #reference statistics tests
+    #no disturbance to existing o/p with ref-stats 0
+    test_cmd($opts,out=>'stat/11.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats 0 -t $$opts{path}/stat/11.stats.targets $$opts{path}/stat/11_target.sam | tail -n+4", exp_fix=>$efix);
+    #with ref-stats 1, no ref file
+    test_cmd($opts,out=>'stat/17.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats 1 $$opts{path}/stat/11_target.sam | grep -e\"^RFS\"", exp_fix=>$efix);
+    #with ref-stats 1, ref file - not covering all targets!
+    test_cmd($opts,expect_fail=>1, out=>'stat/17.stats.expected', cmd=>"$$opts{bin}/samtools stats --ref-stats 1 $$opts{path}/stat/11_target.sam -r $$opts{path}/stat/test.fa", exp_fix=>$efix);
+    #with ref-stats 1, ref file
+    test_cmd($opts,out=>'stat/18.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats 1 $$opts{path}/stat/11_target.sam -r $$opts{path}/stat/test1.fa | grep -e\"^RFS\"", exp_fix=>$efix);
+    #with ref-stats 1, ref file using chunk option
+    test_cmd($opts,out=>'stat/18.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats 1 --ref-stats-chunk -1 $$opts{path}/stat/11_target.sam -r $$opts{path}/stat/test1.fa | grep -e\"^RFS\"", exp_fix=>$efix);
+    #with ref-stats 1, ref file with matching region
+    test_cmd($opts,out=>'stat/19.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats 1 $$opts{path}/stat/11_target.bam -r $$opts{path}/stat/test1.fa alpha:10-20 | grep -e\"^RFS\"", exp_fix=>$efix);
+    #with ref-stats 1, ref file with target file
+    test_cmd($opts,out=>'stat/20.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats 1 $$opts{path}/stat/11_target.sam -r $$opts{path}/stat/test1.fa -t $$opts{path}/stat/11.stats.targets  | grep -e\"^RFS\"", exp_fix=>$efix);
+    #with ref-stats 1, ref file with target file with unmatched region spec
+    test_cmd($opts,out=>'stat/20.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats 1 $$opts{path}/stat/11_target.bam -r $$opts{path}/stat/test1.fa -t $$opts{path}/stat/11.stats.targets ref1 | grep -e\"^RFS\"", exp_fix=>$efix);
 }
 
 sub test_merge
