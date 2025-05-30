@@ -74,6 +74,7 @@ int main_consensus(int argc, char *argv[]);
 int main_reference(int argc, char *argv[]);
 int main_reset(int argc, char *argv[]);
 int main_cram_size(int argc, char *argv[]);
+int main_checksum(int argc, char *argv[]);
 
 const char *samtools_version(void)
 {
@@ -103,7 +104,7 @@ const char *samtools_feature_string(void) {
 static void long_version(void) {
     printf("samtools %s\n"
            "Using htslib %s\n"
-           "Copyright (C) 2024 Genome Research Ltd.\n",
+           "Copyright (C) 2025 Genome Research Ltd.\n",
            samtools_version(), hts_version());
 
     printf("\nSamtools compilation details:\n");
@@ -195,6 +196,7 @@ static void usage(FILE *fp)
 "     phase          phase heterozygotes\n"
 "     stats          generate stats (former bamcheck)\n"
 "     ampliconstats  generate amplicon specific stats\n"
+"     checksum       produce order-agnostic checksums of sequence content\n"
 "\n"
 "  -- Viewing\n"
 "     flags          explain BAM flags\n"
@@ -292,6 +294,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "consensus") == 0) ret = main_consensus(argc-1, argv+1);
     else if (strcmp(argv[1], "reference") == 0) ret = main_reference(argc-1, argv+1);
     else if (strcmp(argv[1], "cram-size") == 0) ret = main_cram_size(argc-1, argv+1);
+    else if (strcmp(argv[1], "checksum") == 0) ret = main_checksum(argc-1, argv+1);
     else if (strcmp(argv[1], "version") == 0 || \
              strcmp(argv[1], "--version") == 0)
         long_version();

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-stats 1 "12 September 2024" "samtools-1.21" "Bioinformatics tools"
+.TH samtools-stats 1 "30 May 2025" "samtools-1.22" "Bioinformatics tools"
 .SH NAME
 samtools stats \- produces comprehensive statistics from alignment file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018, 2020-2021, 2024 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018, 2020-2021, 2024-2025 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -123,7 +123,10 @@ The CHK row contains distinct CRC32 checksums of read names, sequences
 and quality values.  The checksums are computed per alignment record
 and summed, meaning the checksum does not change if the input file has
 the sort-order changed.
-
+.sp .5
+NOTE: Checksum calculation for quality values was modified and quality checksum
+value will be different from that generated using versions up to 1.21.
+.sp
 The SN section contains a series of counts, percentages, and averages, in a similar style to
 .BR "samtools flagstat" ,
 but more comprehensive.

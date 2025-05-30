@@ -1,6 +1,6 @@
 /*  bam_sort.c -- sorting and merging.
 
-    Copyright (C) 2008-2024 Genome Research Ltd.
+    Copyright (C) 2008-2025 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -470,7 +470,14 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, sam_hdr_t *translate,
     // Fill in the tid part of the translation table, adding new targets
     // to the merged header as we go.
 
-    for (i = 0; i < sam_hdr_nref(translate); ++i) {
+    tbl->n_targets = sam_hdr_nref(translate);
+    tbl->tid_trans = calloc(tbl->n_targets ? tbl->n_targets : 1, sizeof(int));
+    if (tbl->tid_trans == NULL) {
+        print_error_errno("merge", "failed to allocate @SQ translation table");
+        return -1;
+    }
+
+    for (i = 0; i < tbl->n_targets; ++i) {
         int trans_tid;
         sq_sn.l = 0;
         res = sam_hdr_find_tag_pos(translate, "SQ", i, "SN", &sq_sn);
@@ -797,11 +804,9 @@ static int trans_tbl_init(merged_header_t* merged_hdr, sam_hdr_t* translate,
     klist_t(hdrln) *rg_list = NULL;
     klist_t(hdrln) *pg_list = NULL;
 
-    tbl->n_targets = sam_hdr_nref(translate);
+    tbl->n_targets = 0;
+    tbl->tid_trans = NULL;
     tbl->rg_trans = tbl->pg_trans = NULL;
-    tbl->tid_trans = (int*)calloc(tbl->n_targets ? tbl->n_targets : 1,
-                                  sizeof(int));
-    if (tbl->tid_trans == NULL) goto memfail;
     tbl->rg_trans = kh_init(c2c);
     if (tbl->rg_trans == NULL) goto memfail;
     tbl->pg_trans = kh_init(c2c);
@@ -867,7 +872,20 @@ static int trans_tbl_init(merged_header_t* merged_hdr, sam_hdr_t* translate,
     return -1;
 }
 
-static int finish_merged_header(merged_header_t *merged_hdr) {
+static int finish_merged_header(merged_header_t *merged_hdr, int resetorder) {
+    if (resetorder && merged_hdr->have_hd) {
+        //reset sort order to unsorted and remove GO, SS
+        if (sam_hdr_remove_tag_id(merged_hdr->hdr, "HD", NULL, NULL, "SS") < 0) {
+            return -1;
+        }
+        if (sam_hdr_remove_tag_id(merged_hdr->hdr, "HD", NULL, NULL, "GO") < 0) {
+            return -1;
+        }
+        if (sam_hdr_update_hd(merged_hdr->hdr, "SO", "unsorted") < 0) {
+            return -1;
+        }
+    }
+
     if (sam_hdr_add_lines(merged_hdr->hdr, ks_c_str(&merged_hdr->out_rg),
                           ks_len(&merged_hdr->out_rg)) < 0)
         return -1;
@@ -1109,15 +1127,16 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     hts_itr_t **iter = NULL;
     sam_hdr_t **hdr = NULL;
     trans_tbl_t *translation_tbl = NULL;
-    int *rtrans = NULL;
+    int *rtrans = NULL, resetorder = 0;
     char *out_idx_fn = NULL;
     void *hreg = NULL;
     hts_reglist_t *lreg = NULL;
     merged_header_t *merged_hdr = init_merged_header();
     if (!merged_hdr) return -1;
-    refs_t *refs = NULL;
+    refs_t *refs = NULL, *refs_out = NULL;
     template_coordinate_keys_t *keys = NULL;
     khash_t(const_c2c) *lib_lookup = NULL;
+    int refs_out_shared = 1;
 
     // Is there a specified pre-prepared header to use for output?
     if (headers) {
@@ -1207,15 +1226,37 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         int order_ok = 1;
         if ((translation_tbl+i)->lost_coord_sort && (sam_order == Coordinate || sam_order == MinHash)) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
-            order_ok = 0;
+            refs_out_shared = order_ok = 0;
+            resetorder = 1;
         }
 
-        if (!refs)
-            refs = cram_get_refs(fp[i]);
+        // Check our translated TIDs for fp[i] and fp[0] match.
+        if (i > 0) {
+            if (translation_tbl[i].n_targets != translation_tbl[0].n_targets
+                || memcmp(translation_tbl[0].tid_trans,
+                          translation_tbl[i].tid_trans,
+                          translation_tbl[0].n_targets *
+                          sizeof(*translation_tbl[0].tid_trans)) != 0)
+                refs_out_shared = order_ok = 0;
+        }
 
-        if (order_ok && refs && hts_set_opt(fp[i], CRAM_OPT_SHARED_REF, refs))
-            goto fail;
+        if (order_ok) {
+            if (!refs)
+                refs = cram_get_refs(fp[i]);
+            if (!refs_out)
+                refs_out = refs;
+
+            if (refs && hts_set_opt(fp[i], CRAM_OPT_SHARED_REF, refs))
+                goto fail;
+        } else {
+            refs = NULL;
+        }
     }
+
+    // We can share refs between compatible input files, but if any input is
+    // incompatible then so will sharing a ref with the output.
+    if (!refs_out_shared)
+        refs_out = NULL;
 
     // Did we get an @HD line?
     if (!merged_hdr->have_hd) {
@@ -1229,7 +1270,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     }
 
     // Transform the header into standard form
-    if (finish_merged_header(merged_hdr) < 0)
+    if (finish_merged_header(merged_hdr, resetorder) < 0)
         goto fail;
 
     hout = merged_hdr->hdr;
@@ -1410,7 +1451,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     }
     if (!(flag & MERGE_UNCOMP)) hts_set_threads(fpout, n_threads);
 
-    if (refs && hts_set_opt(fpout, CRAM_OPT_SHARED_REF, refs))
+    if (refs_out && hts_set_opt(fpout, CRAM_OPT_SHARED_REF, refs_out))
         goto fail;
 
     // Begin the actual merge
@@ -3191,6 +3232,104 @@ static khash_t(const_c2c) * lookup_libraries(sam_hdr_t *header)
     return NULL;
 }
 
+// Updates header fields, adding the header if absent.
+// Done as a macro instead of a function as we don't have va_list versions of
+// these functions.
+#define sam_hdr_update_sort(h, ...) (                                       \
+    (-1 == sam_hdr_update_line((h), "HD", NULL, NULL, __VA_ARGS__, NULL) && \
+     -1 == sam_hdr_add_line((h), "HD", "VN", SAM_FORMAT_VERSION,            \
+                            __VA_ARGS__, NULL))                             \
+    ? -1 : 0)
+
+/*
+ * Sets the header sort order, group order and sub sort fields.
+ * Returns 0 on success
+ *        -1 on failure
+ */
+static int set_sort_order(sam_hdr_t *h, int mapped) {
+    const char *new_so = NULL;
+    const char *new_go = NULL;
+    const char *new_ss = NULL;
+
+    switch (g_sam_order) {
+        case Coordinate:
+            new_so = "coordinate";
+            break;
+        case QueryName:
+            new_so = "queryname";
+            new_ss = natural_sort
+                ? "queryname:natural"
+                : "queryname:lexicographical";
+            break;
+        case MinHash:
+            new_so = mapped
+                ? "coordinate"
+                : "unsorted";
+            new_ss = mapped
+                ? "coordinate:minhash"
+                : "unsorted:minhash";
+            break;
+        case TagQueryName:
+        case TagCoordinate:
+            new_so = "unknown";
+            break;
+        case TemplateCoordinate:
+            new_so = "unsorted";
+            new_go = "query";
+            new_ss = "unsorted:template-coordinate";
+            break;
+        default:
+            new_so = "unknown";
+            break;
+    }
+
+    // Add or update HD
+    if (!new_ss && !new_go) {
+        // SO only
+        if (sam_hdr_update_sort(h, "SO", new_so) == -1) {
+            print_error("sort", "failed to change sort order header to "
+                        "'SO:%s'\n", new_so);
+            return -1;
+        }
+    } else if (new_ss && !new_go) {
+        // SO and SS
+        if (sam_hdr_update_sort(h, "SO", new_so, "SS", new_ss) == -1) {
+            print_error("sort", "failed to change sort order header to "
+                        "'SO:%s SS:%s'\n", new_so, new_ss);
+            return -1;
+        }
+    } else if (!new_ss && new_go) {
+        // SO and GO
+        if (sam_hdr_update_sort(h, "SO", new_so, "GO", new_go) == -1) {
+            print_error("sort", "failed to change sort order header to "
+                        "'SO:%s GO:%s'\n", new_so, new_go);
+            return -1;
+        }
+    } else {
+        // SO, GO and SS
+        if (sam_hdr_update_sort(h, "SO", new_so, "GO", new_go,
+                                "SS", new_ss) == -1) {
+            print_error("sort", "failed to change sort order header to "
+                        "'SO:%s GO:%s SS:%s'\n", new_so, new_go, new_ss);
+            return -1;
+        }
+    }
+
+    // Remove old HD entries
+    if (!new_go && sam_hdr_remove_tag_hd(h, "GO") == -1) {
+        print_error("sort", "failed to delete group order in header\n");
+        return -1;
+    }
+
+    if (!new_ss && sam_hdr_remove_tag_hd(h, "SS") == -1) {
+        print_error("sort", "failed to delete sub sort in header\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+
 /*!
   @abstract Sort an unsorted BAM file based on the provided sort order
 
@@ -3231,9 +3370,6 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     uint8_t *bam_mem = NULL;
     char **fns = NULL;
     size_t fns_size = 0;
-    const char *new_so = NULL;
-    const char *new_go = NULL;
-    const char *new_ss = NULL;
     buf_region *in_mem = NULL;
     khash_t(const_c2c) *lib_lookup = NULL;
     htsThreadPool htspool = { NULL, 0 };
@@ -3305,83 +3441,6 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             goto err;
     }
 
-    switch (g_sam_order) {
-        case Coordinate:
-            new_so = "coordinate";
-            break;
-        case QueryName:
-            new_so = "queryname";
-            new_ss = natural_sort
-                ? "queryname:natural"
-                : "queryname:lexicographical";
-            break;
-        case MinHash:
-            new_so = "coordinate";
-            new_ss = "coordinate:minhash";
-            break;
-        case TagQueryName:
-        case TagCoordinate:
-            new_so = "unknown";
-            break;
-        case TemplateCoordinate:
-            new_so = "unsorted";
-            new_go = "query";
-            new_ss = "unsorted:template-coordinate";
-            break;
-        default:
-            new_so = "unknown";
-            break;
-    }
-
-    if (new_ss == NULL && new_go == NULL) { // just SO
-        if ((-1 == sam_hdr_update_hd(header, "SO", new_so))
-            && (-1 == sam_hdr_add_line(header, "HD", "VN", SAM_FORMAT_VERSION, "SO", new_so, NULL))
-            ) {
-            print_error("sort", "failed to change sort order header to 'SO:%s'\n", new_so);
-            goto err;
-        }
-    } else if (new_ss != NULL && new_go == NULL) { // update SO and SS, but not GO
-        if ((-1 == sam_hdr_update_hd(header, "SO", new_so, "SS", new_ss))
-            && (-1 == sam_hdr_add_line(header, "HD", "VN", SAM_FORMAT_VERSION,
-                                       "SO", new_so, "SS", new_ss, NULL))
-            ) {
-            print_error("sort", "failed to change sort order header to 'SO:%s SS:%s'\n",
-                        new_so, new_ss);
-            goto err;
-        }
-    } else if (new_ss == NULL && new_go != NULL) { // update SO and GO, but not SS
-        if ((-1 == sam_hdr_update_hd(header, "SO", new_so, "GO", new_go))
-            && (-1 == sam_hdr_add_line(header, "HD", "VN", SAM_FORMAT_VERSION,
-                                       "SO", new_so, "GO", new_go, NULL))
-            ) {
-            print_error("sort", "failed to change sort order header to 'SO:%s GO:%s'\n",
-                        new_so, new_go);
-            goto err;
-        }
-    } else { // update SO, GO, and SS
-        if ((-1 == sam_hdr_update_hd(header, "SO", new_so, "GO", new_go, "SS", new_ss))
-            && (-1 == sam_hdr_add_line(header, "HD", "VN", SAM_FORMAT_VERSION,
-                                       "SO", new_so, "GO", new_go, "SS", new_ss, NULL))
-            ) {
-            print_error("sort", "failed to change sort order header to 'SO:%s GO:%s SS:%s'\n",
-                        new_so, new_go, new_ss);
-            goto err;
-        }
-    }
-
-    if (new_go == NULL) {
-        if (-1 == sam_hdr_remove_tag_hd(header, "GO")) {
-            print_error("sort", "failed to delete group order in header\n");
-            goto err;
-        }
-    }
-    if (new_ss == NULL) {
-        if (-1 == sam_hdr_remove_tag_hd(header, "SS")) {
-            print_error("sort", "failed to delete sub sort in header\n");
-            goto err;
-        }
-    }
-
     if (n_threads > 1) {
         htspool.pool = hts_tpool_init(n_threads);
         if (!htspool.pool) {
@@ -3402,8 +3461,11 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     // write sub files
     k = max_k = bam_mem_offset = 0;
     size_t name_len = strlen(prefix) + 30;
+    int placed = 0;
     while ((res = sam_read1(fp, header, b)) >= 0) {
         int mem_full = 0;
+
+        placed |= b->core.tid >= 0;
 
         if (k == max_k) {
             bam1_tag *new_buf;
@@ -3540,6 +3602,10 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         num_in_mem = 0;
     }
 
+    // Set the order here as we need to know if entirely unmapped.
+    if (set_sort_order(header, placed) < 0)
+        goto err;
+
     // write the final output
     if (n_files == 0 && num_in_mem < 2) { // a single block
         if (write_buffer(fnout, modeout, k, buf, header, n_threads, out_fmt,
@@ -3548,9 +3614,12 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             goto err;
         }
     } else { // then merge
-        fprintf(stderr,
+        if (hts_get_log_level() >= 2) { // 2 is between the WARNING (default) and ERROR levels
+            fprintf(stderr,
                 "[bam_sort_core] merging from %d files and %d in-memory blocks...\n",
                 n_files, num_in_mem);
+        }
+
         // Paranoia check - all temporary files should have a name
         for (i = 0; i < n_files; ++i) {
             if (!fns[i]) {
@@ -3761,7 +3830,7 @@ int bam_sort(int argc, char *argv[])
         goto sort_end;
     }
 
-    if (ga.write_index && sam_order != Coordinate) {
+    if (ga.write_index && sam_order != Coordinate && sam_order != MinHash) {
         fprintf(stderr, "[W::bam_sort] Ignoring --write-index as it only works for position sorted files.\n");
         ga.write_index = 0;
     }

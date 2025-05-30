@@ -25,7 +25,7 @@ CC       = gcc
 AR       = ar
 AWK      = awk
 CPPFLAGS =
-#CFLAGS   = -g -Wall -O2 -pedantic -std=c99 -D_XOPEN_SOURCE=600
+#CFLAGS   = -g -Wall -O2 -pedantic -std=c99 -D_XOPEN_SOURCE=700
 CFLAGS   = -g -Wall -O2
 LDFLAGS  =
 LIBS     =
@@ -44,7 +44,8 @@ AOBJS=      bam_aux.o bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
             bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o \
             bam_ampliconclip.o amplicon_stats.o bam_import.o bam_samples.o \
-            bam_consensus.o consensus_pileup.o reference.o reset.o cram_size.o
+            bam_consensus.o consensus_pileup.o reference.o reset.o cram_size.o \
+            bam_checksum.o
 LZ4OBJS  =  $(LZ4DIR)/lz4.o
 
 prefix      = /usr/local
@@ -180,7 +181,8 @@ bam_lpileup.o: bam_lpileup.c config.h $(bam_plbuf_h) $(bam_lpileup_h) splaysort.
 bam_mate.o: bam_mate.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_kstring_h) $(htslib_sam_h) $(samtools_h)
 bam_md.o: bam_md.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_kstring_h) $(htslib_thread_pool_h) $(sam_opts_h) $(samtools_h)
 bam_plbuf.o: bam_plbuf.c config.h $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
-bam_consensus.o: bam_consensus.c config.h $(htslib_sam_h) $(htslib_hfile_h) $(samtools_h) $(sam_opts_h) $(bam_plbuf_h) $(consensus_pileup_h)
+bam_checksum.o: bam_checksum.c config.h $(htslib_sam_h) $(htslib_khash_h) $(htslib_kstring_h) $(htslib_hts_endian_h) $(sam_opts_h) $(sam_utils_h) $(samtools_h)
+bam_consensus.o: bam_consensus.c bam_consensus_tab.h config.h $(htslib_sam_h) $(htslib_hfile_h) $(htslib_faidx_h) $(htslib_thread_pool_h) $(htslib_cram_h) $(samtools_h) $(sam_opts_h) $(bam_plbuf_h) $(consensus_pileup_h)
 bam_plcmd.o: bam_plcmd.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstring_h) $(htslib_klist_h) $(htslib_khash_str2int_h) $(samtools_h) $(bedidx_h) $(sam_opts_h) $(sample_h) $(htslib_cram_h) $(bam_plbuf_h)
 bam_quickcheck.o: bam_quickcheck.c config.h $(htslib_hts_h) $(htslib_sam_h)
 bam_reheader.o: bam_reheader.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_cram_h) $(samtools_h)
@@ -207,7 +209,7 @@ phase.o: phase.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_kstring_h) $(
 reference.o: reference.c config.h $(htslib_sam_h) $(htslib_cram_h) $(samtools_h) $(sam_opts_h)
 sam_opts.o: sam_opts.c config.h $(sam_opts_h)
 sam_utils.o: sam_utils.c config.h $(sam_utils_h)
-sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_kstring_h) $(htslib_thread_pool_h) $(htslib_hts_expr_h) $(samtools_h) $(sam_opts_h) $(bam_h) $(bedidx_h) $(sam_utils_h)
+sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_kstring_h) $(htslib_hfile_h) $(htslib_thread_pool_h) $(htslib_hts_expr_h) $(samtools_h) $(sam_opts_h) $(bam_h) $(bedidx_h) $(sam_utils_h)
 sample.o: sample.c config.h $(sample_h) $(htslib_khash_h)
 stats_isize.o: stats_isize.c config.h $(stats_isize_h) $(htslib_khash_h)
 stats.o: stats.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) $(htslib_hts_defs_h) $(samtools_h) $(htslib_khash_h) $(htslib_kstring_h) $(stats_isize_h) $(sam_opts_h) $(bedidx_h)
@@ -246,6 +248,7 @@ check test: samtools $(BGZIP) $(TEST_PROGRAMS)
 	cd test/mpileup && AWK="$(AWK)" ../regression.sh depth.reg
 	cd test/mpileup && AWK="$(AWK)" ../regression.sh cram-size.reg
 	cd test/consensus && AWK="$(AWK)" ../regression.sh consensus.reg
+	cd test/consensus && AWK="$(AWK)" PARAM="-@4 -Z4" ../regression.sh consensus.reg
 	cd test/cram_size && AWK="$(AWK)" ../regression.sh cram_size.reg
 
 
@@ -331,6 +334,7 @@ install: $(PROGRAMS) $(MISC_PROGRAMS)
 
 testclean:
 	-rm -f test/*.new test/*.tmp test/*/*.new test/*/*.tmp test/*/*.tmp.*
+	-cd test/consensus && rm -f *.bam *.bam.csi
 	-cd test/dat && rm -f test_input_*.bam.bai view.*.bam.bai
 	-cd test/mpileup && rm -f FAIL-*.out* PASS-*.out* *.fa.fai anomalous.[bc]*am indels.[bc]*am mpileup.*.[cs]*am mpileup.*.crai overlap50.[bc]*am expected/1.out xx#depth*.bam*
 	-cd test/reference && rm -f mpileup.*.fai

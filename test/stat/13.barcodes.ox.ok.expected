@@ -1,11 +1,11 @@
 # CHK, Checksum	[2]Read Names	[3]Sequences	[4]Qualities
 # CHK, CRC32 of reads which passed filtering followed by addition (32bit overflow)
-CHK	00b48ec6	e5330ff5	ee3f18a6
+CHK	00b48ec6	e5330ff5	c4badc06
 # Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.
 SN	raw total sequences:	2696	# excluding supplementary and secondary reads
 SN	filtered sequences:	0
 SN	sequences:	2696
-SN	is sorted:	0
+SN	is sorted:	0	# not sorted by coordinate
 SN	1st fragments:	1348
 SN	last fragments:	1348
 SN	reads mapped:	336
@@ -36,8 +36,8 @@ SN	maximum last fragment length:	11
 SN	average quality:	34.4
 SN	insert size average:	10.9
 SN	insert size standard deviation:	0.3
-SN	inward oriented pairs:	74
-SN	outward oriented pairs:	84
+SN	inward oriented pairs:	158
+SN	outward oriented pairs:	0
 SN	pairs with other orientation:	0
 SN	pairs on different chromosomes:	0
 SN	percentage of properly paired reads (%):	0.0
@@ -223,8 +223,8 @@ IS	6	0	0	0	0
 IS	7	0	0	0	0
 IS	8	0	0	0	0
 IS	9	0	0	0	0
-IS	10	14	0	14	0
-IS	11	144	74	70	0
+IS	10	14	14	0	0
+IS	11	144	144	0	0
 # Read lengths. Use `grep ^RL | cut -f 2-` to extract this part. The columns are: read length, count
 RL	11	2696
 # Read lengths - first fragments. Use `grep ^FRL | cut -f 2-` to extract this part. The columns are: read length, count
@@ -240,7 +240,3 @@ ID	1	36	1
 IC	4	0	0	0	1
 IC	5	6	1	0	0
 IC	6	14	15	0	0
-# Coverage distribution. Use `grep ^COV | cut -f 2-` to extract this part.
-COV	[2-2]	2	22
-# GC-depth. Use `grep ^GCD | cut -f 2-` to extract this part. The columns are: GC%, unique sequence percentiles, 10th, 25th, 50th, 75th and 90th depth percentile
-GCD	0.0	100.000	0.000	0.000	0.000	0.000	0.000

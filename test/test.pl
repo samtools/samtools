@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2013-2024 Genome Research Ltd.
+#    Copyright (C) 2013-2025 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -77,6 +77,8 @@ test_ampliconclip($opts);
 test_ampliconclip($opts, threads=>2);
 test_ampliconstats($opts, threads=>2);
 test_reset($opts);
+test_checksum($opts);
+test_checksum($opts, threads=>2);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -112,7 +114,7 @@ sub error
 sub tempfile {
     my ($fh, $name) = File::Temp::tempfile(@_);
     if (wantarray) {
-        if ($^O =~ /^(?:msys|MSWin32)/) {
+        if ($^O =~ /^(?:cygwin|msys|MSWin32)/) {
             $name = abs_path($name);
         }
         return ($fh, $name);
@@ -130,7 +132,7 @@ sub cygpath {
 sub tempdir
 {
     my $dir = File::Temp::tempdir(@_);
-    if ($^O =~ /^msys/) {
+    if ($^O =~ /^(cygwin|msys)/) {
         $dir = cygpath($dir);
     } elsif ($^O eq 'MSWin32') {
         $dir =~ s/\\/\//g;
@@ -159,7 +161,7 @@ sub parse_params
     $$opts{tmp}  = $$opts{keep_files} ? $$opts{keep_files} : tempdir(CLEANUP => 1);
     $$opts{path} = $FindBin::RealBin;
     $$opts{bin}  = $FindBin::RealBin;
-    if ($^O =~ /^msys/) {
+    if ($^O =~ /^(cygwin|msys)/) {
         $$opts{path} = cygpath($$opts{path});
         $$opts{bin}  = cygpath($$opts{bin});
     }
@@ -169,7 +171,7 @@ sub parse_params
     {
         $SIG{TERM} = $SIG{INT} = sub { clean_files($opts); };
     }
-    $$opts{diff} = "diff" . ($^O =~ /^(?:msys|MSWin32)/ ? " -b":"");
+    $$opts{diff} = "diff" . ($^O =~ /^(?:cygwin|msys|MSWin32)/ ? " -b":"");
     return $opts;
 }
 sub clean_files
@@ -306,6 +308,8 @@ sub test_cmd
         else
         {
             failed($opts,%args,msg=>$test,reason=>"The outputs stdout differ:\n\t\t$$opts{path}/$args{out}\n\t\t$$opts{path}/$args{out}.new");
+            # system("hexdump -C $$opts{path}/$args{out}");
+            # system("hexdump -C $$opts{path}/$args{out}.new");
         }
         return;
     }
@@ -623,6 +627,22 @@ sub test_faidx
     cmd("$$opts{diff} $$opts{tmp}/faidx.fa.fai $$opts{tmp}/fa_test.fai");
     cmd("$$opts{diff} $$opts{tmp}/faidx.fa.gz.gzi $$opts{tmp}/fa_test.gzi");
 
+    #with write-index
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1 --write-index"); #ignores write-index
+    cmd("echo \"1\n2\n3\" > $$opts{tmp}/1.reg"); #create region file
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa --write-index -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fa"); #writes and indexes
+    cmd("$$opts{diff} $$opts{tmp}/faidx.fa.fai $$opts{tmp}/1.fa.fai");
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa -r $$opts{tmp}/1.reg -o $$opts{tmp}/out.fa.gz"); #create output for comparison
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/out.fa.gz");
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa --write-index -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fa.gz");  #write and index 1.fa.gz.fai and 1.fa.gz.gzi
+    cmd("$$opts{diff} $$opts{tmp}/out.fa.gz.fai $$opts{tmp}/1.fa.gz.fai");
+    cmd("$$opts{diff} $$opts{tmp}/out.fa.gz.gzi $$opts{tmp}/1.fa.gz.gzi");
+    cmd("$$opts{bin}/samtools faidx --fai-idx $$opts{tmp}/fa_test.fai --gzi-idx $$opts{tmp}/fa_test.gzi $$opts{tmp}/faidx.fa.gz -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fa");    #write and index 1.fa.fai
+    cmd("$$opts{diff} $$opts{tmp}/faidx.fa.fai $$opts{tmp}/1.fa.fai");
+    cmd("$$opts{bin}/samtools faidx --fai-idx $$opts{tmp}/fa_test.fai --gzi-idx $$opts{tmp}/fa_test.gzi $$opts{tmp}/faidx.fa.gz -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fa.gz"); #write and index 1.fa.gz.fai and 1.fa.gz.gzi
+    cmd("$$opts{diff} $$opts{tmp}/out.fa.gz.fai $$opts{tmp}/1.fa.gz.fai");
+    cmd("$$opts{diff} $$opts{tmp}/out.fa.gz.gzi $$opts{tmp}/1.fa.gz.gzi");
+
     # test continuing after an error
     cmd("$$opts{bin}/samtools faidx --output $$opts{tmp}/output_faidx.fa --continue $$opts{tmp}/faidx.fa 100 EEE FFF");
 
@@ -774,6 +794,22 @@ sub test_fqidx
     cmd("$$opts{diff} $$opts{tmp}/fqidx.fq.fai $$opts{tmp}/fq_test.fai");
     cmd("$$opts{diff} $$opts{tmp}/fqidx.fq.gz.gzi $$opts{tmp}/fq_test.gzi");
 
+    #with write-index
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1 --write-index"); #ignores write-index
+    cmd("echo \"1\n2\n3\" > $$opts{tmp}/1.reg"); #create region file
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq --write-index -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fq"); #writes and indexes
+    cmd("$$opts{diff} $$opts{tmp}/fqidx.fq.fai $$opts{tmp}/1.fq.fai");
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq -r $$opts{tmp}/1.reg -o $$opts{tmp}/out.fq.gz"); #create output for comparison
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/out.fq.gz");
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq --write-index -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fq.gz");  #write and index 1.fq.gz.fai and 1.fq.gz.gzi
+    cmd("$$opts{diff} $$opts{tmp}/out.fq.gz.fai $$opts{tmp}/1.fq.gz.fai");
+    cmd("$$opts{diff} $$opts{tmp}/out.fq.gz.gzi $$opts{tmp}/1.fq.gz.gzi");
+    cmd("$$opts{bin}/samtools fqidx --fai-idx $$opts{tmp}/fq_test.fai --gzi-idx $$opts{tmp}/fq_test.gzi $$opts{tmp}/fqidx.fq.gz -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fq");    #write and index 1.fa.fai
+    cmd("$$opts{diff} $$opts{tmp}/fqidx.fq.fai $$opts{tmp}/1.fq.fai");
+    cmd("$$opts{bin}/samtools fqidx --fai-idx $$opts{tmp}/fq_test.fai --gzi-idx $$opts{tmp}/fq_test.gzi $$opts{tmp}/fqidx.fq.gz -r $$opts{tmp}/1.reg -o $$opts{tmp}/1.fq.gz"); #write and index 1.fa.gz.fai and 1.fa.gz.gzi
+    cmd("$$opts{diff} $$opts{tmp}/out.fq.gz.fai $$opts{tmp}/1.fq.gz.fai");
+    cmd("$$opts{diff} $$opts{tmp}/out.fq.gz.gzi $$opts{tmp}/1.fq.gz.gzi");
+
     # test continuing after an error
     cmd("$$opts{bin}/samtools fqidx --output $$opts{tmp}/output_fqidx.fq --continue $$opts{tmp}/fqidx.fq 100 EEE FFF");
 
@@ -905,7 +941,7 @@ sub test_mpileup
         cmd("$$opts{bin}/samtools index $$opts{tmp}/$file.cram");
         print $fh1 "$$opts{tmp}/$file.bam\n";
         print $fh2 "$$opts{tmp}/$file.cram\n";
-        my $atmp = $^O =~ /^msys/ ? cygpath($$opts{tmp}) : abs_path($$opts{tmp});
+        my $atmp = $^O =~ /^(cygwin|msys)/ ? cygpath($$opts{tmp}) : abs_path($$opts{tmp});
         unless ($atmp =~ /^\//) { $atmp = "/$atmp"; }
         print $fh3 "file://$atmp/$file.bam\n";
         print $fh4 "file://$atmp/$file.cram\n";
@@ -994,7 +1030,7 @@ sub test_usage
         next if ($subcommand =~ /^(help|version)$/);
         # Under msys the isatty function fails to recognise the terminal.
         # Skip these tests for now.
-        next if ($^O =~ /^msys/ && $subcommand =~ /^(dict|sort|stats|view|fasta|fastq|samples|reference|head)$/);
+        next if ($^O =~ /^(cygwin|msys)/ && $subcommand =~ /^(dict|sort|stats|view|fasta|fastq|samples|reference|head)$/);
         test_usage_subcommand($opts,%args,subcmd=>$subcommand);
     }
 }
@@ -1129,6 +1165,8 @@ sub querylen
 #   $args->{strip_tags}     hash of tags to strip from alignments (-x)
 #   $args->{min_qlen}       minimum query length to output (-m)
 #
+# Returns record counts before and after filtering.
+#
 # The region list is a reference to an array of region definitions.  Each
 # region definition is itself a reference to an array with between one and
 # three elements - reference, start position and end position.  The positions
@@ -1191,6 +1229,10 @@ sub filter_sam
 
     open(my $sam_in, '<', $in) || die "Couldn't open $in : $!\n";
     open(my $sam_out, '>', $out) || die "Couldn't open $out for writing : $!\n";
+
+    my $total_records = 0;
+    my $output_records = 0;
+
     while (<$sam_in>) {
         chomp;
         if (/^@/) {
@@ -1213,6 +1255,9 @@ sub filter_sam
             print $sam_out "$_\n" || die "Error writing to $out : $!\n";
         } else {
             next if ($no_body);
+
+            $total_records++;
+
             if ($body_filter) {
                 my @sam = split(/\t/, $_);
                 next if ($flags_required
@@ -1264,11 +1309,14 @@ sub filter_sam
                     if ($stripped) { $_ = join("\t", @sam); }
                 }
             }
+
+            $output_records++;
             print $sam_out "$_\n" || die "Error writing to $out : $!\n";
         }
     }
     close($sam_in) || die "Error reading $in : $!\n";
     close($sam_out) || die "Error writing to $out : $!\n";
+    return ($total_records, $output_records);
 }
 
 # Run a samtools subcommand test.  As well as running samtools, various
@@ -1380,12 +1428,50 @@ sub run_view_test
             $res = text_compare($args{out}, $args{compare_text});
         }
     }
+
+    if (!$res && $args{check_save_counts}) {
+        $res = check_saved_counts(@{$args{check_save_counts}});
+    }
+
     if ($res) {
         print "\tFailed command:\n\t@cmd\n\n";
         failed($opts, %args);
     } else {
         passed($opts, %args);
     }
+}
+
+# Check the contents of a file made by the view --save-counts option
+sub check_saved_counts {
+    my ($counts_file, $total, $accepted) = @_;
+    local $/ = undef;
+    open(my $in, '<', $counts_file) || die "Couldn't open $counts_file $!\n";
+    my $content = <$in>;
+    close($in) || die "Error reading $counts_file $!\n";
+    $content =~ s/\r\n/\n/g;
+
+    my ($file_total, $file_accepted, $file_rejected, $trailing_content) =
+        $content =~ m/\{\n
+\s+"records_processed"\ :\ (\d+),\n
+\s+"records_filter_accepted"\ :\ (\d+),\n
+\s+"records_filter_rejected"\ :\ (\d+)\n
+\}\n(.*)/xs;
+
+    my $ok = (defined($file_total) && $file_total == $total
+              && defined($file_accepted) && $file_accepted == $accepted
+              && defined($file_rejected) && $file_rejected == $total - $accepted
+              && !$trailing_content);
+    if (!$ok) {
+        printf(STDERR "\nSaved counts file content differs.  Got:\n%s\n"
+               . "Expected:\n"
+               . "{\n"
+               . "    \"records_processed\" : %d,\n"
+               . "    \"records_filter_accepted\" : %d,\n"
+               . "    \"records_filter_rejected\" : %d\n"
+               . "}\n", $content, $total, $accepted, $total - $accepted);
+        return 1;
+    }
+    return 0;
 }
 
 # Runs a test of the samtools view -s subsampling option.
@@ -2196,17 +2282,29 @@ sub test_view
 
     foreach my $filter (@filter_tests) {
         my $sam_file = "$$opts{tmp}/view.001.$$filter[0].sam";
-        filter_sam($sam_with_ur, $sam_file, $$filter[1]);
+        my ($total, $accepted) = filter_sam($sam_with_ur, $sam_file,
+                                            $$filter[1]);
 
         foreach my $ip (@filter_inputs) {
 
             # Filter test
+            my $expect_fail = $$filter[3];
+            my $count_output = sprintf("%s.test%03d.counts.json", $out, $test);
+            my $save_counts_args = ($expect_fail
+                                    ? [] : ['--save-counts', $count_output]);
+            my $save_counts_params = ($expect_fail ? {} : {
+                check_save_counts => [$count_output, $total, $accepted ]
+                               });
             run_view_test($opts,
                           msg => "$test: Filter @{$$filter[2]} ($$ip[0] input)",
-                          args => ['-h', @{$$filter[2]}, $$ip[1], '--no-PG'],
+                          args => ['-h', @{$$filter[2]},
+                                   @$save_counts_args,
+                                   $$ip[1], '--no-PG'],
                           out => sprintf("%s.test%03d.sam", $out, $test),
                           compare => $sam_file,
-                          expect_fail => $$filter[3]);
+                          expect_fail => $expect_fail,
+                          %$save_counts_params);
+
             $test++;
 
             # Count test
@@ -2216,7 +2314,7 @@ sub test_view
                           out => sprintf("%s.test%03d.count", $out, $test),
                           redirect => 1,
                           compare_count => $sam_file,
-                          expect_fail => $$filter[3]);
+                          expect_fail => $expect_fail);
             $test++;
         }
     }
@@ -2558,30 +2656,39 @@ sub test_view
 
 
     # retrieve reads from a region including their mates
+    my $count_output;
     my $bam = 'test/dat/view.fetch-pairs.bam';
     cmd("$$opts{bin}/samtools index $bam");
 
     $test++;
+    $count_output = sprintf("%s.fetch-pairs.test%03d.counts.json", $out, $test);
     run_view_test($opts,
             msg => "$test: fetch pairs",
-            args => ['--no-PG','--fetch-pairs',$bam,'6:25515943-25515943','6:25020026-25020026','6:25515822-25515822'],
+            args => ['--no-PG', '--save-counts', $count_output,
+                     '--fetch-pairs',$bam,'6:25515943-25515943','6:25020026-25020026','6:25515822-25515822'],
             out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
-            compare_sam => 'test/dat/view.fetch-pairs.expected.sam');
+            compare_sam => 'test/dat/view.fetch-pairs.expected.sam',
+            check_save_counts => [$count_output, 28, 28]);
 
     $test++;
+    $count_output = sprintf("%s.fetch-pairs.test%03d.counts.json", $out, $test);
     run_view_test($opts,
             msg => "$test: fetch pairs",
-            args => ['--no-PG','--fetch-pairs',$bam,'6:25515857-25515857'],
+            args => ['--no-PG', '--save-counts', $count_output,
+                     '--fetch-pairs',$bam,'6:25515857-25515857'],
             out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
-            compare_sam => 'test/dat/view.fetch-pairs.filter0.expected.sam');
+            compare_sam => 'test/dat/view.fetch-pairs.filter0.expected.sam',
+            check_save_counts => [$count_output, 34, 34]);
 
     $test++;
+    $count_output = sprintf("%s.fetch-pairs.test%03d.counts.json", $out, $test);
     run_view_test($opts,
             msg => "$test: fetch pairs",
-            args => ['--no-PG','--fetch-pairs','--exclude-flags','DUP',$bam,'6:25515857-25515857'],
+            args => ['--no-PG', '--save-counts', $count_output,
+                     '--fetch-pairs','--exclude-flags','DUP',$bam,'6:25515857-25515857'],
             out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
-            compare_sam => 'test/dat/view.fetch-pairs.filter1.expected.sam');
-
+            compare_sam => 'test/dat/view.fetch-pairs.filter1.expected.sam',
+            check_save_counts => [$count_output, 31, 28]);
 }
 
 sub gen_head_output
@@ -3177,7 +3284,7 @@ sub test_stats
 {
     my ($opts,%args) = @_;
 
-    my $efix = ($^O =~ /^(?:msys|MSWin32)$/) ? 1 : 0;
+    my $efix = ($^O =~ /^(?:cygwin|msys|MSWin32)$/) ? 1 : 0;
 
     test_cmd($opts,out=>'stat/1.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/1.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/1_map_cigar_large.sam | tail -n+4", exp_fix=>$efix);
@@ -3580,11 +3687,55 @@ sub test_markdup
 sub test_bedcov
 {
     my ($opts,%args) = @_;
+    my $out;
 
     test_cmd($opts,out=>'bedcov/bedcov.expected',cmd=>"$$opts{bin}/samtools bedcov $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_j.expected',cmd=>"$$opts{bin}/samtools bedcov -j $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_gG.expected',cmd=>"$$opts{bin}/samtools bedcov -g512 -G2048 $$opts{path}/bedcov/bedcov_gG.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_c.expected',cmd=>"$$opts{bin}/samtools bedcov -c $$opts{path}/bedcov/bedcov_gG.bed $$opts{path}/bedcov/bedcov.bam");
+    #with header
+    cmd("echo \"#chrom\tchromStart\tchromEnd\t$$opts{path}/bedcov/bedcov.bam_cov\" > $$opts{tmp}/bedcovH1.expected");
+    cmd ("cat $$opts{path}/bedcov/bedcov.expected >> $$opts{tmp}/bedcovH1.expected");
+    cmd("$$opts{bin}/samtools bedcov -H $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam > $$opts{tmp}/out.H1");
+    $out = cmd("diff $$opts{tmp}/bedcovH1.expected $$opts{tmp}/out.H1");
+    if ( $out ne "" ) {
+        failed($opts,msg=>"coverage with header",reason=>"output does $out not match to expected\n");
+    } else {
+        passed($opts,msg=>"coverage with header success\n");
+    }
+    #with custom header
+    cmd("echo \"#chrom\tchromStart\tchromEnd\tT1\nchr1\t12209228\t12209246\t10\" > $$opts{tmp}/bedcovH2.bed");
+    cmd("echo \"#chrom\tchromStart\tchromEnd\tT1\t$$opts{path}/bedcov/bedcov.bam_cov\nchr1\t12209228\t12209246\t10\t24\" > $$opts{tmp}/bedcovH2.expected");
+    cmd("$$opts{bin}/samtools bedcov -H $$opts{tmp}/bedcovH2.bed $$opts{path}/bedcov/bedcov.bam > $$opts{tmp}/out.H2");
+    $out = cmd("diff $$opts{tmp}/bedcovH2.expected $$opts{tmp}/out.H2");
+    if ( $out ne "" ) {
+        failed($opts,msg=>"coverage with custom header",reason=>"output does not match to expected\n");
+    } else {
+        passed($opts,msg=>"coverage with custom header success\n");
+    }
+    #with empty source header
+    cmd("echo \"#chrom\tchromStart\tchromEnd\t\nchr1\t12209228\t12209246\t10\" > $$opts{tmp}/bedcovH3.bed");
+    cmd("echo \"#chrom\tchromStart\tchromEnd\t\t$$opts{path}/bedcov/bedcov.bam_cov\nchr1\t12209228\t12209246\t10\t24\" > $$opts{tmp}/bedcovH3.expected");
+    cmd("$$opts{bin}/samtools bedcov -H $$opts{tmp}/bedcovH3.bed $$opts{path}/bedcov/bedcov.bam > $$opts{tmp}/out.H3");
+    $out = cmd("diff $$opts{tmp}/bedcovH3.expected $$opts{tmp}/out.H3");
+    if ( $out ne "" ) {
+        failed($opts,msg=>"coverage with src empty header",reason=>"output does not match to expected\n");
+    } else {
+        passed($opts,msg=>"coverage with src empty header success\n");
+    }
+    #empty added header
+    #chrom\tchromStart\tchromEnd\tname\tscore\tstrand\tthickStart\t\
+    #    thickEnd\titemRgb\tblockCount\tblockSizes\tblockStarts
+    cmd("echo \"chr1\t12209228\t12209246\t4\t5\t6\t7\t8\t9\t10\t11\t12\t13\t14\" > $$opts{tmp}/bedcovH4.bed");
+    cmd("echo \"#chrom\tchromStart\tchromEnd\tname\tscore\tstrand\tthickStart\tthickEnd\titemRgb\tblockCount\tblockSizes\tblockStarts\t.\t.\t$$opts{path}/bedcov/bedcov.bam_cov\" > $$opts{tmp}/bedcovH4.expected");
+    cmd("echo \"chr1\t12209228\t12209246\t4\t5\t6\t7\t8\t9\t10\t11\t12\t13\t14\t24\" >> $$opts{tmp}/bedcovH4.expected");
+    cmd("$$opts{bin}/samtools bedcov -H $$opts{tmp}/bedcovH4.bed $$opts{path}/bedcov/bedcov.bam > $$opts{tmp}/out.H4");
+    $out = cmd("diff $$opts{tmp}/bedcovH4.expected $$opts{tmp}/out.H4");
+    if ( $out ne "" ) {
+        failed($opts,msg=>"coverage with empty header",reason=>"output does not match to expected\n");
+    } else {
+        passed($opts,msg=>"coverage with empty header success\n");
+    }
 }
 
 sub test_split
@@ -3779,4 +3930,41 @@ sub test_reset
     test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.flg.1.expected"}, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{bin}/test/reset/seq.sam -o $$opts{bin}/test/reset/output");
     #flag update default
     test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.flg.2.expected"}, cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/reset/seq.sam -o $$opts{bin}/test/reset/output");
+}
+
+sub test_checksum
+{
+    my ($opts, %args) = @_;
+
+    my $chk = exists($args{threads}) ?"checksum -@ $args{threads}" :"checksum";
+
+    # Basic mode, two files with one read-group removed and subtle QC diffs
+    # 1.1 and 2.1 checksums should have the same "all" and ERR013140 and
+    # ERR156632 groups should match, with "-" matching delted ERR016352.
+    # tr -d '\011' is to fix windows nl-cr endings which break the comparison.
+    test_cmd($opts, out=>"checksum/chk1.1.expected", cmd=>"$$opts{bin}/samtools $chk $$opts{path}/checksum/chk1.bam | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+    test_cmd($opts, out=>"checksum/chk2.1.expected", cmd=>"$$opts{bin}/samtools $chk $$opts{path}/checksum/chk2.cram | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+
+    # Whole file comparison.
+    # These checksums differ to above as the order is now included
+    test_cmd($opts, out=>"checksum/chk2.2.expected", cmd=>"$$opts{bin}/samtools $chk -a $$opts{path}/checksum/chk2.cram | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+
+    # QC fail and verbose modes
+    test_cmd($opts, out=>"checksum/chk2.3.expected", cmd=>"$$opts{bin}/samtools $chk -qv $$opts{path}/checksum/chk2.cram | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+    test_cmd($opts, out=>"checksum/chk2.4.expected", cmd=>"$$opts{bin}/samtools $chk -qv -a $$opts{path}/checksum/chk2.cram | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+
+    # Splits and merging.
+    # Basic mode
+    cmd("$$opts{bin}/samtools split -f '$$opts{path}/checksum/chk1-%!.tmp' $$opts{path}/checksum/chk1.bam");
+    foreach my $rg (qw/ERR013140 ERR016352 ERR156632/) {
+        cmd("$$opts{bin}/samtools checksum $$opts{path}/checksum/chk1-$rg.tmp -o $$opts{path}/checksum/chk1-$rg.tmp.chk");
+    }
+    test_cmd($opts, out=>"checksum/chk1.1.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk1-ERR*.tmp.chk | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+
+    # Full alignment mode
+    cmd("$$opts{bin}/samtools split -u $$opts{path}/checksum/chk2-noRG.tmp -f '$$opts{path}/checksum/chk2-%!.tmp' $$opts{path}/checksum/chk2.cram");
+    foreach my $rg (qw/ERR013140 ERR156632 noRG/) {
+        cmd("$$opts{bin}/samtools checksum -a $$opts{path}/checksum/chk2-$rg.tmp -o $$opts{path}/checksum/chk2-$rg.tmp.chk");
+    }
+    test_cmd($opts, out=>"checksum/chk2.2.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk2-*.tmp.chk | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
 }

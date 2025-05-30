@@ -1,7 +1,7 @@
 /*  phase.c -- phase subcommand.
 
     Copyright (C) 2011 Broad Institute.
-    Copyright (C) 2013-2016, 2019 Genome Research Ltd.
+    Copyright (C) 2013-2016, 2019, 2024 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 

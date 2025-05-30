@@ -393,6 +393,10 @@ int bam_sanitize_options(const char *str) {
             opt |= FIX_MQUAL;
         else if (strncmp(str_start, "unmap", 5) == 0)
             opt |= FIX_UNMAP;
+        else if (strncmp(str_start, "cigdup", 6) == 0)
+            opt |= FIX_CIGDUP;
+        else if (strncmp(str_start, "cigarx", 6) == 0)
+            opt |= FIX_CIGARX | FIX_CIGDUP;
         else if (strncmp(str_start, "cigar", 5) == 0)
             opt |= FIX_CIGAR;
         else if (strncmp(str_start, "aux", 3) == 0)
@@ -467,6 +471,53 @@ int bam_sanitize(sam_hdr_t *h, bam1_t *b, int flags) {
                 from = next;
             }
             b->l_data = to - b->data;
+        }
+    }
+
+    if ((flags & FIX_CIGARX) && !(b->core.flag & BAM_FUNMAP)) {
+        // Turn CIGAR = and X into M.  These will then be merged together
+        // by CIGDUP below.  Ie 10=1X9= becomes 20M.
+        int i;
+        uint32_t *cig = bam_get_cigar(b);
+        for (i = 0; i < b->core.n_cigar; i++) {
+            int op = bam_cigar_op(cig[i]);
+            if (op == BAM_CEQUAL || op == BAM_CDIFF)
+                cig[i] = bam_cigar_gen(bam_cigar_oplen(cig[i]), BAM_CMATCH);
+        }
+    }
+
+    if ((flags & FIX_CIGDUP) && !(b->core.flag & BAM_FUNMAP)) {
+        // Canonicalise cigar strings, so xMyM becomes (x+y)M.
+        int nc = b->core.n_cigar, i, j;
+        uint32_t *cigf = bam_get_cigar(b), *cigt = cigf;
+        uint32_t last_op = -1, last_len = 0;
+
+        for (i = j = 0; i < nc; i++) {
+            int op = bam_cigar_op(cigf[i]);
+            int len = bam_cigar_oplen(cigf[i]);
+            if (op == last_op) {
+                if (last_len + len >= (1<<28)) {
+                    cigt[j-1] = bam_cigar_gen((1<<28)-1, op);
+                    len -= (1<<28)-1;
+                    cigt[j++] = bam_cigar_gen(len, op);
+                } else {
+                    cigt[j-1] = bam_cigar_gen(len = last_len + len, op);
+                }
+            } else if (len > 0) {
+                cigt[j++] = cigf[i];
+            }
+            if (len > 0) {
+                last_op  = op;
+                last_len = len;
+            }
+        }
+
+        if (j != nc) {
+            // Collapsed CIGAR so move data down
+            b->core.n_cigar = j;
+            uint8_t *endp = b->data + b->l_data;
+            memmove(cigf + j, cigf + nc, endp - (uint8_t *)(cigf + nc));
+            b->l_data -= 4*(nc-j);
         }
     }
 

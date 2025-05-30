@@ -563,6 +563,8 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
         else
             rf |= SAM_AUX;
     }
+    if (opts->illumina_tag || opts->copy_tags)
+        rf |= SAM_AUX;
     if (hts_set_opt(state->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
         fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
         free(state);
@@ -655,6 +657,15 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
         free(state);
         return false;
     }
+
+    kstring_t str = KS_INITIALIZE;
+    if (sam_hdr_find_tag_hd(state->h, "SO", &str) == 0 &&
+        strcmp(str.s, "coordinate") == 0) {
+        print_error(opts->filetype == FASTA ? "fasta" : "fastq",
+                    "Coordinate sorted file.  "
+                    "Read pairs may be out of order");
+    }
+    ks_free(&str);
 
     *state_out = state;
     return true;

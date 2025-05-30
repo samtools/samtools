@@ -21,8 +21,16 @@ timeout_in: 10m
 # clone with our own commands too.
 clone_template: &HTSLIB_CLONE
   htslib_clone_script: |
-    printenv CIRRUS_CHANGE_TITLE
-    .ci_helpers/clone "https://github.com/${CIRRUS_REPO_OWNER}/htslib" "${HTSDIR}" "${CIRRUS_BRANCH}" `printenv CIRRUS_CHANGE_TITLE | sed -n 's/.*htslib#\([0-9]*\).*/\1/p'`
+    # Tricky, but when run as a PR Cirrus-CI obscures the branch name and
+    # replaces it by pull/<num>.  This means we can't automatically get PRs
+    # to test whether the user has a similarly named branch to compiler and
+    # test against.
+    #
+    # Instead if we add htslib#NUM into the first line of the commit then
+    # we will use that PR from htslib instead.  This is only needed when
+    # making a PR, so for development prior to the PR being made the
+    # CIRRUS_BRANCH will be used in preference.
+    .ci_helpers/clone ${CIRRUS_REPO_OWNER} htslib "${HTSDIR}" "${CIRRUS_BRANCH}" `printenv CIRRUS_CHANGE_TITLE | sed -n 's/.*htslib#\([0-9]*\).*/\1/p'`
 
 htslib_compile_template: &HTSLIB_COMPILE
   << : *HTSLIB_CLONE
@@ -77,7 +85,7 @@ gcc_task:
     DO_MAINTAINER_CHECKS: yes
     # gcc ubsan is incompatible with some -Wformat options, but they're checked
     # in other tests.  See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=87884
-    CFLAGS: -g -Og -std=c99 -D_XOPEN_SOURCE=600 -pedantic -fsanitize=address,undefined -Wno-format-truncation -Wno-format-overflow
+    CFLAGS: -g -Og -std=c99 -D_XOPEN_SOURCE=700 -pedantic -fsanitize=address,undefined -Wno-format-truncation -Wno-format-overflow
     CPPFLAGS: -DHTS_ALLOW_UNALIGNED=0
     LDFLAGS: -fsanitize=address,undefined
     UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1

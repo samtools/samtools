@@ -413,7 +413,8 @@ static void HTS_FORMAT(HTS_PRINTF_FMT, 1, 2) error(const char *format, ...)
 "   -X              include customized index file\n"
 "   -p chr:pos      go directly to this position\n"
 "   -s STR          display only reads from this sample or group\n"
-"   -w INT          display width (with -d T only)\n");
+"   -w INT          display width (with -d T only)\n"
+"   -i              hide inserts\n");
         sam_global_opt_help(stderr, "-.--.--.");
     }
     else
@@ -439,6 +440,7 @@ int bam_tview_main(int argc, char *argv[])
     int view_mode=display_ncurses, display_width = 0;
     tview_t* tv=NULL;
     char *samples=NULL, *position=NULL, *ref, *fn_idx=NULL;
+    int show_inserts = 1;
     int c, has_index_file = 0, ref_index = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -448,7 +450,7 @@ int bam_tview_main(int argc, char *argv[])
     };
 
     char *tmp;
-    while ((c = getopt_long(argc, argv, "s:p:d:Xw:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "s:p:d:Xw:i", lopts, NULL)) >= 0) {
         switch (c) {
             case 'w':
                 display_width = strtol(optarg,&tmp,10);
@@ -457,6 +459,7 @@ int bam_tview_main(int argc, char *argv[])
             case 's': samples=optarg; break;
             case 'p': position=optarg; break;
             case 'X': has_index_file=1; break; // -X flag for index filename
+            case 'i': show_inserts=0; break;
             case 'd':
             {
                 switch(optarg[0])
@@ -514,6 +517,7 @@ int bam_tview_main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    tv->ins = show_inserts;
     if ( position )
     {
         int tid;

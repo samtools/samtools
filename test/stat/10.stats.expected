@@ -1,11 +1,11 @@
 # CHK, Checksum	[2]Read Names	[3]Sequences	[4]Qualities
 # CHK, CRC32 of reads which passed filtering followed by addition (32bit overflow)
-CHK	343826c4	53884d5c	f7568bb4
+CHK	343826c4	53884d5c	e975613c
 # Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.
 SN	raw total sequences:	4	# excluding supplementary and secondary reads
 SN	filtered sequences:	0
 SN	sequences:	4
-SN	is sorted:	0
+SN	is sorted:	0	# not sorted by coordinate
 SN	1st fragments:	2
 SN	last fragments:	2
 SN	reads mapped:	4
@@ -420,7 +420,3 @@ LRL	35	2
 MAPQ	40	4
 # Indel distribution. Use `grep ^ID | cut -f 2-` to extract this part. The columns are: length, number of insertions, number of deletions
 # Indels per cycle. Use `grep ^IC | cut -f 2-` to extract this part. The columns are: cycle, number of insertions (fwd), .. (rev) , number of deletions (fwd), .. (rev)
-# Coverage distribution. Use `grep ^COV | cut -f 2-` to extract this part.
-COV	[1-1]	1	70
-# GC-depth. Use `grep ^GCD | cut -f 2-` to extract this part. The columns are: GC%, unique sequence percentiles, 10th, 25th, 50th, 75th and 90th depth percentile
-GCD	0.0	100.000	0.000	0.000	0.000	0.000	0.000

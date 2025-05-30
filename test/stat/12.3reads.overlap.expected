@@ -1,11 +1,11 @@
 # CHK, Checksum	[2]Read Names	[3]Sequences	[4]Qualities
 # CHK, CRC32 of reads which passed filtering followed by addition (32bit overflow)
-CHK	09f8b87f	140798ec	2b989f07
+CHK	09f8b87f	140798ec	db2d0e25
 # Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.
 SN	raw total sequences:	3	# excluding supplementary and secondary reads
 SN	filtered sequences:	0
 SN	sequences:	3
-SN	is sorted:	1
+SN	is sorted:	1	# sorted by coordinate
 SN	1st fragments:	1
 SN	last fragments:	2
 SN	reads mapped:	3

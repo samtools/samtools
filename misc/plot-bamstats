@@ -26,6 +26,7 @@ use strict;
 use warnings;
 use Carp;
 use POSIX qw/floor ceil/;
+use URI::Escape qw(uri_escape);
 use List::Util qw(max);
 
 my $opts = parse_params();
@@ -714,7 +715,7 @@ sub plot_qualities
     # Average, mean and quality percentiles per cycle, forward and reverse reads in separate plots
     $args = get_defaults($opts,"$$opts{prefix}quals2.png",wh=>$is_paired ? '700,500' : '600,400');
     $fh = $$args{fh};
-    my $pos_size = $is_paired ? " set rmargin 0; set lmargin 0; set tmargin 0; set bmargin 0; set origin 0.1,0.1; set size 0.4,0.8" : '';
+    my $pos_size = " set rmargin 0; set lmargin 0; set tmargin 0; set bmargin 0; set origin 0.1,0.1; set size 0.4,0.8";
     print $fh qq[
             $$args{terminal}
             set output "$$args{img}"
@@ -736,7 +737,7 @@ sub plot_qualities
                 set size 0.4,0.8
                 unset ytics
                 set y2tics mirror
-                set yrange [0:$yrange]
+                set y2range [0:$yrange]
                 unset ylabel
                 set xlabel "Cycle (rev reads)"
                 set label "$$args{title}" at screen 0.5,0.95 center noenhanced
@@ -810,16 +811,36 @@ sub plot_qualities
     $args = get_defaults($opts,"$$opts{prefix}quals-hm.png", wh=>'600,500');
     $fh = $$args{fh};
     my $max = defined $lmax && $lmax > $fmax ? $lmax : $fmax;
-    my @ytics;
-    for my $cycle (@ffq) { if ( $$cycle[0]%10==0 ) { push @ytics,qq["$$cycle[0]" $$cycle[0]]; } }
-    my $ytics = join(',', @ytics);
-    $pos_size = $is_paired ? " set origin 0,0.46\n set size 0.95,0.6" : '';
+    my $ytics = generate_ticks([ map { $_->[0] } @ffq ], $is_paired);
+    my $colorbox = "set colorbox vertical user origin first ($nquals+1),0 size screen 0.025,0.812";
+    $pos_size = $is_paired
+       ? " set origin 0.05,0.5\n set size 0.85,0.5" :
+         " set origin 0.05,0.05\n set size 0.85,1.0\n$colorbox" ;
+    my $set_xtics = $is_paired ? "unset" : "set";
+
     print $fh qq[
             $$args{terminal}
             set output "$$args{img}"
             unset key
             unset colorbox
-            set palette defined (0 0 0 0, 1 0 0 1, 3 0 1 0, 4 1 0 0, 6 1 1 1)
+
+            # Perceptually uniform heatmap "plasma" by Nathaniel J. Smith & Stefan van der Walt
+            # used in Python's matplotlib:  https://github.com/BIDS/colormap/blob/master/colormaps.py
+            # Values from:  https://github.com/Gnuplotting/gnuplot-palettes/blob/master/plasma.pal
+            # Dark end squashed to make low values more distinguishable.
+            set palette model RGB
+            set palette defined ( \\
+                 0 '#000000' \\
+              , .7 '#0c0847' \\
+              ,  4 '#4b0381' \\
+              , 10 '#7d03a8' \\
+              , 20 '#a82296' \\
+              , 30 '#cb4679' \\
+              , 40 '#e56b5d' \\
+              , 50 '#f89441' \\
+              , 60 '#fdc328' \\
+              , 70 '#f0f921' )
+
             set cbrange [0:$max]
             set yrange  [0:$ncycles]
             set xrange  [0:$nquals]
@@ -835,7 +856,7 @@ sub plot_qualities
             set ylabel "Cycle (fwd reads)" offset character -1,0
             unset ytics
             set ytics ($ytics)
-            unset xtics
+            $set_xtics xtics
             set title "$$args{title}" noenhanced
             splot '-' matrix with image
         ];
@@ -847,12 +868,10 @@ sub plot_qualities
     print $fh "\nend\n";
     if ( $is_paired )
     {
-        @ytics = ();
-        for my $cycle (@lfq) { if ( $$cycle[0]%10==0 ) { push @ytics,qq["$$cycle[0]" $$cycle[0]]; } }
-        $ytics = join(',', @ytics);
+        my $ytics = generate_ticks([ map { $_->[0] } @lfq ], $is_paired);
         print $fh qq[
-                set origin 0,0.03
-                set size 0.95,0.6
+                set origin 0.05,0.05
+                set size 0.85,0.5
                 set ylabel "Cycle (rev reads)" offset character -1,0
                 set xlabel "Base Quality"
                 unset title
@@ -860,7 +879,7 @@ sub plot_qualities
                 set ytics ($ytics)
                 set xrange  [0:$nquals]
                 set xtics
-                set colorbox vertical user origin first ($nquals+1),0 size screen 0.025,0.812
+                $colorbox
                 set cblabel "Number of bases"
                 splot '-' matrix with image
             ];
@@ -875,6 +894,28 @@ sub plot_qualities
     plot($$args{gp});
 }
 
+sub generate_ticks {
+    my ($cycles, $skip_even) = @_;
+
+    my @marks;
+    my $div = 10;
+    while (scalar(@$cycles)/$div > 20) {
+       $div *= 2;
+    }
+    $div = nice_num($div);
+    foreach my $v (@$cycles) {
+        if ($v % $div == 0) {
+            if ($skip_even) {
+                my $label = $v % 20 ? $v : '';
+                push @marks, qq{"$label" $v};
+            }
+            else {
+                push @marks, qq{"$v" $v};
+            }
+        }
+    }
+    return join(', ', @marks);
+}
 
 sub plot_acgt_cycles
 {
@@ -1598,15 +1639,17 @@ sub create_html
         {
             # new row
             if ( $i>0 ) { print $fh "</tr>\n"; }
-            print $fh "<tr>";
+            print $fh "<tr>\n";
         }
         if ( -e "$$opts{prefix}$imgs[$i].png" )
         {
             my $desc = $imgs{$imgs[$i]};
-            print $fh qq[<td><a class="thumbnail" href="$prefix$imgs[$i].png"><img src="$prefix$imgs[$i].png" width="150px"><span>$desc<br><img src="$prefix$imgs[$i].png"></span></a>\n];
+            my $link = uri_escape("$prefix$imgs[$i].png");
+            print $fh qq[  <td><a class="thumbnail" href="$link"><img src="$link" width="150px"><span>$desc<br><img src="$link"></span></a>\n];
         }
-        else { print $fh "<td>\n"; }
+        else { print $fh "  <td />\n"; }
     }
+    print $fh "</tr></table>\n";
 
     my $reads_total      = get_value($opts,'SN','raw total sequences:');
     my $reads_filtered   = get_value($opts,'SN','filtered sequences:');
@@ -1634,7 +1677,6 @@ sub create_html
     $bases_mapped   = bignum($bases_mapped);
 
     print $fh qq[
-        </table>
 
         <table class="nums">
             <tr><th>Reads</tr>

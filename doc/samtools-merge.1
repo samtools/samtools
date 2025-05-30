@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-merge 1 "12 September 2024" "samtools-1.21" "Bioinformatics tools"
+.TH samtools-merge 1 "30 May 2025" "samtools-1.22" "Bioinformatics tools"
 .SH NAME
 samtools merge \- merges multiple sorted files into a single file
 .\"
@@ -83,7 +83,8 @@ of existing IDs in the output header will have a suffix appended to them to diff
 records from other files and the read records will be updated to reflect this.
 
 The ordering of the records in the input files must match the usage of the
-\fB-n\fP, \fB-N\fP and \fB-t\fP command-line options.  If they do not,
+\fB-n\fP, \fB-N\fP, \fB-t\fP and \fB--template-coordinate\fP
+command-line options.  If they do not,
 the output order will be undefined.  Note this also extends to
 disallowing mixing of "queryname" files with a combination of natural
 and lexicographical sort orders.  See
@@ -150,6 +151,9 @@ files to be merged.
 .B -t TAG
 The input alignments have been sorted by the value of TAG, then by either
 position or name (if \fB-n\fP is given).
+.TP
+.B --template-coordinate
+Input files are sorted by template-coordinate.
 .TP
 .BI -R \ STR
 Merge files in the specified region indicated by

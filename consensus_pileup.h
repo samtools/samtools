@@ -1,6 +1,6 @@
 /*  consensus_pileup.h -- Pileup orientated data per consensus column
 
-    Copyright (C) 2013-2016, 2020-2022 Genome Research Ltd.
+    Copyright (C) 2013-2016, 2020-2022, 2024 Genome Research Ltd.
 
     Author: James Bonfied <jkb@sanger.ac.uk>
 
@@ -100,3 +100,59 @@ int pileup_loop(samFile *fp,
                                  sam_hdr_t *h,
                                  pileup_t *p),
                 void *client_data);
+
+
+// A class-like set of data and callback functions
+typedef struct {
+    // Caller private data, passed back to the callbacks
+    void *client_data;
+
+    // A new client context
+    void *client_context;
+
+    // Creates a new client context.
+    // Called once per block of threaded data.
+    void (*context_new)(void *client_data,
+                        samFile *fp,
+                        sam_hdr_t *h);
+
+    // Called when a client context goes out of scope.
+    // This is only ever called in chr/pos order.
+    int (*context_free)(void *client_data,
+                        void *client_context);
+
+    // Read a new sequence record
+    int (*seq_fetch)(void *client_data,
+                     void *client_context,
+                     samFile *fp,
+                     sam_hdr_t *h,
+                     bam1_t *b);
+
+    // Called once per sequence, the first time it is used.
+    int (*seq_init)(void *client_data,
+                    void *client_context,
+                    samFile *fp,
+                    sam_hdr_t *h,
+                    pileup_t *p);
+
+    // Called once per consensus pileup
+    int (*seq_column)(void *client_data,
+                      void *client_context,
+                      samFile *fp,
+                      sam_hdr_t *h,
+                      pileup_t *p,
+                      int depth,
+                      hts_pos_t pos,
+                      int nth,
+                      int is_insert);
+
+    // Called once per sequence, once it's no longer needed.
+    void (*seq_free)(void *client_data,
+                     samFile *fp,
+                     sam_hdr_t *h,
+                     pileup_t *p);
+} pileup_context;
+
+//int pileup_loop_parallel(samFile *fp,
+//                         sam_hdr_t *h,
+//                         pileup_context *ctx);

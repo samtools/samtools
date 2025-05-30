@@ -1,6 +1,6 @@
 /*  stats.c -- This is the former bamcheck integrated into samtools/htslib.
 
-    Copyright (C) 2012-2024 Genome Research Ltd.
+    Copyright (C) 2012-2025 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
     Author: Sam Nicholls <sam@samnicholls.net>
@@ -745,7 +745,7 @@ void update_checksum(bam1_t *bam_line, stats_t *stats)
     stats->checksum.reads += crc32(0L, seq, (seq_len+1)/2);
 
     uint8_t *qual = bam_get_qual(bam_line);
-    stats->checksum.quals += crc32(0L, qual, (seq_len+1)/2);
+    stats->checksum.quals += crc32(0L, qual, seq_len);
 }
 
 // Collect statistics about the barcode tags specified by init_barcode_tags method
@@ -1254,7 +1254,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
 
             if ( is_fwd*is_mfwd>0 )
                 stats->isize->inc_other(stats->isize->data, isize);
-            else if ( is_fst*pos_fst>=0 )
+            else if ( is_fst*pos_fst>0 )
             {
                 if ( is_fst*is_fwd>0 )
                     stats->isize->inc_inward(stats->isize->data, isize);
@@ -1267,6 +1267,9 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
                     stats->isize->inc_outward(stats->isize->data, isize);
                 else
                     stats->isize->inc_inward(stats->isize->data, isize);
+            } else {
+                // assume that exactly overlapping reads are inwards
+                stats->isize->inc_inward(stats->isize->data, isize);
             }
         }
     }
@@ -1537,7 +1540,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\traw total sequences:\t%ld\t# excluding supplementary and secondary reads\n", (long)(stats->nreads_filtered+stats->nreads_1st+stats->nreads_2nd+stats->nreads_other));  // not counting excluded seqs (and none of the below)
     fprintf(to, "SN\tfiltered sequences:\t%ld\n", (long)stats->nreads_filtered);
     fprintf(to, "SN\tsequences:\t%ld\n", (long)(stats->nreads_1st+stats->nreads_2nd+stats->nreads_other));
-    fprintf(to, "SN\tis sorted:\t%d\n", stats->is_sorted ? 1 : 0);
+    fprintf(to, "SN\tis sorted:\t%d\t# %s by coordinate\n", stats->is_sorted ? 1 : 0, stats->is_sorted ? "sorted" : "not sorted");
     fprintf(to, "SN\t1st fragments:\t%ld\n", (long)stats->nreads_1st);
     fprintf(to, "SN\tlast fragments:\t%ld\n", (long)stats->nreads_2nd);
     fprintf(to, "SN\treads mapped:\t%ld\n", (long)(stats->nreads_paired_and_mapped+stats->nreads_single_mapped));
@@ -1821,47 +1824,50 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
             fprintf(to, "IC\t%d\t%ld\t%ld\t%ld\t%ld\n", ilen+1, (long)stats->ins_cycles_1st[ilen], (long)stats->ins_cycles_2nd[ilen], (long)stats->del_cycles_1st[ilen], (long)stats->del_cycles_2nd[ilen]);
     }
 
-    fprintf(to, "# Coverage distribution. Use `grep ^COV | cut -f 2-` to extract this part.\n");
-    if  ( stats->cov[0] )
-        fprintf(to, "COV\t[<%d]\t%d\t%ld\n",stats->info->cov_min,stats->info->cov_min-1, (long)stats->cov[0]);
-    for (icov=1; icov<stats->ncov-1; icov++)
-        if ( stats->cov[icov] )
-            fprintf(to, "COV\t[%d-%d]\t%d\t%ld\n",stats->info->cov_min + (icov-1)*stats->info->cov_step, stats->info->cov_min + icov*stats->info->cov_step-1,stats->info->cov_min + icov*stats->info->cov_step-1, (long)stats->cov[icov]);
-    if ( stats->cov[stats->ncov-1] )
-        fprintf(to, "COV\t[%d<]\t%d\t%ld\n",stats->info->cov_min + (stats->ncov-2)*stats->info->cov_step-1,stats->info->cov_min + (stats->ncov-2)*stats->info->cov_step-1, (long)stats->cov[stats->ncov-1]);
+    if (stats->is_sorted) {
+        fprintf(to, "# Coverage distribution. Use `grep ^COV | cut -f 2-` to extract this part.\n");
+        if  ( stats->cov[0] )
+            fprintf(to, "COV\t[<%d]\t%d\t%ld\n",stats->info->cov_min,stats->info->cov_min-1, (long)stats->cov[0]);
+        for (icov=1; icov<stats->ncov-1; icov++)
+            if ( stats->cov[icov] )
+                fprintf(to, "COV\t[%d-%d]\t%d\t%ld\n",stats->info->cov_min + (icov-1)*stats->info->cov_step, stats->info->cov_min + icov*stats->info->cov_step-1,stats->info->cov_min + icov*stats->info->cov_step-1, (long)stats->cov[icov]);
+        if ( stats->cov[stats->ncov-1] )
+            fprintf(to, "COV\t[%d<]\t%d\t%ld\n",stats->info->cov_min + (stats->ncov-2)*stats->info->cov_step-1,stats->info->cov_min + (stats->ncov-2)*stats->info->cov_step-1, (long)stats->cov[stats->ncov-1]);
 
-    // Calculate average GC content, then sort by GC and depth
-    fprintf(to, "# GC-depth. Use `grep ^GCD | cut -f 2-` to extract this part. The columns are: GC%%, unique sequence percentiles, 10th, 25th, 50th, 75th and 90th depth percentile\n");
-    uint32_t igcd;
-    for (igcd=0; igcd<stats->igcd; igcd++)
-    {
-        if ( stats->info->fai )
-            stats->gcd[igcd].gc = rint(100. * stats->gcd[igcd].gc);
-        else
-            if ( stats->gcd[igcd].depth )
-                stats->gcd[igcd].gc = rint(100. * stats->gcd[igcd].gc / stats->gcd[igcd].depth);
-    }
-    if ( stats->ngcd )
-        qsort(stats->gcd, stats->igcd+1, sizeof(gc_depth_t), gcd_cmp);
-    igcd = 0;
-    while ( igcd < stats->igcd )
-    {
-        // Calculate percentiles (10,25,50,75,90th) for the current GC content and print
-        uint32_t nbins=0, itmp=igcd;
-        float gc = stats->gcd[igcd].gc;
-        while ( itmp<stats->igcd && fabs(stats->gcd[itmp].gc-gc)<0.1 )
+
+        // Calculate average GC content, then sort by GC and depth
+        fprintf(to, "# GC-depth. Use `grep ^GCD | cut -f 2-` to extract this part. The columns are: GC%%, unique sequence percentiles, 10th, 25th, 50th, 75th and 90th depth percentile\n");
+        uint32_t igcd;
+        for (igcd=0; igcd<stats->igcd; igcd++)
         {
-            nbins++;
-            itmp++;
+            if ( stats->info->fai )
+                stats->gcd[igcd].gc = rint(100. * stats->gcd[igcd].gc);
+            else
+                if ( stats->gcd[igcd].depth )
+                    stats->gcd[igcd].gc = rint(100. * stats->gcd[igcd].gc / stats->gcd[igcd].depth);
         }
-        fprintf(to, "GCD\t%.1f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\n", gc, (igcd+nbins+1)*100./(stats->igcd+1),
-                gcd_percentile(&(stats->gcd[igcd]),nbins,10) *avg_read_length/stats->info->gcd_bin_size,
-                gcd_percentile(&(stats->gcd[igcd]),nbins,25) *avg_read_length/stats->info->gcd_bin_size,
-                gcd_percentile(&(stats->gcd[igcd]),nbins,50) *avg_read_length/stats->info->gcd_bin_size,
-                gcd_percentile(&(stats->gcd[igcd]),nbins,75) *avg_read_length/stats->info->gcd_bin_size,
-                gcd_percentile(&(stats->gcd[igcd]),nbins,90) *avg_read_length/stats->info->gcd_bin_size
-              );
-        igcd += nbins;
+        if ( stats->ngcd )
+            qsort(stats->gcd, stats->igcd+1, sizeof(gc_depth_t), gcd_cmp);
+        igcd = 0;
+        while ( igcd < stats->igcd )
+        {
+            // Calculate percentiles (10,25,50,75,90th) for the current GC content and print
+            uint32_t nbins=0, itmp=igcd;
+            float gc = stats->gcd[igcd].gc;
+            while ( itmp<stats->igcd && fabs(stats->gcd[itmp].gc-gc)<0.1 )
+            {
+                nbins++;
+                itmp++;
+            }
+            fprintf(to, "GCD\t%.1f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\n", gc, (igcd+nbins+1)*100./(stats->igcd+1),
+                    gcd_percentile(&(stats->gcd[igcd]),nbins,10) *avg_read_length/stats->info->gcd_bin_size,
+                    gcd_percentile(&(stats->gcd[igcd]),nbins,25) *avg_read_length/stats->info->gcd_bin_size,
+                    gcd_percentile(&(stats->gcd[igcd]),nbins,50) *avg_read_length/stats->info->gcd_bin_size,
+                    gcd_percentile(&(stats->gcd[igcd]),nbins,75) *avg_read_length/stats->info->gcd_bin_size,
+                    gcd_percentile(&(stats->gcd[igcd]),nbins,90) *avg_read_length/stats->info->gcd_bin_size
+                  );
+            igcd += nbins;
+        }
     }
 }
 

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-consensus 1 "12 September 2024" "samtools-1.21" "Bioinformatics tools"
+.TH samtools-consensus 1 "30 May 2025" "samtools-1.22" "Bioinformatics tools"
 .SH NAME
 samtools consensus \- produces a consensus FASTA/FASTQ/PILEUP
 .\"
-.\" Copyright (C) 2021-2024 Genome Research Ltd.
+.\" Copyright (C) 2021-2025 Genome Research Ltd.
 .\"
 .\" Author: James Bonfield <jkb@sanger.ac.uk>
 .\"
@@ -85,7 +85,8 @@ gaps (either within an insertion or otherwise) are determined as the
 average of the surrounding non-gap bases.  The columns shown are the
 reference name, position, nth base at that position (zero if not an
 insertion), consensus call, consensus confidence, sequences and
-quality values.
+quality values.  Note even when a reference is supplied, the consensus
+base is always report (if non-zero depth) in the 5th column.
 
 Two consensus calling algorithms are offered.  The default computes a
 heterozygous consensus in a Bayesian manner, derived from the "Gap5"
@@ -219,6 +220,18 @@ this depth check will produce consensus "N", or absent if it is an
 insertion.  Note this check is performed after filtering by flags
 and mapping/base quality.
 
+.TP
+.BI "-T " ref.fa ", --reference " ref.fa
+For base positions with zero coverage, use the supplied reference
+instead of "N".  Note this does not replace minimum depth or minimum
+quality filters as the base is known but considiered low quality so
+the ambiguity is retained.
+
+.TP
+.BI "--ref-qual " INT
+When \fB--reference\fR is given this specifies the quality value to
+use for reference-derived bases.  This defaults to zero.
+
 .TP 0
 The following options apply only to the simple consensus mode:
 
@@ -231,7 +244,7 @@ quality instead.  These sums are also used in the
 and
 .B --het-fract
 parameters too.  Quality values are always used for the "Gap5"
-consensus method and this option has no affect.
+consensus method and this option has no effect.
 Note currently  quality values only affect SNPs and not inserted
 sequences, which still get scores with a fixed +1 per base type occurrence.
 
@@ -261,6 +274,21 @@ fraction of bases agreeing with the most likely consensus call to emit
 that base type.  This defaults to 0.75.  Failing this check will
 output "N".
 
+.TP
+.BI "-@ " NTHREADS
+Specify the number of additional threads to use for computing the
+consensus.  Note if no index is present threads will only be used for
+parallel decompression meaning asking for more than 2 threads is
+unlikely to speed up processing.  With an index the consensus is
+computed for multiple regions simultaneously, offering near linear
+speed ups.
+
+.TP
+.BI "-Z " BASE_COUNT
+When using multiple threads this specifies the number of bases per
+threading job.  The default is 500,000 bp for fasta/fastq output and
+100,000 for pileup output.  Larger blocks may yield improved threading
+performance at a cost of more memory.
 
 .TP 0
 The following options apply only to Bayesian consensus mode enabled
@@ -402,7 +430,7 @@ parameters they are equivalent to.
 .IP -
 Create a modified FASTA reference that has a 1:1 coordinate correspondence with the original reference used in alignment.
 .EX 2
-samtools consensus -a --show-ins no in.bam -o ref.fa
+samtools consensus -a --show-ins no --show-del yes in.bam -o ref.fa
 .EE
 
 .IP -
