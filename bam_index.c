@@ -52,7 +52,7 @@ static void index_usage(FILE *fp)
 "  -m, --min-shift INT  Set minimum interval size for CSI indices to 2^INT [%d]\n"
 "  -M                   Interpret all filename arguments as files to be indexed\n"
 "  -o, --output FILE    Write index to FILE [alternative to <out.index> in args]\n"
-"  -@, --threads INT    Sets the number of threads [none]\n", BAM_LIDX_SHIFT);
+"  -@, --threads INT    Sets the number of additional threads [0]\n", BAM_LIDX_SHIFT);
 }
 
 // Returns 1 if the file does not exist or can be positively
