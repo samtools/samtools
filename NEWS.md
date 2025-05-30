@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.22 (30th May 2025)
+----------------------------
+
 Note this release changes the default output CRAM version from 3.0 to 3.1.
 HTSlib and SAMtools have been able to read CRAM 3.1 since version 1.12,
 however other tools may not yet be able to cope.  We know Noodles reads CRAM
