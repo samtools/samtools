@@ -3422,13 +3422,13 @@ sub test_sort
     test_cmd($opts, out=>"sort/template-coordinate.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} --template-coordinate -m 10M $$opts{path}/sort/template-coordinate.sort.sam -O SAM -o -");
 
     # Minimiser sort, basic
-    test_cmd($opts, out=>"sort/minimiser-basic.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{path}/dat/auto_indexed.tmp.bam | $$opts{bin}/samtools sort${threads} -M -K10 -O SAM -o -");
+    test_cmd($opts, out=>"sort/minimiser-basic.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{path}/dat/auto_indexed.tmp.bam | $$opts{bin}/samtools sort${threads} -m 10M -M -K10 -O SAM -o -");
 
     # Minimiser sort, indexed reference
-    test_cmd($opts, out=>"sort/minimiser-indexed.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{path}/dat/auto_indexed.tmp.bam | $$opts{bin}/samtools sort${threads} -M -K10 -I $$opts{path}/dat/mpileup.ref.fa -O SAM -o -");
+    test_cmd($opts, out=>"sort/minimiser-indexed.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{path}/dat/auto_indexed.tmp.bam | $$opts{bin}/samtools sort${threads} -m 10M -M -K10 -I $$opts{path}/dat/mpileup.ref.fa -O SAM -o -");
 
     # Minimiser sort, indexed reference plus homopolymer squash
-    test_cmd($opts, out=>"sort/minimiser-indexed-poly.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{path}/dat/auto_indexed.tmp.bam | $$opts{bin}/samtools sort${threads} -MH -K10 -I $$opts{path}/dat/mpileup.ref.fa -O SAM -o -");
+    test_cmd($opts, out=>"sort/minimiser-indexed-poly.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{path}/dat/auto_indexed.tmp.bam | $$opts{bin}/samtools sort${threads} -m 10M -MH -K10 -I $$opts{path}/dat/mpileup.ref.fa -O SAM -o -");
 }
 
 sub test_collate
