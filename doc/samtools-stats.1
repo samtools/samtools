@@ -501,11 +501,11 @@ Example usage: samtools stats [options] -X /data_folder/data.bam /index_folder/d
 .BI "-@, --threads " INT
 Number of input/output compression threads to use in addition to main thread [0].
 .TP
-.BI "--ref-stats " INT
-Create statistics on reference data, 0 to disable and 1 to enable [0].
+.B "--ref-stats"
+Create statistics on reference data.
 .TP
 .BI "--ref-stats-chunk " INT
-Number of reference bases to read at a time, in Mbs [1].
+Number of reference bases to read at a time, in Mbs, for reference statistics [1].
 
 .SH AUTHOR
 .PP

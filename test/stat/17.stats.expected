@@ -1,5 +1,5 @@
-RFS	4	4	-1.00	56	100	71.50	286
-RFS	alpha	100	-1.00	-1
-RFS	ref1	56	-1.00	-1
-RFS	ref2	60	-1.00	-1
-RFS	ref3_unused	70	-1.00	-1
+RFS	4	4	0.36	56	100	71.50	286
+RFS	alpha	100	0.45	0
+RFS	ref1	56	0.49	3
+RFS	ref2	60	0.51	3
+RFS	ref3_unused	70	0.00	70

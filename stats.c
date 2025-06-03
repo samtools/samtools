@@ -2169,8 +2169,8 @@ error(const char *format, ...)
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
         printf("    -p, --remove-overlaps               Remove overlaps of paired-end reads from coverage and base count computations.\n");
         printf("    -g, --cov-threshold <int>           Only bases with coverage above this value will be included in the target percentage computation [0]\n");
-        printf("        --ref-stats <int>               Create statistics on reference data, 0 to disable and 1 to enable [0]\n");
-        printf("        --ref-stats-chunk <int>         Reference retrival chunk size, in Mbs [1]\n");
+        printf("        --ref-stats                     Create statistics on reference data.\n");
+        printf("        --ref-stats-chunk <int>         Reference retrival chunk size, in Mbs, for reference statistics [1].\n");
         sam_global_opt_help(stdout, "-.--.@-.");
         printf("\n");
     }
@@ -2706,7 +2706,7 @@ int main_stats(int argc, char *argv[])
         {"split-prefix", required_argument, NULL, 'P'},
         {"remove-overlaps", no_argument, NULL, 'p'},
         {"cov-threshold", required_argument, NULL, 'g'},
-        {"ref-stats", required_argument, NULL, 2},
+        {"ref-stats", no_argument, NULL, 2},
         {"ref-stats-chunk", required_argument, NULL, 3},
         {NULL, 0, NULL, 0}
     };
@@ -2763,8 +2763,8 @@ int main_stats(int argc, char *argv[])
                       if ( info->cov_threshold < 0 || info->cov_threshold == INT_MAX )
                           error("Unsupported value for coverage threshold %d\n", info->cov_threshold);
                       break;
-            case   2: info->ref_stats = atoi(optarg); break;    //ref stats
-            case   3: info->ref_chunksz = atoi(optarg);         //in Mbs
+            case   2: info->ref_stats = 1; break;           //ref stats
+            case   3: info->ref_chunksz = atoi(optarg);     //in Mbs
                 if (info->ref_chunksz <= 0) {
                     info->ref_chunksz = 1;
                 }
