@@ -392,20 +392,17 @@ of GC content.  Subsequent columns list the coverage depth at 10th,
 percentage, revealing any GC bias in mapping.  These columns are
 averaged depths, so are floating point with no maximum value.
 
-RFS reports the statistics of the reference data. The 1st line gives the overall
-statistics of reference data in the report. It gives the total no. of targets in
-the input file, the no. of targets covered in the report, average GC content,
-minimum, maximum, average and total lengths of targets covered in the report.
-The 2nd line onwards gives the statistics about targets covered. Targets covered
-are given by the
-.BR -t
-option and in the absence of it, by the regions specified. When neither of these
-are present, all the targets in input file are considered. It gives the name of
-target, length, GC content and number of unknown bases. For GC content and no. of
-unknown bases, reference file
-.RB ( -r \ option)
-is required and in the absence of it, will have -1 as value. The lengths are from
-the region specification and from file header.
+RFS reports statistics of the reference data.  The first line gives the overall
+statistics for the reference.  This comprises of the total number of targets in
+the input file and the number covered; followed by the average GC content,
+minimum, maximum, average and total lengths of targets in the report.
+The second and subsequent lines contain the statistics for each target.  Targets
+are regions either specified on the command line or given in the target file
+(\fB-t\fR option).  If no regions are chosen then all the reference data is used.
+Each line gives the name of target, length, GC content and number of unknown
+bases.  For the GC content and the number of unknown bases a reference file is
+required (\fB-t\fR option), otherwise the value is set to -1.  The lengths are
+from the region specification and from file header.
 
 .SH OPTIONS
 .TP 8
@@ -501,11 +498,11 @@ Example usage: samtools stats [options] -X /data_folder/data.bam /index_folder/d
 .BI "-@, --threads " INT
 Number of input/output compression threads to use in addition to main thread [0].
 .TP
-.BI "--ref-stats " INT
-Create statistics on reference data, 0 to disable and 1 to enable [0].
+.B "--ref-stats"
+Create statistics on reference data.
 .TP
 .BI "--ref-stats-chunk " INT
-Number of reference bases to read at a time, in Mbs [1].
+Number of reference bases to read at a time, in Mbs, for reference statistics [1].
 
 .SH AUTHOR
 .PP

@@ -58,6 +58,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include <htslib/khash.h>
 #include <htslib/kstring.h>
+#include <htslib/thread_pool.h>
 #include "stats_isize.h"
 #include "sam_opts.h"
 #include "bedidx.h"
@@ -2169,8 +2170,8 @@ error(const char *format, ...)
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
         printf("    -p, --remove-overlaps               Remove overlaps of paired-end reads from coverage and base count computations.\n");
         printf("    -g, --cov-threshold <int>           Only bases with coverage above this value will be included in the target percentage computation [0]\n");
-        printf("        --ref-stats <int>               Create statistics on reference data, 0 to disable and 1 to enable [0]\n");
-        printf("        --ref-stats-chunk <int>         Reference retrival chunk size, in Mbs [1]\n");
+        printf("        --ref-stats                     Create statistics on reference data.\n");
+        printf("        --ref-stats-chunk <int>         Reference retrival chunk size, in Mbs, for reference statistics [1].\n");
         sam_global_opt_help(stdout, "-.--.@-.");
         printf("\n");
     }
@@ -2624,22 +2625,14 @@ void collect_refstats(stats_t *stats)
                     }
                     error("Failed to fetch the sequence \"%s\"\n", sam_hdr_tid2name(stats->info->sam_header, i));
                 }
+                int64_t bc[256] = {0};          //count of bases
                 for (k = 0; k < tmp; ++k) {
-                    switch(buf[k]) {
-                        case 'G': case 'g':
-                        case 'C': case 'c':
-                            ++gc;
-                        break;
-                        case 'A': case 'a':
-                        case 'T': case 't':
-                            ++at;
-                        break;
-                        case 'N': case 'n':
-                            ++cntN;
-                        break;
-                        default: ; //ignore
-                    }
+                    ++bc[(uint8_t)*(buf + k)];
                 }
+                //get count of relevant bases
+                gc += bc['G'] + bc['g'] + bc['C'] + bc['c'];
+                at += bc['A'] + bc['a'] + bc['T'] + bc['t'];
+                cntN += bc['N'] + bc['n'];
                 free(buf);
                 if (tmp < tmpend) {
                     //asked and didnt get whole --> nothing more
@@ -2676,6 +2669,8 @@ int main_stats(int argc, char *argv[])
     char *group_id = NULL;
     int sparse = 0, has_index_file = 0, ret = 1;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    hts_tpool *tpool = NULL;
+    htsThreadPool htspool = {0};
 
     stats_info_t *info = stats_info_init(argc, argv);
     if (!info) {
@@ -2706,7 +2701,7 @@ int main_stats(int argc, char *argv[])
         {"split-prefix", required_argument, NULL, 'P'},
         {"remove-overlaps", no_argument, NULL, 'p'},
         {"cov-threshold", required_argument, NULL, 'g'},
-        {"ref-stats", required_argument, NULL, 2},
+        {"ref-stats", no_argument, NULL, 2},
         {"ref-stats-chunk", required_argument, NULL, 3},
         {NULL, 0, NULL, 0}
     };
@@ -2763,8 +2758,8 @@ int main_stats(int argc, char *argv[])
                       if ( info->cov_threshold < 0 || info->cov_threshold == INT_MAX )
                           error("Unsupported value for coverage threshold %d\n", info->cov_threshold);
                       break;
-            case   2: info->ref_stats = atoi(optarg); break;    //ref stats
-            case   3: info->ref_chunksz = atoi(optarg);         //in Mbs
+            case   2: info->ref_stats = 1; break;           //ref stats
+            case   3: info->ref_chunksz = atoi(optarg);     //in Mbs
                 if (info->ref_chunksz <= 0) {
                     info->ref_chunksz = 1;
                 }
@@ -2800,8 +2795,14 @@ int main_stats(int argc, char *argv[])
         return 1;
     }
 
-    if (ga.nthreads > 0)
-        hts_set_threads(info->sam, ga.nthreads);
+    if (ga.nthreads > 0 && (tpool = hts_tpool_init(ga.nthreads))) {
+        //q size set automatically and threads shared b/w sam and fai file
+        htspool.pool = tpool;
+        hts_set_thread_pool(info->sam, &htspool);
+        if (info->fai) {
+            fai_thread_pool(info->fai, tpool, 0);
+        }
+    }
 
     stats_t *all_stats = stats_init();
     if (!all_stats) {
@@ -2913,6 +2914,9 @@ cleanup_split_hash:
 cleanup_all_stats:
     cleanup_stats(all_stats);
     cleanup_stats_info(info);
+    if (tpool) {
+        hts_tpool_destroy(tpool);
+    }
 
     return ret;
 }
