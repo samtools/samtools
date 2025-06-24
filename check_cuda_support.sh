@@ -1,32 +1,55 @@
 #!/bin/bash
-# CUDA GPU Detection Script for Samtools
-# This script helps users check if their system supports CUDA acceleration
+# =============================================================================
+# CUDA GPU Detection and Capability Assessment Script for Samtools
+# =============================================================================
+#
+# This script provides comprehensive CUDA environment detection and helps users
+# determine if their system is capable of running samtools with GPU acceleration.
+#
+# Features:
+# - Hardware detection (GPU devices, memory, compute capability)  
+# - Software detection (CUDA toolkit, drivers, compilers)
+# - Performance assessment and recommendations
+# - Clear diagnostic output with next steps
+#
+# Author: Akshay Dedaniya <Dedaniya08@hotmail.com>
+# Copyright (C) 2025 - MIT License
 
 echo "==================================================================="
-echo "Samtools CUDA GPU Detection Script"
+echo "Samtools CUDA GPU Detection & Capability Assessment"
 echo "==================================================================="
 echo ""
 
-# Color codes for output
+# =============================================================================
+# Output Formatting and Utility Functions
+# =============================================================================
+
+# Color codes for enhanced readability
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Function to print status
+# Function to print status with consistent formatting
 print_status() {
     local status=$1
     local message=$2
-    if [ "$status" = "OK" ]; then
-        echo -e "${GREEN}[✓]${NC} $message"
-    elif [ "$status" = "WARN" ]; then
-        echo -e "${YELLOW}[!]${NC} $message"
-    elif [ "$status" = "ERROR" ]; then
-        echo -e "${RED}[✗]${NC} $message"
-    else
-        echo -e "${BLUE}[i]${NC} $message"
-    fi
+    case "$status" in
+        "OK")
+            echo -e "${GREEN}[✓]${NC} $message" ;;
+        "WARN")
+            echo -e "${YELLOW}[!]${NC} $message" ;;
+        "ERROR")
+            echo -e "${RED}[✗]${NC} $message" ;;
+        "INFO")
+            echo -e "${BLUE}[i]${NC} $message" ;;
+        "STEP")
+            echo -e "${CYAN}[→]${NC} $message" ;;
+        *)
+            echo -e "${NC}    $message" ;;
+    esac
 }
 
 # Check 1: NVIDIA GPU Hardware Detection

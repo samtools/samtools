@@ -1,7 +1,12 @@
-# Makefile for samtools, utilities for the Sequence Alignment/Map format.
+# =============================================================================
+# Samtools Makefile - Sequence Alignment/Map Format Utilities
+# =============================================================================
 #
-#    Copyright (C) 2008-2022, 2024 Genome Research Ltd.
-#    Portions copyright (C) 2010-2012 Broad Institute.
+# This Makefile builds samtools with optional CUDA GPU acceleration support.
+#
+# Copyright (C) 2008-2025 Genome Research Ltd.
+# Portions copyright (C) 2010-2012 Broad Institute.
+# CUDA GPU acceleration (C) 2025 Akshay Dedaniya <Dedaniya08@hotmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,30 +26,45 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+# =============================================================================
+# Build Configuration Variables
+# =============================================================================
+
+# Standard build tools
 CC       = gcc
 AR       = ar
 AWK      = awk
+
+# Compiler and linker flags
 CPPFLAGS =
 #CFLAGS   = -g -Wall -O2 -pedantic -std=c99 -D_XOPEN_SOURCE=700
 CFLAGS   = -g -Wall -O2
 LDFLAGS  =
 LIBS     =
 
-# CUDA configuration (populated by configure script)
-# These variables are set by configure when --enable-cuda is used
-NVCC            ?= nvcc
-CUDA_CPPFLAGS   ?=
-CUDA_CFLAGS     ?=
-CUDA_LDFLAGS    ?=
-CUDA_LIBS       ?=
-CUDA_ARCH       ?=
-CUDA_OBJS       ?=
-ENABLE_CUDA     ?=
+# =============================================================================
+# CUDA GPU Acceleration Configuration
+# =============================================================================
 
-# Use configure-generated CUDA settings if available
+# CUDA build tools and flags (populated by configure script)
+# These variables are automatically set when --enable-cuda is used with configure
+NVCC            ?= nvcc                # NVIDIA CUDA compiler
+CUDA_CPPFLAGS   ?=                     # CUDA preprocessor flags
+CUDA_CFLAGS     ?=                     # CUDA compiler flags
+CUDA_LDFLAGS    ?=                     # CUDA linker flags
+CUDA_LIBS       ?=                     # CUDA libraries to link
+CUDA_ARCH       ?=                     # GPU architecture target
+CUDA_OBJS       ?=                     # CUDA object files to build
+ENABLE_CUDA     ?=                     # CUDA enable flag
+
+# Import configure-generated settings
 -include config.mk
 
-# Add CUDA flags if enabled
+# =============================================================================
+# Conditional CUDA Build Setup
+# =============================================================================
+
+# Add CUDA flags and libraries if GPU acceleration is enabled
 ifneq ($(CUDA_OBJS),)
     CPPFLAGS += $(CUDA_CPPFLAGS)
     LDFLAGS += $(CUDA_LDFLAGS)

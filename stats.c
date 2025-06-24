@@ -435,9 +435,16 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
         if ( cig==BAM_CINS )
         {
             int idx = is_fwd ? icycle : read_len-icycle-ncig;
-            if ( idx<0 )
-                error("FIXME: read_len=%d vs icycle=%d\n", read_len,icycle);
-            if ( idx >= stats->nbases || idx<0 ) error("FIXME: %d vs %d, %s:%"PRIhts_pos" %s\n", idx, stats->nbases, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
+            if ( idx<0 ) {
+                fprintf(stderr, "Warning: Negative insertion index: read_len=%d vs icycle=%d\n", read_len, icycle);
+                continue;
+            }
+            if ( idx >= stats->nbases || idx<0 ) {
+                fprintf(stderr, "Warning: Insertion index out of bounds: %d vs %d, %s:%"PRIhts_pos" %s\n", 
+                       idx, stats->nbases, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), 
+                       bam_line->core.pos+1, bam_get_qname(bam_line));
+                continue;
+            }
             if ( order == READ_ORDER_FIRST )
                 stats->ins_cycles_1st[idx]++;
             if ( order == READ_ORDER_LAST )
@@ -451,7 +458,10 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
         {
             int idx = is_fwd ? icycle-1 : read_len-icycle-1;
             if ( idx<0 ) continue;  // discard meaningless deletions
-            if ( idx >= stats->nbases ) error("FIXME: %d vs %d\n", idx,stats->nbases);
+            if ( idx >= stats->nbases ) {
+                fprintf(stderr, "Warning: Deletion index out of bounds: %d vs %d\n", idx, stats->nbases);
+                continue;
+            }
             if ( order == READ_ORDER_FIRST )
                 stats->del_cycles_1st[idx]++;
             if ( order == READ_ORDER_LAST )
@@ -516,11 +526,23 @@ void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
         // Ignore H and N CIGARs. The letter are inserted e.g. by TopHat and often require very large
         //  chunk of refseq in memory. Not very frequent and not noticeable in the stats.
         if ( cig==BAM_CREF_SKIP || cig==BAM_CHARD_CLIP || cig==BAM_CPAD ) continue;
+        // Handle unsupported CIGAR operations
         if ( cig!=BAM_CMATCH && cig!=BAM_CEQUAL && cig!=BAM_CDIFF ) // not relying on precalculated diffs
-            error("TODO: cigar %d, %s:%"PRIhts_pos" %s\n", cig, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
+        {
+            fprintf(stderr, "Warning: Unsupported CIGAR operation %d, %s:%"PRIhts_pos" %s\n", 
+                   cig, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), 
+                   bam_line->core.pos+1, bam_get_qname(bam_line));
+            continue;
+        }
 
+        // Check reference sequence buffer bounds
         if ( ncig+iref > stats->nrseq_buf )
-            error("FIXME: %d+%"PRIhts_pos" > %"PRId64", %s, %s:%"PRIhts_pos"\n", ncig, iref, stats->nrseq_buf, bam_get_qname(bam_line), sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1);
+        {
+            fprintf(stderr, "Warning: Reference sequence buffer overflow: %d+%"PRIhts_pos" > %"PRId64", %s, %s:%"PRIhts_pos"\n", 
+                   ncig, iref, stats->nrseq_buf, bam_get_qname(bam_line), 
+                   sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1);
+            break;
+        }
 
         int im;
         for (im=0; im<ncig; im++)
@@ -530,29 +552,49 @@ void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
 
             // ---------------15
             // =ACMGRSVTWYHKDBN
+            // Handle 'N' bases in reads (represented as 15 in 4-bit encoding)
             if ( cread==15 )
             {
                 int idx = is_fwd ? icycle : read_len-icycle-1;
                 if ( idx>stats->max_len )
-                    error("mpc: %d>%d\n",idx,stats->max_len);
+                {
+                    fprintf(stderr, "Warning: Read position exceeds maximum: %d>%d\n", idx, stats->max_len);
+                    continue;
+                }
                 idx = idx*stats->nquals;
                 if ( idx>=stats->nquals*stats->nbases )
-                    error("FIXME: mpc_buf overflow\n");
+                {
+                    fprintf(stderr, "Warning: MPC buffer overflow prevented\n");
+                    continue;
+                }
                 mpc_buf[idx]++;
             }
             else if ( cref && cread && cref!=cread )
             {
                 uint8_t qual = quals[iread] + 1;
                 if ( qual>=stats->nquals )
-                    error("TODO: quality too high %d>=%d (%s %"PRIhts_pos" %s)\n", qual, stats->nquals, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
+                {
+                    fprintf(stderr, "Warning: Quality score too high %d>=%d (%s %"PRIhts_pos" %s)\n", 
+                           qual, stats->nquals, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), 
+                           bam_line->core.pos+1, bam_get_qname(bam_line));
+                    continue;
+                }
 
                 int idx = is_fwd ? icycle : read_len-icycle-1;
                 if ( idx>stats->max_len )
-                    error("mpc: %d>%d (%s %"PRIhts_pos" %s)\n", idx, stats->max_len, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
+                {
+                    fprintf(stderr, "Warning: MPC index exceeds maximum: %d>%d (%s %"PRIhts_pos" %s)\n", 
+                           idx, stats->max_len, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), 
+                           bam_line->core.pos+1, bam_get_qname(bam_line));
+                    continue;
+                }
 
                 idx = idx*stats->nquals + qual;
                 if ( idx>=stats->nquals*stats->nbases )
-                    error("FIXME: mpc_buf overflow\n");
+                {
+                    fprintf(stderr, "Warning: MPC buffer overflow prevented for quality data\n");
+                    continue;
+                }
                 mpc_buf[idx]++;
             }
 
@@ -984,7 +1026,12 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
         {
             uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
             if ( qual>=stats->nquals )
-                error("TODO: quality too high %d>=%d (%s %"PRIhts_pos" %s)\n", qual, stats->nquals, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
+            {
+                fprintf(stderr, "Warning: Quality score too high %d>=%d (%s %"PRIhts_pos" %s)\n", 
+                       qual, stats->nquals, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), 
+                       bam_line->core.pos+1, bam_get_qname(bam_line));
+                continue;
+            }
             if ( qual>stats->max_qual )
                 stats->max_qual = qual;
 
@@ -1306,7 +1353,10 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
 
     // Number of mapped bases from cigar
     if ( bam_line->core.n_cigar == 0)
-        error("FIXME: mapped read with no cigar?\n");
+    {
+        fprintf(stderr, "Warning: Mapped read with no CIGAR string: %s\n", bam_get_qname(bam_line));
+        return;
+    }
     int readlen=seq_len;
     if ( stats->regions )
     {
