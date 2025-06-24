@@ -96,6 +96,12 @@ const char *samtools_feature_string(void) {
 #else
     "curses=no "
 #endif
+
+#ifdef ENABLE_CUDA
+    "cuda=yes "
+#else
+    "cuda=no "
+#endif
     ;
 
     return fmt;
@@ -230,6 +236,18 @@ int main(int argc, char *argv[])
     setmode(fileno(stdout), O_BINARY);
     setmode(fileno(stdin),  O_BINARY);
 #endif
+
+    // Initialize CUDA support if available
+#ifdef ENABLE_CUDA
+    int cuda_initialized = (samtools_cuda_init() == 0);
+    if (cuda_initialized) {
+        // CUDA initialization success message is printed by samtools_cuda_init()
+    } else {
+        // Fall back to CPU-only mode
+        fprintf(stderr, "[main] CUDA acceleration not available, using CPU-only mode.\n");
+    }
+#endif
+
     if (argc < 2) { usage(stderr); return 1; }
 
     if (strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0) {
@@ -312,8 +330,13 @@ int main(int argc, char *argv[])
     // may have already closed stdout.
     if (fclose(stdout) != 0 && errno != EBADF) {
         print_error_errno(argv[1], "closing standard output failed");
-        return 1;
+        ret = 1;
     }
+
+    // Cleanup CUDA resources
+#ifdef ENABLE_CUDA
+    samtools_cuda_cleanup();
+#endif
 
     return ret;
 }

@@ -53,4 +53,25 @@ int bam_sanitize_options(const char *str);
 //        <0 on failure.
 int bam_sanitize(sam_hdr_t *h, bam1_t *b, int flags);
 
+// CUDA GPU acceleration support
+#ifdef ENABLE_CUDA
+#include "cuda/cuda_config.h"
+#include "cuda/cuda_sort.cuh"
+#include "cuda/cuda_pileup.cuh"
+#include "cuda/cuda_stats.cuh"
+
+// Global CUDA context for samtools
+extern cuda_context_t *global_cuda_context;
+
+// Initialize CUDA support (call once at startup)
+int samtools_cuda_init(void);
+
+// Cleanup CUDA support (call once at shutdown)
+void samtools_cuda_cleanup(void);
+
+// Check if CUDA acceleration is available and enabled
+bool samtools_cuda_enabled(void);
+
+#endif // ENABLE_CUDA
+
 #endif

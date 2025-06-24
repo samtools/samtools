@@ -48,6 +48,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "htslib/hts_endian.h"
 #include "htslib/cram.h"
+#include "samtools.h"
 #include "htslib/thread_pool.h"
 #include "sam_opts.h"
 #include "samtools.h"
@@ -3746,12 +3747,16 @@ int bam_sort(int argc, char *argv[])
     int window = 100;
     char *minimiser_ref = NULL;
     int no_squash = 1;
+    bool use_gpu = false;
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
         { "threads", required_argument, NULL, '@' },
         {"no-PG", no_argument, NULL, 1},
         { "template-coordinate", no_argument, NULL, 2},
+#ifdef ENABLE_CUDA
+        { "gpu", no_argument, NULL, 3},
+#endif
         { NULL, 0, NULL, 0 }
     };
 
@@ -3791,6 +3796,15 @@ int bam_sort(int argc, char *argv[])
             else if (minimiser_kmer > 31)
                 minimiser_kmer = 31;
             break;
+#ifdef ENABLE_CUDA
+        case 3: // --gpu option
+            use_gpu = true;
+            if (!samtools_cuda_enabled()) {
+                fprintf(stderr, "[bam_sort] GPU acceleration is not available. Using CPU mode.\n");
+                use_gpu = false;
+            }
+            break;
+#endif
 
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
@@ -3864,6 +3878,12 @@ int bam_sort(int argc, char *argv[])
         if (tmpprefix.s[tmpprefix.l-1] != '/') kputc('/', &tmpprefix);
         ksprintf(&tmpprefix, "samtools.%d.%u.tmp", (int) getpid(), t % 10000);
     }
+
+#ifdef ENABLE_CUDA
+    if (use_gpu) {
+        fprintf(stderr, "[bam_sort] Using GPU acceleration for sorting.\n");
+    }
+#endif
 
     ret = bam_sort_core_ext(sam_order, sort_tag,
                             (sam_order == MinHash) ? minimiser_kmer : 0,

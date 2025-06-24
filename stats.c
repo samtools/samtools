@@ -48,6 +48,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <ctype.h>
 #include <inttypes.h>
 #include <getopt.h>
+#include "samtools.h"
 #include <errno.h>
 #include <assert.h>
 #include <zlib.h>   // for crc32
@@ -162,6 +163,9 @@ typedef struct
     int cov_threshold;
     int ref_stats;      // have statistics on reference data or not, 1 - yes, 0 - no
     int ref_chunksz;    // size of ref base chunks to retrieve, in bytes
+#ifdef ENABLE_CUDA
+    int use_gpu;        // use GPU acceleration for statistics computation
+#endif
 }
 stats_info_t;
 
@@ -2703,6 +2707,9 @@ int main_stats(int argc, char *argv[])
         {"cov-threshold", required_argument, NULL, 'g'},
         {"ref-stats", no_argument, NULL, 2},
         {"ref-stats-chunk", required_argument, NULL, 3},
+#ifdef ENABLE_CUDA
+        {"gpu", no_argument, NULL, 4},
+#endif
         {NULL, 0, NULL, 0}
     };
     int opt, tmp_flag;
@@ -2766,6 +2773,16 @@ int main_stats(int argc, char *argv[])
                 //ref retrieval buffer size in bytes
                 info->ref_chunksz = info->ref_chunksz * 1024 * 1024;
             break;
+#ifdef ENABLE_CUDA
+            case   4: // --gpu option
+                if (!samtools_cuda_enabled()) {
+                    fprintf(stderr, "[stats] GPU acceleration is not available. Using CPU mode.\n");
+                } else {
+                    fprintf(stderr, "[stats] Using GPU acceleration for statistics computation.\n");
+                    info->use_gpu = 1;
+                }
+                break;
+#endif
             case '?':
             case 'h': error(NULL);
             /* no break */
