@@ -1,3 +1,17 @@
+# Fork Notice and Attribution
+
+This repository is a GPU-accelerated fork of [samtools/samtools](https://github.com/samtools/samtools), originally developed by Genome Research Ltd. and contributors. All original code is licensed under the MIT/Expat License. This fork introduces CUDA GPU acceleration and major refactoring for performance and maintainability.
+
+**Key differences from upstream:**
+- CUDA GPU acceleration for sorting, statistics, and pileup
+- Modularized codebase and robust CPU/GPU fallback
+- Enhanced documentation and build/test scripts
+
+**License:**
+This project, including all modifications, remains under the MIT/Expat License. See [LICENSE](LICENSE) for details.
+
+---
+
 # Samtools
 
 [![Build Status](https://api.cirrus-ci.com/github/samtools/samtools.svg?branch=develop)](https://cirrus-ci.com/github/samtools/samtools)
