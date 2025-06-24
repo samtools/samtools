@@ -7,6 +7,9 @@ This repository is a GPU-accelerated fork of [samtools/samtools](https://github.
 - Modularized codebase and robust CPU/GPU fallback
 - Enhanced documentation and build/test scripts
 
+**Author:**
+- Akshay Dedaniya (<dedaniya08@hotmail.com>)
+
 **License:**
 This project, including all modifications, remains under the MIT/Expat License. See [LICENSE](LICENSE) for details.
 
