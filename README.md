@@ -172,7 +172,7 @@ samtools sort --gpu input.bam -o output.bam
 - **Performance not improved:** Large files benefit most; check GPU utilization.
 - **Automatic fallback:** If GPU is unavailable, samtools continues in CPU mode with a warning.
 
-For more, see `README_CUDA.md` and `CUDA_IMPLEMENTATION.md`.
+For more, see `CUDA_IMPLEMENTATION.md`.
 
 ---
 

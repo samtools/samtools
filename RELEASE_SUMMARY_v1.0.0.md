@@ -31,7 +31,7 @@
 - **Detection script**: `./check_cuda_support.sh` for system analysis
 - **Auto-configure**: `./configure` handles all scenarios intelligently
 - **GPU commands**: `samtools sort --gpu`, `samtools stats --gpu`
-- **Documentation**: README_CUDA.md, CUDA_IMPLEMENTATION.md
+- **Documentation**: CUDA_IMPLEMENTATION.md
 
 ### 📁 Files Added/Modified (27 total)
 
@@ -55,8 +55,7 @@
 
 #### User Tools & Documentation
 - `check_cuda_support.sh` - Comprehensive GPU detection
-- `README_CUDA.md` - Complete user guide
-- `CUDA_IMPLEMENTATION.md` - Technical documentation
+- `CUDA_IMPLEMENTATION.md` - Complete user guide
 - `examples/gpu_example.sh` - Usage examples and benchmarks
 
 #### Testing & Validation
