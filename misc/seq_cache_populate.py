@@ -86,7 +86,7 @@ class SpooledFile:
                 raise e
         self._fd, self._filename = tempfile.mkstemp(dir=self._dir)
         self._file = open(self._fd, "wb+")
-        self._file.write(self._mmap[:self._mmap.tell()])
+        self._file.write(memoryview(self._mmap)[:self._mmap.tell()])
         return self._file.write(b)
 
     def save_to(self, filename):
