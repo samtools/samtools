@@ -67,7 +67,7 @@ DEFAULT_NUMBER_OF_SUBDIRS = 2
 MAX_MEMORY_SIZE = 256 * 1024 * 1024
 
 
-class SpooledFile:
+class TemporarySpooledFile:
     """A spooled file that can reuse an existing memory map."""
     def __init__(self, spool: mmap.mmap, dir: str):
         self._file = spool
@@ -88,6 +88,12 @@ class SpooledFile:
         self._file = open(self._fd, "wb+")
         self._file.write(memoryview(self._mmap)[:self._mmap.tell()])
         return self._file.write(b)
+
+    def delete(self):
+        if self._filename:
+            filename = self._filename
+            self.close()
+            os.remove(filename)
 
     def save_to(self, filename):
         if self._filename:
@@ -118,7 +124,7 @@ class SpooledFile:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+        self.delete()
 
 
 def fasta_to_blocks(fasta_file, block_size: int = 128 * 1024):
@@ -165,7 +171,7 @@ def fasta_to_contig_files_and_md5sums(
         fasta_file,
         memory_spool: mmap.mmap,
         contig_dir=tempfile.gettempdir()
-) -> Iterator[Tuple[SpooledFile, str, str]]:
+) -> Iterator[Tuple[TemporarySpooledFile, str, str]]:
     """Create a spooled in memory file for each contig and calculate each md5sum"""
     if contig_dir and not os.path.exists(contig_dir):
         os.makedirs(contig_dir, mode=0o775)
@@ -178,8 +184,7 @@ def fasta_to_contig_files_and_md5sums(
     while not eof:
         block = b""
         hasher = hashlib.md5()
-        tmp = SpooledFile(memory_spool, contig_dir)
-        try:
+        with TemporarySpooledFile(memory_spool, contig_dir) as tmp:
             for block in block_iter:
                 if block.startswith(b">"):
                     # Discard name block and continue with sequence.
@@ -192,8 +197,6 @@ def fasta_to_contig_files_and_md5sums(
             else:  # No break, so no new contig was found
                 eof = True
             yield tmp, hasher.hexdigest(), name
-        finally:
-            tmp.close()
         name = name_block_to_name(block)
 
 
