@@ -216,12 +216,12 @@ typedef struct {
 } mplp_conf_t;
 
 typedef struct {
-    char *ref[2];
-    int ref_id[2];
-    hts_pos_t ref_len[2];
+    char *ref[3];
+    int ref_id[3];
+    hts_pos_t ref_len[3];
 } mplp_ref_t;
 
-#define MPLP_REF_INIT {{NULL,NULL},{-1,-1},{0,0}}
+#define MPLP_REF_INIT {{NULL,NULL,NULL},{-1,-1,-1},{0,0,0}}
 
 typedef struct {
     samFile *fp;
@@ -298,31 +298,38 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid, char **ref, hts_pos_t *ref_len)
 
     // Do we need to reference count this so multiple mplp_aux_t can
     // track which references are in use?
-    // For now we just cache the last two. Sufficient?
-    if (tid == r->ref_id[0]) {
+    // For now we just cache the last three.  This is because we need
+    // current ref and last ref (for -a opt) and mpileup itself may use
+    // current ref and potentially next ref.
+    int x;
+    for (x = 0; x < 3; x++) {
+        if (tid != r->ref_id[x])
+            continue;
+
+        if (x) {
+            // Shuffle element x to element 0 and rotate others up one
+            int tmp_id        = r->ref_id[x];
+            hts_pos_t tmp_len = r->ref_len[x];
+            char *tmp_ref     = r->ref[x];
+
+            // x is 1 (aBc -> Bac) or 2 (abC -> Cab).
+            memmove(&r->ref_id[1],  &r->ref_id[0],  x * sizeof(*r->ref_id));
+            memmove(&r->ref_len[1], &r->ref_len[0], x * sizeof(*r->ref_len));
+            memmove(&r->ref[1],     &r->ref[0],     x * sizeof(*r->ref));
+            r->ref_id[0]  = tmp_id;
+            r->ref_len[0] = tmp_len;
+            r->ref[0]     = tmp_ref;
+        }
         *ref = r->ref[0];
         *ref_len = r->ref_len[0];
         return 1;
     }
-    if (tid == r->ref_id[1]) {
-        // Last, swap over
-        int tmp_id;
-        hts_pos_t tmp_len;
-        tmp_id  = r->ref_id[0];  r->ref_id[0]  = r->ref_id[1];  r->ref_id[1]  = tmp_id;
-        tmp_len = r->ref_len[0]; r->ref_len[0] = r->ref_len[1]; r->ref_len[1] = tmp_len;
 
-        char *tc;
-        tc = r->ref[0]; r->ref[0] = r->ref[1]; r->ref[1] = tc;
-        *ref = r->ref[0];
-        *ref_len = r->ref_len[0];
-        return 1;
-    }
-
-    // New, so migrate to old and load new
-    free(r->ref[1]);
-    r->ref[1]     = r->ref[0];
-    r->ref_id[1]  = r->ref_id[0];
-    r->ref_len[1] = r->ref_len[0];
+    // New, so fill slot zero
+    free(r->ref[2]);
+    memmove(&r->ref_id[1],  &r->ref_id[0],  2 * sizeof(*r->ref_id));
+    memmove(&r->ref_len[1], &r->ref_len[0], 2 * sizeof(*r->ref_len));
+    memmove(&r->ref[1],     &r->ref[0],     2 * sizeof(*r->ref));
 
     r->ref_id[0] = tid;
     r->ref[0] = faidx_fetch_seq64(ma->conf->fai,
@@ -866,6 +873,7 @@ fail:
     free(data); free(plp); free(n_plp);
     free(mp_ref.ref[0]);
     free(mp_ref.ref[1]);
+    free(mp_ref.ref[2]);
     return ret;
 }
 
