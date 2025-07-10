@@ -1,0 +1,30 @@
+@HD	VN:1.17	SO:coordinate
+@SQ	SN:T1	LN:40
+@SQ	SN:T2	LN:40
+@CO	@SQ SN* LN* AH AN AS DS  M5 SP TP UR
+@CO	@RG ID* BC CN DS DT FO KS LB PG PI PL PM PU SM
+@CO	@PG ID* PN CL PP DS VN
+@CO	this is a dummy alignment file to demonstrate different abilities of hts apis
+@CO	QNAME FLAG RNAME POS MAPQ CIGAR RNEXT PNEXT TLEN SEQ QUAL [TAG:TYPE:VALUE]…
+@CO	1234567890123456789012345678901234567890
+@CO	AAAAACTGAAAACCCCTTTTGGGGACTGTTAACAGTTTTT	T1
+@CO	TTTTCCCCACTGAAAACCCCTTTTGGGGACTGTTAACAGT	T2
+@CO	ITR1-ITR2M, ITR2-ITR2M are proper pairs in T1 and T2, UNMP1 is partly mapped and pair is unmapped, UNMP2 & 3 are unmapped
+@CO	A1-A2, A4-A3 are proper pairs with A4-A3 in different read order. A5 is secondary alignment
+@PG	ID:samtools	PN:samtools	VN:1.22-6-g3036eb9	CL:./samtools sort -o /tmp/s.sam ../htslib/samples/sample.sam
+ITR1	99	T1	5	40	4M	=	33	10	ACTG	()()
+UNMP1	73	T1	21	40	3M	*	0	5	GGG	&&1
+A1	99	T1	25	35	6M	=	31	8	ACTGTT	******
+A5	355	T1	25	55	4M	=	33	5	ACTG	PPPP
+B1	99	T1	25	35	6M	=	31	8	GCTATT	******
+B5	355	T1	25	35	4M	=	33	5	AGTG	PPPP
+A2	147	T1	31	33	6M	=	25	-8	ACTGTT	()()()
+ITR1M	147	T1	33	37	4M	=	5	-10	ACTG	$$$$
+A4	99	T2	12	50	3M	=	23	5	GAA	()(
+B4	99	T2	12	50	3M	=	23	5	GAT	()(
+ITR2	147	T2	23	49	2M	=	35	-10	TT	**
+A3	147	T2	23	47	2M1X	=	12	-5	TTG	(((
+B3	147	T2	23	47	2M1X	=	12	-5	TAG	(((
+ITR2M	99	T2	35	51	2M	=	23	10	AA	&&
+UNMP2	141	*	0	0	*	*	0	7	AA	&&
+UNMP3	77	*	0	0	*	*	0	5	GGG	&&2
