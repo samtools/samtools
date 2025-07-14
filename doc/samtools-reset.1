@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-reset 1 "30 May 2025" "samtools-1.22" "Bioinformatics tools"
+.TH samtools-reset 1 "14 July 2025" "samtools-1.22.1" "Bioinformatics tools"
 .SH NAME
 samtools reset \- removes the alignment information added by aligners and updates flags accordingly
 .\"
@@ -114,11 +114,11 @@ By default the PG entry for reset will be present in the output.
 Keep the duplicate flag as it is. This option is absent by default and alignments are marked non-duplicates.
 
 .TP
-.BI -@,--thread\  N
+.BI "-@, --threads " N
 This gives the number of worker threads to be used.
 
 .TP
-.BI -O,--output-fmt\  FMT[,options]
+.BI "-O, --output-fmt " FMT[,options]
 Sets the format of the output file and any associated format-specific options.
 If this option is not present, the format is identified from the output file name extension.
 
