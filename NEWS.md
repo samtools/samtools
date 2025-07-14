@@ -1,6 +1,36 @@
 Release a.b
 -----------
 
+Release 1.22.1 (14th July 2025)
+-------------------------------
+
+Bug fixes:
+
+* SECURITY: Fix use-after-free bug in `samtools mpileup -a` due to reference
+  sequences being discarded too early.  This could happen when the `-a`
+  option was used, and all the alignments for one of the references started
+  at the same position.  This caused mpileup to try to load the next reference
+  before it had finished writing data for the previous one out.
+  (PR #2229, fixes #2227.  Reported by Pouya Kheradpour)
+
+* This release bundles htslib-1.22.1 and htscodecs v1.6.4.  Fixes
+  a possible buffer overflow on some invalid CRAM inputs; and a
+  failure when trying to save data with very long alignment records
+  with sequence '*' as CRAM version 3.1.
+
+  See the HTSlib and htscodecs NEWS files for details.
+
+Documentation:
+
+* Clarify that `-@` starts additional threads in `samtools index` help,
+  and fix formatting issues in the `samtools reset` manual page.
+  (PR #2225)
+
+Build changes:
+
+* Added settings to limit memory used by `samtools sort` when running tests.
+  (PR #2226)
+
 Release 1.22 (30th May 2025)
 ----------------------------
 
