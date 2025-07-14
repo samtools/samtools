@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.22.1 (14th July 2025)
+-------------------------------
+
 Bug fixes:
 
 * SECURITY: Fix use-after-free bug in `samtools mpileup -a` due to reference
