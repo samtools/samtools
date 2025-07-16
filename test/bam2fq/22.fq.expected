@@ -1,0 +1,60 @@
+@entry1/1
+AAAAAAAAAAAAAAAAAAAAAAAAA
++
+abcdefghijklmnopqrstuvwxy
+@entry1/2	s0:Z:3S20M2S:AAAAA:yxwba
+TTTTTTTTTTTTTTTTTTTT
++
+vutsrqponmlkjihgfedc
+@entry2/1	s0:Z:2S21M2S:TTTT:abxy
+AAAAAAAAAAAAAAAAAAAAA
++
+cdefghijklmnopqrstuvw
+@entry2/2	s0:Z:20M5S:AAAAA:edcba
+TTTTTTTTTTTTTTTTTTTT
++
+yxwvutsrqponmlkjihgf
+@entry3/1	s0:Z:20M5S:TTTTT:uvwxy
+AAAAAAAAAAAAAAAAAAAA
++
+abcdefghijklmnopqrst
+@entry4/1	s0:Z:1S10M2S12M:TTT:alm
+AAAAAAAAAAAAAAAAAAAAAA
++
+bcdefghijknopqrstuvwxy
+@entry5/1	s0:Z:1S2S10M12M:TTT:abc
+AAAAAAAAAAAAAAAAAAAAAA
++
+defghijklmnopqrstuvwxy
+@entry10/1	s0:Z:1M2M10S12S:TTTTTTTTTTTTTTTTTTTTTT:defghijklmnopqrstuvwxy
+AAA
++
+abc
+@entry11/1	s0:Z:1M2M10S12S:TTTTTTTTTTTTTTTTTTTTTT:defghijklmnopqrstuvwxy
+AAA
++
+abc
+@entry13/1
+AAAAAAAAAAAAAAAAAAAAAAAAA
++
+abcdefghijklmnopqrstuvwxy
+@entry14/1	s0:Z:2M1S10M12S:TTTTTTTTTTTTT:cnopqrstuvwxy
+AAAAAAAAAAAA
++
+abdefghijklm
+@entry15/1	s0:Z:2M1S11M11S:TTTTTTTTTTTT:copqrstuvwxy
+AAAAAAAAAAAAA
++
+abdefghijklmn
+@entry16/1	s0:Z:2S1M10S12M:TTTTTTTTTTTT:111122222333
+AAAAAAAAAAAAA
++
+1334444455555
+@entry17/1	s0:Z:2S1M11S11M:TTTTTTTTTTTTT:abdefghijklmn
+AAAAAAAAAAAA
++
+copqrstuvwxy
+@entry18/1	s0:Z:2H2S6M2N6M2P6M2D4X1S:TTA:aby
+AAAAAAAAAAAAAAAAAAAAAA
++
+cdefghijklmnopqrstuvwx

@@ -3,7 +3,7 @@
 .SH NAME
 samtools-fasta, samtools-fastq \- converts a SAM/BAM/CRAM file to FASTA or FASTQ
 .\"
-.\" Copyright (C) 2008-2011, 2013-2020, 2023-2024 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2020, 2023-2025 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -61,7 +61,7 @@ Note this command is attempting to reverse the alignment process, so
 if the aligner took a single input FASTQ and produced multiple SAM
 records via supplementary and/or secondary alignments, then converting
 back to FASTQ again should produce the original single FASTA / FASTQ
-record.  By default it will not attempt to records for supplementary
+record.  By default it will not attend to records of supplementary
 and secondary alignments, but see the \fB-F\fR option for more details.
 
 If the input contains read-pairs which are to be interleaved or
@@ -270,6 +270,20 @@ mean 'read until the separator or end of tag', for example:
 .B n*i*
 ignore the left part of the tag until the separator, then use the second part
 .RE
+.TP 8
+.B --no-sc
+Remove data corresponding to soft-clips from cigar, bases and quality values of
+filtered output. The removed data are added as an aux tag, 'Z' type array, with
+tag 's0', when \fB--no-sc-bkp\fR is absent. The array will contain data in the
+order of cigar before the removal, bases removed and quality values removed,
+separated by ':'. With reversed reads, the cigar, bases and quality values are
+reversed; bases are flipped as well.
+.TP 8
+.BI "--sc-aux " TAG
+Tag with which to backup the removed soft-clip data, default is 's0'.
+.TP 8
+.B --no-sc-bkp
+Avoids backup of data removed as part of soft-clip removal, \fB--no-sc\fR option.
 
 .SH EXAMPLES
 Starting from a coordinate sorted file, output paired reads to

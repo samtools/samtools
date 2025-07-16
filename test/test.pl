@@ -3215,6 +3215,15 @@ sub test_bam2fq
     # -D TAG
     test_cmd($opts, out=>'bam2fq/20.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -D NM:test/dat/bam2fq.NM-D $$opts{path}/dat/bam2fq.001.sam");
     test_cmd($opts, out=>'bam2fq/19.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -D MD:test/dat/bam2fq.MD-D $$opts{path}/dat/bam2fq.001.sam");
+
+    #with no-sc w/o aux s0 overwrite and dump
+    test_cmd($opts, out=>'bam2fq/21.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -O --no-sc --no-sc-bkp -T 's0' $$opts{path}/dat/bam2fq.sc.sam");
+    #with no-sc with aux s0 overwrite and dump
+    test_cmd($opts, out=>'bam2fq/22.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -O --no-sc -T's0' $$opts{path}/dat/bam2fq.sc.sam");
+    #with no-sc with s0 overwrite and no dump
+    test_cmd($opts, out=>'bam2fq/23.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -O --no-sc $$opts{path}/dat/bam2fq.sc.sam");
+    #with no-sc with bkp as s1 and dump
+    test_cmd($opts, out=>'bam2fq/24.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -O --no-sc --sc-aux s1 -T's0,s1' $$opts{path}/dat/bam2fq.sc.sam");
 }
 
 
