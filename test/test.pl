@@ -79,6 +79,7 @@ test_ampliconstats($opts, threads=>2);
 test_reset($opts);
 test_checksum($opts);
 test_checksum($opts, threads=>2);
+test_coverage($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -3983,4 +3984,22 @@ sub test_checksum
         cmd("$$opts{bin}/samtools checksum -a $$opts{path}/checksum/chk2-$rg.tmp -o $$opts{path}/checksum/chk2-$rg.tmp.chk");
     }
     test_cmd($opts, out=>"checksum/chk2.2.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk2-*.tmp.chk | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+}
+
+
+sub test_coverage
+{
+    my ($opts, %args) = @_;
+
+    #basic / existing
+    test_cmd($opts, out=>"coverage/1.expected", cmd=>"$$opts{bin}/samtools coverage $$opts{path}/dat/sample.sam");
+    #coverage --min-depth 1
+    test_cmd($opts, out=>"coverage/1.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 1 $$opts{path}/dat/sample.sam");
+    #coverage --min-depth 2
+    test_cmd($opts, out=>"coverage/2.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 2 $$opts{path}/dat/sample.sam");
+    #coverage --min-depth 2 -Q 8 -q 45
+    test_cmd($opts, out=>"coverage/3.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 2 -Q 8 -q 45 $$opts{path}/dat/sample.sam");
+    #coverage --min-depth 2 with 2 files, shows depth per file
+    cmd("cat '$$opts{path}/dat/sample.sam' | sed '/A1/d' > $$opts{tmp}/sample1.sam");
+    test_cmd($opts, out=>"coverage/4.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 2 $$opts{path}/dat/sample.sam $$opts{tmp}/sample1.sam");
 }
