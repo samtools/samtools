@@ -1,3 +1,3 @@
 #rname	startpos	endpos	numreads	covbases	coverage	meandepth	meanbaseq	meanmapq
-T1	1	40	11	19	47.5	1.3	7.46	36.8
-T2	1	40	12	8	20	0.8	7.12	49
+T1	1	40	11	4	10	0.4	5.25	36.8
+T2	1	40	12	6	15	0.7	7.43	49

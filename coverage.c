@@ -615,11 +615,9 @@ int main_coverage(int argc, char *argv[]) {
         }
 
         bool count_base = false;
-        unsigned long long tmpQ = 0;
-        int tmpCnt = 0;
+        unsigned long long summed_baseQ = 0, quality_bases = 0, depth = 0;
         for (i = 0; i < n_bam_files; ++i) { // base level filters have to go here
             int depth_at_pos = n_plp[i];
-            tmpQ = 0; tmpCnt = 0;
             for (j = 0; j < n_plp[i]; ++j) {
                 const bam_pileup1_t *p = plp[i] + j; // DON'T modify plp[][] unless you really know
 
@@ -629,28 +627,28 @@ int main_coverage(int argc, char *argv[]) {
                     if (bam_get_qual(p->b)[p->qpos] < opt_min_baseQ) {
                         --depth_at_pos; // low base quality
                     } else {
-                        tmpQ += bam_get_qual(p->b)[p->qpos];
-                        ++tmpCnt;
+                        summed_baseQ += bam_get_qual(p->b)[p->qpos];
+                        ++quality_bases;
                     }
                 } else {
                     print_value_warning = 1; // no quality at position
                 }
             }
 
-            if (depth_at_pos >= mindepth) {
+            if (depth_at_pos > 0) {
                 count_base = true;
-                stats[tid].summed_baseQ += tmpQ;
-                stats[tid].quality_bases += tmpCnt;
-                stats[tid].summed_coverage += depth_at_pos;
-            } else {
-                continue;   //ignore the position
+                depth += depth_at_pos;
             }
 
             if(current_bin < n_bins && opt_plot_coverage) {
                 hist[current_bin] += depth_at_pos;
             }
         }
-        if (count_base) {
+        if (count_base && depth >= mindepth) {
+            stats[tid].summed_coverage += depth;
+            stats[tid].summed_baseQ += summed_baseQ;
+            stats[tid].quality_bases += quality_bases;
+
             stats[tid].n_covered_bases++;
             if (opt_print_histogram && current_bin < n_bins && !opt_plot_coverage)
                 ++(hist[current_bin]); // Histogram based on breadth of coverage

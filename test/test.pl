@@ -3999,7 +3999,8 @@ sub test_coverage
     test_cmd($opts, out=>"coverage/2.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 2 $$opts{path}/dat/sample.sam");
     #coverage --min-depth 2 -Q 8 -q 45
     test_cmd($opts, out=>"coverage/3.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 2 -Q 8 -q 45 $$opts{path}/dat/sample.sam");
-    #coverage --min-depth 2 with 2 files, shows depth per file
+    #shows coverage is based on all inputs
     cmd("cat '$$opts{path}/dat/sample.sam' | sed '/A1/d' > $$opts{tmp}/sample1.sam");
-    test_cmd($opts, out=>"coverage/4.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 2 $$opts{path}/dat/sample.sam $$opts{tmp}/sample1.sam");
+    test_cmd($opts, out=>"coverage/4.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 1 $$opts{path}/dat/sample.sam $$opts{tmp}/sample1.sam");
+    test_cmd($opts, out=>"coverage/5.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 4 $$opts{path}/dat/sample.sam $$opts{tmp}/sample1.sam");
 }
