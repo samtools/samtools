@@ -1,7 +1,7 @@
 /* coverage.c -- samtools coverage subcommand
 
     Copyright (C) 2018,2019 Florian Breitwieser
-    Portions copyright (C) 2019-2021, 2023-2024 Genome Research Ltd.
+    Portions copyright (C) 2019-2021, 2023-2025 Genome Research Ltd.
 
     Author: Florian P Breitwieser <florian.bw@gmail.com>
 
@@ -119,6 +119,8 @@ static int usage(void) {
             "  -d, --depth INT         maximum allowed coverage depth [1000000].\n"
             "                          If 0, depth is set to the maximum integer value,\n"
             "                          effectively removing any depth limit.\n"
+            "      --min-depth INT     minimum coverage depth below which a position \n"
+            "                          to be ignored [1]\n"
             "Output options:\n"
             "  -m, --histogram         show histogram instead of tabular output\n"
             "  -D, --plot-depth        plot depth instead of tabular output\n"
@@ -317,7 +319,7 @@ int main_coverage(int argc, char *argv[]) {
     int fail_flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP); // Default fail flags
     int required_flags = 0;
     int print_value_warning = 0;
-
+    int mindepth = 1;   //min depth in file, below which pos is ignored
     int *n_plp = NULL;
     sam_hdr_t *h = NULL; // BAM header of the 1st input
 
@@ -351,6 +353,7 @@ int main_coverage(int argc, char *argv[]) {
         {"region", required_argument, NULL, 'r'},
         {"help", no_argument, NULL, 'h'},
         {"depth", required_argument, NULL, 'd'},
+        {"min-depth", required_argument, NULL, 3},
         { NULL, 0, NULL, 0 }
     };
 
@@ -367,6 +370,11 @@ int main_coverage(int argc, char *argv[]) {
                 if ((fail_flags = bam_str2flag(optarg)) < 0) {
                     fprintf(stderr,"Could not parse --ff %s\n", optarg); return EXIT_FAILURE;
                 }; break;
+            case 3: //min-depth
+                if ((i = atoi(optarg)) > 0) {
+                    mindepth = i;
+                }
+                break;
             case 'o': opt_output_file = optarg; opt_full_width = false; break;
             case 'l': opt_min_len = atoi(optarg); break;
             case 'q': opt_min_mapQ = atoi(optarg); break;
@@ -607,6 +615,7 @@ int main_coverage(int argc, char *argv[]) {
         }
 
         bool count_base = false;
+        unsigned long long summed_baseQ = 0, quality_bases = 0, depth = 0;
         for (i = 0; i < n_bam_files; ++i) { // base level filters have to go here
             int depth_at_pos = n_plp[i];
             for (j = 0; j < n_plp[i]; ++j) {
@@ -618,8 +627,8 @@ int main_coverage(int argc, char *argv[]) {
                     if (bam_get_qual(p->b)[p->qpos] < opt_min_baseQ) {
                         --depth_at_pos; // low base quality
                     } else {
-                        stats[tid].summed_baseQ += bam_get_qual(p->b)[p->qpos];
-                        stats[tid].quality_bases++;
+                        summed_baseQ += bam_get_qual(p->b)[p->qpos];
+                        ++quality_bases;
                     }
                 } else {
                     print_value_warning = 1; // no quality at position
@@ -628,14 +637,18 @@ int main_coverage(int argc, char *argv[]) {
 
             if (depth_at_pos > 0) {
                 count_base = true;
-                stats[tid].summed_coverage += depth_at_pos;
+                depth += depth_at_pos;
             }
 
             if(current_bin < n_bins && opt_plot_coverage) {
                 hist[current_bin] += depth_at_pos;
             }
         }
-        if (count_base) {
+        if (count_base && depth >= mindepth) {
+            stats[tid].summed_coverage += depth;
+            stats[tid].summed_baseQ += summed_baseQ;
+            stats[tid].quality_bases += quality_bases;
+
             stats[tid].n_covered_bases++;
             if (opt_print_histogram && current_bin < n_bins && !opt_plot_coverage)
                 ++(hist[current_bin]); // Histogram based on breadth of coverage
