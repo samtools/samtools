@@ -195,7 +195,15 @@ static int read_bam(void *data, bam1_t *b) {
     return ret;
 }
 
-void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, int tid) {
+void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, int tid,
+    bool *header) {
+
+    if (*header) {
+        fputs("#rname\tstartpos\tendpos\tnumreads\tcovbases\tcoverage\tmeandepth\tmeanbaseq\tmeanmapq\n",
+         file_out);
+        *header = false;
+    }
+
     fputs(sam_hdr_tid2name(h, tid), file_out);
     double region_len = (double) stats[tid].end - stats[tid].beg;
     fprintf(file_out, "\t%"PRId64"\t%"PRId64"\t%u\t%llu\t%g\t%g\t%.3g\t%.3g\n",
@@ -524,9 +532,6 @@ int main_coverage(int argc, char *argv[]) {
         }
     }
 
-    if (opt_print_tabular && opt_print_header)
-        fputs("#rname\tstartpos\tendpos\tnumreads\tcovbases\tcoverage\tmeandepth\tmeanbaseq\tmeanmapq\n", file_out);
-
     h = data[0]->hdr; // easy access to the header of the 1st BAM
     int n_targets = sam_hdr_nref(h);
     stats = calloc(n_targets, sizeof(stats_aux_t));
@@ -581,7 +586,7 @@ int main_coverage(int argc, char *argv[]) {
                     print_hist(file_out, h, stats, old_tid, hist, n_bins, opt_full_utf, opt_plot_coverage);
                     fputc('\n', file_out);
                 } else if (opt_print_tabular) {
-                    print_tabular_line(file_out, h, stats, old_tid);
+                    print_tabular_line(file_out, h, stats, old_tid, &opt_print_header);
                 }
 
                 if (opt_print_histogram)
@@ -642,6 +647,11 @@ int main_coverage(int argc, char *argv[]) {
         }
     }
 
+    if (ret < 0) {
+        status = EXIT_FAILURE;
+        goto coverage_end;
+    }
+
     if (tid == -1 && opt_reg && *opt_reg != '*')
         // Region specified but no data covering it.
         tid = data[0]->iter->tid;
@@ -650,7 +660,7 @@ int main_coverage(int argc, char *argv[]) {
         if (opt_print_histogram) {
             print_hist(file_out, h, stats, tid, hist, n_bins, opt_full_utf, opt_plot_coverage);
         } else if (opt_print_tabular) {
-            print_tabular_line(file_out, h, stats, tid);
+            print_tabular_line(file_out, h, stats, tid, &opt_print_header);
         }
     }
 
@@ -659,7 +669,7 @@ int main_coverage(int argc, char *argv[]) {
         for (i = 0; i < n_targets; ++i) {
             if (!stats[i].covered) {
                 stats[i].end = sam_hdr_tid2len(h, i);
-                print_tabular_line(file_out, h, stats, i);
+                print_tabular_line(file_out, h, stats, i, &opt_print_header);
             }
         }
     }
@@ -668,7 +678,6 @@ int main_coverage(int argc, char *argv[]) {
         print_error("coverage", "Warning:  Missing quality values in alignments.  Mean base quality calculated only on available values.");
     }
 
-    if (ret < 0) status = EXIT_FAILURE;
 
 coverage_end:
     if (n_plp) free(n_plp);
