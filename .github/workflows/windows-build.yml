@@ -50,4 +50,69 @@ jobs:
         export PATH="$PATH:/mingw64/bin:/c/Program Files/Git/bin"
         export MSYSTEM=MINGW64
         make check
+              - name: Build EXE
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --name "MEXC Bot" `
+            --hidden-import app `
+            --add-data "app.py;." `
+            --add-data "templates;templates" `
+            --add-data "static;static" `
+            --add-data "locales;locales" `
+            --add-data "config.yaml;." `
+            --add-data ".env.example;." `
+            app_launcher.py
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y
+
+      - name: Build Installer
+        shell: pwsh
+        run: |
+          mkdir installer 2>$null
+          Set-Content -Path installer\mexc_bot.iss -Value @"
+#define MyAppName "MEXC Bot"
+#define MyAppVersion "${{ github.run_number }}"
+#define MyAppPublisher "Dali5599"
+#define MyAppExeName "MEXC Bot.exe"
+[Setup]
+AppId={{A1F4B2F8-3D8A-4C6E-8B3D-FA2F3E8A7A01}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+DefaultDirName={pf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+OutputDir=dist\installer
+OutputBaseFilename=MEXC_Bot_Setup
+Compression=lzma
+SolidCompression=yes
+WizardStyle=modern
+ArchitecturesInstallIn64BitMode=x64
+PrivilegesRequired=admin
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
+Name: "french"; MessagesFile: "compiler:Languages\French.isl"
+[Files]
+Source: "dist\MEXC Bot\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+[Icons]
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+[Tasks]
+Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"; Flags: unchecked
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait postinstall skipifsilent
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}\logs"
+Type: filesandordirs; Name: "{app}\data"
+"@
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\mexc_bot.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: MEXC_Bot_Installer
+          path: dist/installer/MEXC_Bot_Setup.exe
+
 
