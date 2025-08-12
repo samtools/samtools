@@ -361,9 +361,9 @@ typedef struct {
     double lprior15[15] ALIGNED(16);  /* 15 combinations of {ACGT*} */
 
     double pMM[101] ALIGNED(16);
-    double p__[101] ALIGNED(16);
-    double p_M[101] ALIGNED(16);
-    double po_[101] ALIGNED(16);
+    double pxx[101] ALIGNED(16);
+    double pxM[101] ALIGNED(16);
+    double pox[101] ALIGNED(16);
     double poM[101] ALIGNED(16);
     double poo[101] ALIGNED(16);
     double puu[101] ALIGNED(16);
@@ -384,7 +384,7 @@ static cons_probs cons_prob_recall, cons_prob_precise;
  *
  * M = match base
  * m = match pad
- * _ = mismatch
+ * x = mismatch
  * o = overcall
  * u = undercall
  *
@@ -393,11 +393,12 @@ static cons_probs cons_prob_recall, cons_prob_precise;
  * as coming from one of two alleles, giving us a 2D matrix of possibilities
  * (the hypotheses) for each and every call (the observation).
  *
- * So pMM[] is the chance that given a call 'x' that it came from the
- * x/x allele combination.  Similarly p_o[] is the chance that call
- * 'x' came from a mismatch (non-x) / overcall (consensus=*) combination.
+ * So pMM[] is the chance that given a call 'c' that it came from the
+ * c/c allele combination.  Similarly pxo[] is the chance that call
+ * 'c' came from a mismatch (non-c) / overcall (consensus=*) combination.
  *
- * Examples with observation (call) C and * follows
+ * Examples with observation (call) C and * follows.
+ * NB: "_" is mismatch (x) here for ease of visualisation
  *
  *  C | A  C  G  T  *          * | A  C  G  T  *
  *  -----------------          -----------------
@@ -790,11 +791,11 @@ static void consensus_init(double p_het, double p_indel, double het_scale,
         // Or is it that prob is 1-p(subst)-p(overcall)?
         cp->pMM[i] = log(prob);
 
-        //cp->p__[i] = log(1-prob); // Big help to PB-CCS SNPs; unless fudged
-        cp->p__[i] = log((1-prob)/3); // correct? poor on PB-CCS w/o fudge
+        //cp->pxx[i] = log(1-prob); // Big help to PB-CCS SNPs; unless fudged
+        cp->pxx[i] = log((1-prob)/3); // correct? poor on PB-CCS w/o fudge
 
         // Mixed alleles; just average two likelihoods
-        cp->p_M[i] = log((exp(cp->pMM[i]) + exp(cp->p__[i]))/2);
+        cp->pxM[i] = log((exp(cp->pMM[i]) + exp(cp->pxx[i]))/2);
 
         // What does this really mean?  Can we simulate this by priors?
         // It reduces the likelihood of calling het sites, which is
@@ -814,7 +815,7 @@ static void consensus_init(double p_het, double p_indel, double het_scale,
         // Also consider never changing calls, but changing their
         // confidence, so the data is what produces the call with the
         // parameters skewing the quality score distribution.
-        cp->p_M[i] += log(het_scale);
+        cp->pxM[i] += log(het_scale);
 
         if (mode == MODE_BAYES_116) {
             // Compatibility with samtools 1.16
@@ -822,11 +823,11 @@ static void consensus_init(double p_het, double p_indel, double het_scale,
             // This had no differention for indel vs substitution error rates,
             // so o(vercall) and u(undercall) are subst(_).
             cp->pmm[i] = cp->pMM[i];
-            cp->poM[i] = cp->p_M[i];
-            cp->pum[i] = cp->p_M[i];
-            cp->po_[i] = cp->p__[i];
-            cp->poo[i] = cp->p__[i];
-            cp->puu[i] = cp->p__[i];
+            cp->poM[i] = cp->pxM[i];
+            cp->pum[i] = cp->pxM[i];
+            cp->pox[i] = cp->pxx[i];
+            cp->poo[i] = cp->pxx[i];
+            cp->puu[i] = cp->pxx[i];
 
         } else {
             // When observing A C G T; leads to insertion calls
@@ -841,16 +842,16 @@ static void consensus_init(double p_het, double p_indel, double het_scale,
             if (cp->poo[i] > cp->pMM[i]-.5)
                 cp->poo[i] = cp->pMM[i]-.5;
 
-            cp->po_[i] = log((exp(cp->poo[i]) + exp(cp->p__[i]))/2);
+            cp->pox[i] = log((exp(cp->poo[i]) + exp(cp->pxx[i]))/2);
             cp->poM[i] = log((exp(cp->poo[i]) + exp(cp->pMM[i]))/2);
 
             // Overcalls should never be twice as likely than mismatches.
-            // Het bases are mix of _M (other) and MM ops (this).
-            // It's fine for _M to be less likely than oM (more likely
+            // Het bases are mix of xM (other) and MM ops (this).
+            // It's fine for xM to be less likely than oM (more likely
             // to be overcalled than miscalled),  but it should never
             // be stronger when combined with other mixed data.
-            if (cp->poM[i] > cp->p_M[i]+.5)
-                cp->poM[i] = cp->p_M[i]+.5;
+            if (cp->poM[i] > cp->pxM[i]+.5)
+                cp->poM[i] = cp->pxM[i]+.5;
 
             // Note --low-MQ and --scale-MQ have a big impact on
             // undercall errs.  May need to separate these options per
@@ -868,12 +869,12 @@ static void consensus_init(double p_het, double p_indel, double het_scale,
     }
 
     cp->pMM[0] = cp->pMM[1];
-    cp->p__[0] = cp->p__[1];
-    cp->p_M[0] = cp->p_M[1];
+    cp->pxx[0] = cp->pxx[1];
+    cp->pxM[0] = cp->pxM[1];
 
     cp->pmm[0] = cp->pmm[1];
     cp->poo[0] = cp->poo[1];
-    cp->po_[0] = cp->po_[1];
+    cp->pox[0] = cp->pox[1];
     cp->poM[0] = cp->poM[1];
     cp->puu[0] = cp->puu[1];
     cp->pum[0] = cp->pum[1];
@@ -1302,14 +1303,13 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
             continue;
 
         int hb = 0;
-#define _ 0
-        static int X[16] = {_,0,1,_,2,_,_,_,3,_,_,_,_,_,_,_};
-#undef _
+        const int x = 0;
+        static int X[16] = {x,0,1,x,2,x,x,x,3,x,x,x,x,x,x,x};
         uint8_t *seq = bam_get_seq(&p->b);
         int i, base1 = X[p->base4];
         hash1[base1]++;
         for (i = p->seq_offset-K2; i <= p->seq_offset+K2; i++) {
-            int base = i >= 0 && i < p->b.core.l_qseq ? X[bam_seqi(seq,i)] : _;
+            int base = i >= 0 && i < p->b.core.l_qseq ? X[bam_seqi(seq,i)] : x;
             hb = (hb<<2)|base;
         }
         hashN[hb]++;
@@ -1335,14 +1335,14 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
 
 #ifdef K2
         int hb = 0;
-#define _ 0
-        static int X[16] = {_,0,1,_,2,_,_,_,3,_,_,_,_,_,_,_};
+        const int x = 0;
+        static int X[16] = {x,0,1,x,2,x,x,x,3,x,x,x,x,x,x,x};
         int i, base1 = X[p->base4];
+        uint8_t *seq = bam_get_seq(&p->b);
         for (i = p->seq_offset-K2; i <= p->seq_offset+K2; i++) {
-            int base = i >= 0 && i < p->b.core.l_qseq ? X[bam_seqi(seq,i)] : _;
+            int base = i >= 0 && i < p->b.core.l_qseq ? X[bam_seqi(seq,i)] : x;
             hb = (hb<<2)|base;
         }
-#undef _
 #endif
 
         const bam1_t *b = &p->b;
@@ -1369,7 +1369,7 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
         // convert from sam base to acgt*n order.
         base = L[base];
 
-        double MM, __, _M, oo, oM, o_, uu, um, mm, qe;
+        double MM, xx, xM, oo, oM, ox, uu, um, mm, qe;
 
         // Correction for mapping quality.  Maybe speed up via lookups?
         // Cannot nullify mapping quality completely.  Lots of (true)
@@ -1400,9 +1400,9 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
 
             // Equivalent to the above, but avoiding numbers very close to 1
             // This is also marginally faster.
-            double _P = q2p[qual];
-            double _M = mqual_pow_1m[mqual];
-            qual = ph_log(_P+.75*_M-_P*_M);
+            double P = q2p[qual];
+            double M = mqual_pow_1m[mqual];
+            qual = ph_log(P+.75*M-P*M);
 
             //qual = ph_log(1-_p*_m); // testing
             //qual *= 6/sqrt(td);
@@ -1423,20 +1423,20 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
         // May wish to further separate to qual2 and qual3 for ins and del?
         int qual2 = MAX(1, qual-(poly-2)*cp->poly_mul);
 
-        /* MM=match  _M=half-match  __=mismatch */
-        __ = cp->p__[qual];       // neither match
-        MM = cp->pMM[qual] - __;  // both match
-        _M = cp->p_M[qual] - __;  // one allele only (half match)
+        /* MM=match  xM=half-match  xx=mismatch */
+        xx = cp->pxx[qual];       // neither match
+        MM = cp->pMM[qual] - xx;  // both match
+        xM = cp->pxM[qual] - xx;  // one allele only (half match)
 
         /* observation ACGT, but against hypothesis ** or *base */
-        oo = cp->poo[qual2] - __;
-        oM = cp->poM[qual2] - __;
-        o_ = cp->po_[qual2] - __;
+        oo = cp->poo[qual2] - xx;
+        oM = cp->poM[qual2] - xx;
+        ox = cp->pox[qual2] - xx;
 
         /* observation * */
-        uu = cp->puu[qual2] - __;
-        um = cp->pum[qual2] - __;
-        mm = cp->pmm[qual2] - __;
+        uu = cp->puu[qual2] - xx;
+        um = cp->pum[qual2] - xx;
+        mm = cp->pmm[qual2] - xx;
 
         if (flags & CONS_DISCREP) {
             qe = q2p[qual];
@@ -1449,57 +1449,57 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
         counts2[bam_is_rev(b)][base]++;
 #endif
 
-        // oM should never be higher than _M for actual bases!  or...
-        //printf("base %d@%d MM %f _M %f oM %f\n", base, qual, MM, _M, oM);
+        // oM should never be higher than xM for actual bases!  or...
+        //printf("base %d@%d MM %f xM %f oM %f\n", base, qual, MM, xM, oM);
 
         switch (base) {
         case 0: // A
             S[0]  += MM;
-            S[1]  += _M;
-            S[2]  += _M;
-            S[3]  += _M;
+            S[1]  += xM;
+            S[2]  += xM;
+            S[3]  += xM;
             S[4]  += oM;
-            S[8]  += o_;
-            S[11] += o_;
-            S[13] += o_;
+            S[8]  += ox;
+            S[11] += ox;
+            S[13] += ox;
             S[14] += oo;
             break;
 
         case 1: // C
-            S[1]  += _M;
+            S[1]  += xM;
             S[5]  += MM;
-            S[6]  += _M;
-            S[7]  += _M;
+            S[6]  += xM;
+            S[7]  += xM;
             S[8]  += oM;
-            S[4]  += o_;
-            S[11] += o_;
-            S[13] += o_;
+            S[4]  += ox;
+            S[11] += ox;
+            S[13] += ox;
             S[14] += oo;
 
-            //fprintf(stderr, "%d %f %f %f\n", qual, MM+__, oo+__, MM-oo);
+            //fprintf(stderr, "%d %f %f %f\n", qual, MM+xx, oo+xx, MM-oo);
             break;
 
         case 2: // G
-            S[ 2] += _M;
-            S[ 6] += _M;
+            S[ 2] += xM;
+            S[ 6] += xM;
             S[ 9] += MM;
-            S[10] += _M;
+            S[10] += xM;
             S[11] += oM;
-            S[4]  += o_;
-            S[8]  += o_;
-            S[13] += o_;
+            S[4]  += ox;
+            S[8]  += ox;
+            S[13] += ox;
             S[14] += oo;
             break;
 
         case 3: // T
-            S[ 3] += _M; // _m
-            S[ 7] += _M;
-            S[10] += _M;
+            S[ 3] += xM; // xm
+            S[ 7] += xM;
+            S[10] += xM;
             S[12] += MM; // mm
             S[13] += oM;
-            S[4]  += o_;
-            S[8]  += o_;
-            S[11] += o_;
+            S[4]  += ox;
+            S[8]  += ox;
+            S[11] += ox;
             S[14] += oo;
             // S[14] oo
 
