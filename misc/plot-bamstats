@@ -930,11 +930,10 @@ sub plot_acgt_cycles
             $$args{terminal}
             set output "$$args{img}"
             $$args{grid}
-            set style line 1 linecolor rgb "green"
-            set style line 2 linecolor rgb "red"
-            set style line 3 linecolor rgb "black"
-            set style line 4 linecolor rgb "blue"
-            set style increment user
+            set linetype 1 linecolor rgb "green"
+            set linetype 2 linecolor rgb "red"
+            set linetype 3 linecolor rgb "black"
+            set linetype 4 linecolor rgb "blue"
             set ylabel "Base content [%]"
             set xlabel "Read Cycle"
             set yrange [0:100]
@@ -1148,12 +1147,11 @@ sub plot_mismatches_per_cycle
             $$args{terminal}
             set output "$$args{img}"
             $$args{grid}
-            set style line 1 linecolor rgb "#e40000"
-            set style line 2 linecolor rgb "#ff9f00"
-            set style line 3 linecolor rgb "#bbbb00"
-            set style line 4 linecolor rgb "#4ebd68"
-            set style line 5 linecolor rgb "#0061ff"
-            set style increment user
+            set linetype 1 linecolor rgb "#e40000"
+            set linetype 2 linecolor rgb "#ff9f00"
+            set linetype 3 linecolor rgb "#bbbb00"
+            set linetype 4 linecolor rgb "#4ebd68"
+            set linetype 5 linecolor rgb "#0061ff"
             set key left top
             $style
             set ylabel "Number of mismatches"
@@ -1210,10 +1208,9 @@ sub plot_indel_dist
         $$args{terminal}
         set output "$$args{img}"
         $$args{grid}
-        set style line 1 linetype 1  linecolor rgb "red"
-        set style line 2 linetype 2  linecolor rgb "black"
-        set style line 3 linetype 3  linecolor rgb "green"
-        set style increment user
+        set linetype 1 linecolor rgb "red"
+        set linetype 2 linecolor rgb "black"
+        set linetype 3 linecolor rgb "green"
         set ylabel "Indel count [log]"
         set xlabel "Indel length"
         set y2label "Insertions/Deletions ratio"
@@ -1245,11 +1242,10 @@ sub plot_indel_cycles
         $$args{terminal}
         set output "$$args{img}"
         $$args{grid}
-        set style line 1 linetype 1  linecolor rgb "red"
-        set style line 2 linetype 2  linecolor rgb "black"
-        set style line 3 linetype 3  linecolor rgb "green"
-        set style line 4 linetype 4  linecolor rgb "blue"
-        set style increment user
+        set linetype 1 linecolor rgb "red"
+        set linetype 2 linecolor rgb "black"
+        set linetype 3 linecolor rgb "green"
+        set linetype 4 linecolor rgb "blue"
         set ylabel "Indel count"
         set xlabel "Read Cycle"
         set title "$$args{title}" noenhanced
