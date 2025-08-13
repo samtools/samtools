@@ -1377,9 +1377,8 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
         // hamming distance to next best location.)
 
         if (flags & CONS_MQUAL) {
-            int mqual = b->core.qual;
+            double mqual = b->core.qual;
             if (opts->nm_adjust) {
-                //mqual /= (nm_local(p, b, pos)+1);
                 mqual /= (nm_local(p, b, b->core.pos + p->seq_offset+1)+1);
                 mqual *= 1 + 2*(0.5-(td>30?30:td)/60.0); // depth fudge
             }
@@ -1401,7 +1400,7 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
             // Equivalent to the above, but avoiding numbers very close to 1
             // This is also marginally faster.
             double P = q2p[qual];
-            double M = mqual_pow_1m[mqual];
+            double M = mqual_pow_1m[(int)mqual];
             qual = ph_log(P+.75*M-P*M);
 
             //qual = ph_log(1-_p*_m); // testing
