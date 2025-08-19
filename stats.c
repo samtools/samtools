@@ -259,6 +259,7 @@ typedef struct
     // Auxiliary data
     double sum_qual;                // For calculating average quality value
     void *rg_hash;                  // Read groups to include, the array is null-terminated
+    void* samples_hash;             // Samples name in the BAM, the array is null-terminated
 
     // Split
     char* split_name;
@@ -292,7 +293,7 @@ typedef struct {
 KHASH_MAP_INIT_STR(qn2pair, pair_t*)
 
 KHASH_SET_INIT_STR(rg)
-
+KHASH_SET_INIT_STR(samples)
 
 static void HTS_NORETURN error(const char *format, ...);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
@@ -1558,6 +1559,20 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "# CHK, CRC32 of reads which passed filtering followed by addition (32bit overflow)\n");
     fprintf(to, "CHK\t%08x\t%08x\t%08x\n", stats->checksum.names,stats->checksum.reads,stats->checksum.quals);
     fprintf(to, "# Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.\n");
+
+       
+    if (kh_begin((kh_samples_t *)stats->samples_hash) == kh_end((kh_samples_t *)stats->samples_hash)) {
+        fprintf(to, "SN\tsample name:\t.\t# no sample was found in read groups.\n");
+    }
+    else {
+        khint_t k;
+        for (k = kh_begin((kh_samples_t *)stats->samples_hash); k < kh_end((kh_samples_t *)stats->samples_hash); ++k) {
+            if (kh_exist((kh_samples_t *)stats->samples_hash, k)) {
+                fprintf(to, "SN\tsample name:\t%s\n", (char *) kh_key((kh_samples_t *)stats->samples_hash, k));
+            }
+        }
+    }
+
     fprintf(to, "SN\traw total sequences:\t%ld\t# excluding supplementary and secondary reads\n", (long)(stats->nreads_filtered+stats->nreads_1st+stats->nreads_2nd+stats->nreads_other));  // not counting excluded seqs (and none of the below)
     fprintf(to, "SN\tfiltered sequences:\t%ld\n", (long)stats->nreads_filtered);
     fprintf(to, "SN\tsequences:\t%ld\n", (long)(stats->nreads_1st+stats->nreads_2nd+stats->nreads_other));
@@ -2140,6 +2155,43 @@ static void init_group_id(stats_t *stats, stats_info_t *info, const char *id)
     ks_free(&sm);
 }
 
+static void init_samples_names(stats_t *stats, stats_info_t *info)
+{
+    stats->samples_hash = kh_init(samples);
+    if (!stats->samples_hash) error("Could not initialise samples set\n");
+    sam_hdr_t *header = info->sam_header;
+    kstring_t sm = KS_INITIALIZE;
+    const char *key;
+    int i, ret, nrg = sam_hdr_count_lines(header, "RG");
+    if (nrg < 0) error("Could not parse header\n");
+
+    for (i=0; i<nrg; i++) {
+        // test if current read group was selected
+        if ( stats->rg_hash ) {
+            key = sam_hdr_line_name(header, "RG", i);
+            khint_t k = kh_get(rg, stats->rg_hash, key);
+            if ( k == kh_end((kh_rg_t *)stats->rg_hash) ) continue;
+            }
+        ret = sam_hdr_find_tag_pos(header, "RG", i, "SM", &sm);
+        if (ret < 0) continue;
+        char* sn = strdup(ks_c_str(&sm));
+        if (sn == NULL) {
+            error("Out of memory.\n");
+        }
+        kh_put(samples, stats->samples_hash, sn, &ret);
+        //already present ?
+        if (ret == 0 ) {
+            free(sn);
+            continue;
+        }
+        if (ret < 0) {
+            error("Failed to insert key '%s' into sample_set.\n", ks_c_str(&sm));
+            }
+    }
+
+    ks_free(&sm);
+}
+
 
 static void  HTS_FORMAT(HTS_PRINTF_FMT, 1, 2) HTS_NORETURN
 error(const char *format, ...)
@@ -2221,6 +2273,14 @@ void cleanup_stats(stats_t* stats)
     }
     destroy_regions(stats);
     if ( stats->rg_hash ) kh_destroy(rg, stats->rg_hash);
+    if ( stats->samples_hash ) {
+        khint_t k;
+        for (k = kh_begin((kh_samples_t *)stats->samples_hash); k < kh_end((kh_samples_t *)stats->samples_hash); ++k)
+            if (kh_exist((kh_samples_t *)stats->samples_hash, k)) {
+               free((char *) kh_key((kh_samples_t *)stats->samples_hash, k));
+               }
+        kh_destroy(rg, stats->samples_hash);
+        }
     free(stats->split_name);
     free(stats->mapping_qualities);
     free(stats);
@@ -2369,6 +2429,7 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->cov_rbuf.size = stats->nbases*5;
     stats->cov_rbuf.buffer = calloc(sizeof(int32_t),stats->cov_rbuf.size);
     if (!stats->cov_rbuf.buffer) goto nomem;
+    init_samples_names(stats, info);
     if ( group_id ) init_group_id(stats, info, group_id);
     // .. arrays
     stats->quals_1st      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
