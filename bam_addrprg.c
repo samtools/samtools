@@ -1,6 +1,6 @@
 /* bam_addrprg.c -- samtools command to add or replace readgroups.
 
-   Copyright (c) 2013, 2015-2017, 2019-2021 Genome Research Limited.
+   Copyright (c) 2013, 2015-2017, 2019-2021, 2025 Genome Research Limited.
 
    Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
@@ -80,15 +80,28 @@ static void cleanup_opts(parsed_opts_t* opts)
     free(opts);
 }
 
-static void cleanup_state(state_t* state)
+static bool cleanup_state(state_t* state)
 {
-    if (!state) return;
+    if (!state) return false;
     free(state->rg_id);
-    if (state->output_file) sam_close(state->output_file);
+
+    bool clean_exit = true;
+    if (state->output_file) {
+        if (sam_close(state->output_file) != 0) {
+            print_error_errno("addreplacerg", "[cleanup_state] Error closing SAM output file");
+            clean_exit = false;
+        }
+    }
     sam_hdr_destroy(state->output_header);
-    if (state->input_file) sam_close(state->input_file);
+    if (state->input_file) {
+        if (sam_close(state->input_file) != 0) {
+            print_error_errno("addreplacerg", "[cleanup_state] Error closing SAM input file");
+            clean_exit = false;
+        }
+    }
     sam_hdr_destroy(state->input_header);
     free(state);
+    return clean_exit;
 }
 
 // Converts \t and \n into real tabs and newlines
@@ -345,9 +358,10 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
 
     if (opts->uncompressed)
         strcat(output_mode, "0");
-    if (opts->output_name) // File format auto-detection
+    if (opts->output_name) { // File format auto-detection
         sam_open_mode(output_mode + strlen(output_mode),
                       opts->output_name, NULL);
+    }
     retval->output_file = sam_open_format(opts->output_name == NULL?"-":opts->output_name, output_mode, &opts->ga.out);
 
     if (retval->output_file == NULL) {
@@ -423,6 +437,7 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
 
 static bool readgroupise(parsed_opts_t *opts, state_t* state, char *arg_list)
 {
+    // Write PG line to header
     if (!opts->no_pg && sam_hdr_add_pg(state->output_header, "samtools",
                                        "VN", samtools_version(),
                                        arg_list ? "CL": NULL,
@@ -430,10 +445,12 @@ static bool readgroupise(parsed_opts_t *opts, state_t* state, char *arg_list)
                                        NULL))
         return false;
 
+    // Write header to output
     if (sam_hdr_write(state->output_file, state->output_header) != 0) {
         print_error_errno("addreplacerg", "[%s] Could not write header to output file", __func__);
         return false;
     }
+    // Write index if requested
     char *idx_fn = NULL;
     if (opts->ga.write_index) {
         if (!(idx_fn = auto_index(state->output_file, opts->output_name, state->output_header)))
@@ -458,7 +475,6 @@ static bool readgroupise(parsed_opts_t *opts, state_t* state, char *arg_list)
         free(idx_fn);
         return false;
     } else {
-
         if (opts->ga.write_index) {
             if (sam_idx_save(state->output_file) < 0) {
                 print_error_errno("addreplacerg", "[%s] Writing index failed", __func__);
@@ -485,11 +501,12 @@ int main_addreplacerg(int argc, char** argv)
             goto error;
     }
 
-    cleanup_state(state);
+    int final_state = EXIT_SUCCESS;
+    if (!cleanup_state(state)) { final_state = EXIT_FAILURE; }
     cleanup_opts(opts);
     free(arg_list);
 
-    return EXIT_SUCCESS;
+    return final_state;
 error:
     cleanup_state(state);
     cleanup_opts(opts);
