@@ -173,6 +173,8 @@ void sam_global_opt_help(FILE *fp, const char *shortopts) {
             fprintf(fp,"verbosity INT\n"
                     "               Set level of verbosity\n");
     }
+
+    fprintf(fp, "\nSee https://www.htslib.org/doc/samtools.html#GLOBAL_COMMAND_OPTIONS\nfor more details.\n");
 }
 
 void sam_global_args_init(sam_global_args *ga) {
