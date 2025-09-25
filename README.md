@@ -65,6 +65,6 @@ Please cite this paper when using SAMtools for your publications.
 
 ### Support
 
-If you have found a bug or would like a new feature, please report the same in GitHub [SAMtools](https://github.com/samtools/samtools/issues) issue tracker.
+If you have found a bug or would like a new feature, please report the same in the GitHub [SAMtools](https://github.com/samtools/samtools/issues) issue tracker.
 
-For any security related issue, please send a mail to [samtools@sanger.ac.uk](mailto:samtools@sanger.ac.uk) instead of reporting in GitHub issue tracker. 
+For any security related issue, please send a mail to [samtools@sanger.ac.uk](mailto:samtools@sanger.ac.uk) instead of reporting in the GitHub issue tracker. 
