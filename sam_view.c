@@ -1,6 +1,6 @@
 /*  sam_view.c -- SAM<->BAM<->CRAM conversion.
 
-    Copyright (C) 2009-2024 Genome Research Ltd.
+    Copyright (C) 2009-2025 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -57,6 +57,7 @@ typedef struct samview_settings {
     int min_mapQ;
     int rghash_discard; // 0 keep, 1 discard
     int rnhash_discard; // 0 keep, 1 discard
+    int rghash_strict; // 0 default, 1 don't keep RG-less
 
     // Described here in the same terms as the usage statement.
     // The code however always negates to "reject if"         keep if:
@@ -183,6 +184,8 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
             khint_t k = kh_get(str, settings->rghash, (char*)(s + 1));
             if ((k == kh_end(settings->rghash)) != settings->rghash_discard)
                 return 1;
+        } else if (!settings->rghash_discard && settings->rghash_strict) {
+            return 1;
         }
     }
     if (settings->tag) {
@@ -914,8 +917,10 @@ int main_samview(int argc, char *argv[])
         {"qname-file", required_argument, NULL, 'N'},
         {"read-group", required_argument, NULL, 'r'},
         {"read-group-file", required_argument, NULL, 'R'},
+        {"read-group-strict", no_argument, NULL, LONGOPT('R')},
         {"readgroup", required_argument, NULL, 'r'},
         {"readgroup-file", required_argument, NULL, 'R'},
+        {"readgroup-strict", no_argument, NULL, LONGOPT('R')},
         {"region-file", required_argument, NULL, LONGOPT('L')},
         {"regions-file", required_argument, NULL, LONGOPT('L')},
         {"remove-B", no_argument, NULL, 'B'},
@@ -1083,6 +1088,9 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
             settings.count_rf |= SAM_RGAUX;
+            break;
+        case LONGOPT('R'):
+            settings.rghash_strict = 1;
             break;
         case 'N':
             if (add_read_names_file("view", &settings, optarg) != 0) {
@@ -1599,9 +1607,11 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "Filtering options (Only include in output reads that...):\n"
 "  -L, --target[s]-file FILE  ...overlap (BED) regions in FILE\n"
 "  -N, --qname-file [^]FILE   ...whose read name is listed in FILE (\"^\" negates)\n"
-"  -r, --read-group STR       ...are in read group STR\n"
+"  -r, --read-group STR       ...are in read group STR or in no read group\n"
 "  -R, --read-group-file [^]FILE\n"
-"                             ...are in a read group listed in FILE\n"
+"                             ...are in a read group listed in FILE or in none\n"
+"      --read-group-strict    modifies the previous two setting to exclude reads\n"
+"                             without read groups\n"
 "  -d, --tag STR1[:STR2]      ...have a tag STR1 (with associated value STR2)\n"
 "  -D, --tag-file STR:FILE    ...have a tag STR whose value is listed in FILE\n"
 "  -q, --min-MQ INT           ...have mapping quality >= INT\n"
