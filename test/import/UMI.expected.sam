@@ -1,0 +1,6 @@
+@HD	VN:1.6	SO:unsorted	GO:query
+@CO	Reverse with: samtools fastq -n -o paired.fastq -U --UMI-tag RX
+Instrument:RunID:FlowCellID:1:0:1:2	4	*	0	0	*	*	0	0	TAAAAACAAAAAG	X00000000000Y
+Instrument:RunID:FlowCellID:1:1:1:2	4	*	0	0	*	*	0	0	TAAAAACAAAAAG	X00000000000Y	RX:Z:ACGT
+Instrument:RunID:FlowCellID:1:2:1:2	4	*	0	0	*	*	0	0	TAAAAACAAAAAG	X00000000000Y	RX:Z:ACGT-TA
+Instrument:RunID:FlowCellID:1:0:1:2:	4	*	0	0	*	*	0	0	TAAAAACAAAAAG	X00000000000Y
