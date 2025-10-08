@@ -3,7 +3,7 @@
 .SH NAME
 samtools view \- views and converts SAM/BAM/CRAM files
 .\"
-.\" Copyright (C) 2008-2011, 2013-2022, 2024 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2022, 2024-25 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -89,6 +89,7 @@ The
 .BR -N ,
 .BR -r ,
 .BR -R ,
+.BR -n ,
 .BR -d ,
 .BR -D ,
 .BR -s ,
@@ -331,6 +332,9 @@ Note that records with no
 .B RG
 tag will also be output when using this option.
 This behaviour may change in a future release.
+.TP
+.BR -n ", " --exclude-no-read-group
+Do not output alignments that have no read group.
 .TP
 .BI "-d " STR1[:STR2] ", --tag " STR1[:STR2]
 Only output alignments with tag
