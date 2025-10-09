@@ -1,6 +1,6 @@
 /*  sam_view.c -- SAM<->BAM<->CRAM conversion.
 
-    Copyright (C) 2009-2024 Genome Research Ltd.
+    Copyright (C) 2009-2025 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -94,6 +94,7 @@ typedef struct samview_settings {
     hts_reglist_t *reglist;
     int sanitize;
     int count_rf; // CRAM_OPT_REQUIRED_FIELDS for view -c
+    int exclude_no_rg;
 } samview_settings_t;
 
 // Copied from htslib/sam.c.
@@ -177,12 +178,16 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         uint32_t k = __ac_Wang_hash(__ac_X31_hash_string(bam_get_qname(b)) ^ settings->subsam_seed);
         if ((double)(k&0xffffff) / 0x1000000 >= settings->subsam_frac) return 1;
     }
-    if (settings->rghash) {
+    if (settings->rghash || settings->exclude_no_rg) {
         uint8_t *s = bam_aux_get(b, "RG");
         if (s) {
-            khint_t k = kh_get(str, settings->rghash, (char*)(s + 1));
-            if ((k == kh_end(settings->rghash)) != settings->rghash_discard)
-                return 1;
+            if (settings->rghash) {
+                khint_t k = kh_get(str, settings->rghash, (char*)(s + 1));
+                if ((k == kh_end(settings->rghash)) != settings->rghash_discard)
+                    return 1;
+            }
+        } else if (settings->exclude_no_rg) {
+            return 1;
         }
     }
     if (settings->tag) {
@@ -890,6 +895,10 @@ int main_samview(int argc, char *argv[])
         {"customized-index", no_argument, NULL, 'X'},
         {"excl-flags", required_argument, NULL, 'F'},
         {"exclude-flags", required_argument, NULL, 'F'},
+        {"excl-no-read-group", no_argument, NULL, 'n'},
+        {"excl-no-readgroup", no_argument, NULL, 'n'},
+        {"exclude-no-read-group", no_argument, NULL, 'n'},
+        {"exclude-no-readgroup", no_argument, NULL, 'n'},
         {"expr", required_argument, NULL, 'e'},
         {"expression", required_argument, NULL, 'e'},
         {"fai-reference", required_argument, NULL, 't'},
@@ -954,7 +963,7 @@ int main_samview(int argc, char *argv[])
     int tmp_flag;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:pPz:",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:pPz:n",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -1084,6 +1093,7 @@ int main_samview(int argc, char *argv[])
             }
             settings.count_rf |= SAM_RGAUX;
             break;
+        case 'n': settings.exclude_no_rg = 1; break;
         case 'N':
             if (add_read_names_file("view", &settings, optarg) != 0) {
                 ret = 1;
@@ -1599,9 +1609,11 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "Filtering options (Only include in output reads that...):\n"
 "  -L, --target[s]-file FILE  ...overlap (BED) regions in FILE\n"
 "  -N, --qname-file [^]FILE   ...whose read name is listed in FILE (\"^\" negates)\n"
-"  -r, --read-group STR       ...are in read group STR\n"
+"  -r, --read-group STR       ...are in read group STR or in no read group\n"
 "  -R, --read-group-file [^]FILE\n"
-"                             ...are in a read group listed in FILE\n"
+"                             ...are in a read group listed in FILE or in none\n"
+"  -n, --exclude-no-read_group\n"
+"                             ...have a read group, exclude those that have not\n"
 "  -d, --tag STR1[:STR2]      ...have a tag STR1 (with associated value STR2)\n"
 "  -D, --tag-file STR:FILE    ...have a tag STR whose value is listed in FILE\n"
 "  -q, --min-MQ INT           ...have mapping quality >= INT\n"
