@@ -1318,5 +1318,7 @@ int main_checksum(int argc, char **argv) {
     if (ret)
         fprintf(stderr, "[checksum] Failed to process data\n");
 
+    sam_global_args_free(&ga);
+
     return ret;
 }
