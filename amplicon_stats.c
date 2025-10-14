@@ -1770,6 +1770,7 @@ int main_ampliconstats(int argc, char **argv) {
 
     free(args.argv);
     destroy_bed_hash(bed_hash);
+    sam_global_args_free(&args.ga);
 
     return ret;
 }

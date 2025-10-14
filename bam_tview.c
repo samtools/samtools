@@ -550,5 +550,7 @@ int bam_tview_main(int argc, char *argv[])
     tv->my_loop(tv);
     tv->my_destroy(tv);
 
+    sam_global_args_free(&ga);
+
     return EXIT_SUCCESS;
 }

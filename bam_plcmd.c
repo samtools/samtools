@@ -1220,5 +1220,6 @@ int bam_mpileup(int argc, char *argv[])
     if (mplp.fai) fai_destroy(mplp.fai);
     if (mplp.bed) bed_destroy(mplp.bed);
     if (mplp.auxlist) kl_destroy(auxlist, (klist_t(auxlist) *)mplp.auxlist);
+    sam_global_args_free(&mplp.ga);
     return ret;
 }

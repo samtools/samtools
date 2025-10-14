@@ -539,5 +539,7 @@ int main_import(int argc, char *argv[]) {
     if (opts.p.pool)
         hts_tpool_destroy(opts.p.pool);
 
+    sam_global_args_free(&opts.ga);
+
     return ret;
 }
