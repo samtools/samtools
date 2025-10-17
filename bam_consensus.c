@@ -2614,7 +2614,7 @@ int pileup_loop_parallel(consensus_opts *opts) {
         thread; filters requiring header also needs this irrespective of file
         type; it is easy to copy from tdata[0] rather than reading and parsing;
         will be released along with file close */
-        tdata[i].fp->bam_header = sam_hdr_dup(tdata[0].fp->bam_header);
+        sam_hdr_set(tdata[i].fp, opts->h, 0);
     }
 
     pool = hts_tpool_init(opts->nthreads);
