@@ -96,15 +96,21 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  -T TAGLIST   copy arbitrary tags to the %s header line, '*' for all\n",
     fq ? "FASTQ" : "FASTA");
     if (fq) fprintf(to,
-"  -v INT       default quality score if not given in file [1]\n"
+"  -v INT       default quality score if not given in file [1]\n");
+    fprintf(to,
 "  -i           add Illumina Casava 1.8 format entry to header (eg 1:N:0:ATCACG)\n"
+"  -U, --UMI     add UMI to read name\n"
+"  --UMI-tag TAG-LIST\n"
+"               the list of aux tags to search for UMI barcode [RX,OX]\n"
 "  -c INT       compression level [0..9] to use when writing bgzf files [1]\n"
 "  --i1 FILE    write first index reads to FILE\n"
 "  --i2 FILE    write second index reads to FILE\n"
 "  --barcode-tag TAG\n"
-"               Barcode tag [" DEFAULT_BARCODE_TAG "]\n"
+"               Barcode tag [" DEFAULT_BARCODE_TAG "]\n");
+    if (fq) fprintf(to,
 "  --quality-tag TAG\n"
-"               Quality tag [" DEFAULT_QUALITY_TAG "]\n"
+"               Quality tag [" DEFAULT_QUALITY_TAG "]\n");
+    fprintf(to,
 "  --index-format STR\n"
 "               How to parse barcode and quality tags\n\n");
     sam_global_opt_help(to, "-.--.@-.");
@@ -162,6 +168,8 @@ typedef struct bam2fq_opts {
     const char *filter_tag;       // -d opt
     strhash_t *filter_tag_vals;
     char *scauxtag;
+    int UMI;
+    char *UMI_tag;
 } bam2fq_opts_t;
 
 typedef struct bam2fq_state {
@@ -178,6 +186,8 @@ typedef struct bam2fq_state {
     char *index_sequence;
     char compression_level;
     htsThreadPool p;
+    int UMI;
+    char *UMI_tag;
 } bam2fq_state_t;
 
 // Adds a single tag value to the filter tag value hash
@@ -265,6 +275,8 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     opts->flag_off = BAM_FSECONDARY|BAM_FSUPPLEMENTARY;
     opts->no_sc = false;
     opts->sc2aux = true;
+    opts->UMI = 0;
+    opts->UMI_tag = "OX,RX";
 
     int c;
     const char* type_str = argv[0];
@@ -294,9 +306,11 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         {"no-sc", no_argument, NULL, 4},
         {"no-sc-bkp", no_argument, NULL, 5},
         {"sc-aux", required_argument, NULL, 6},
+        {"UMI", no_argument, NULL, 'U'},
+        {"UMI-tag", required_argument, NULL, LONGOPT('U')},
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "0:1:2:o:f:F:G:niNOs:c:tT:v:@:d:D:",
+    while ((c = getopt_long(argc, argv, "0:1:2:o:f:F:G:niNOs:c:tT:v:@:d:D:U",
                             lopts, NULL)) > 0) {
         switch (c) {
             case 'b': opts->barcode_tag = optarg; break;
@@ -320,6 +334,10 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
             case 's': opts->fnse = optarg; break;
             case 't': opts->copy_tags = true; break;
             case 'i': opts->illumina_tag = true; break;
+
+            case 'U': opts->UMI = true; break;
+            case LONGOPT('U'): opts->UMI_tag = optarg; break;
+
             case 'c':
                 opts->compression_level = atoi(optarg);
                 if (opts->compression_level < 0)
@@ -497,6 +515,9 @@ void set_sam_opts(samFile *fp, bam2fq_state_t *state,
 
     hts_set_opt(fp, FASTQ_OPT_BARCODE, opts->barcode_tag);
 
+    if (state->UMI)
+        hts_set_opt(fp, FASTQ_OPT_UMI, state->UMI_tag);
+
     if (opts->extra_tags && (*opts->extra_tags == '*' || *opts->extra_tags == '\0'))
         hts_set_opt(fp, FASTQ_OPT_AUX, NULL);
     else {
@@ -559,6 +580,8 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     state->index_sequence = NULL;
     state->hstdout = NULL;
     state->compression_level = opts->compression_level;
+    state->UMI = opts->UMI;
+    state->UMI_tag = opts->UMI_tag;
 
     state->fp = sam_open_format(opts->fn_input, "r", &opts->ga.in);
     if (state->fp == NULL) {

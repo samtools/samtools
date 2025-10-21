@@ -3084,7 +3084,7 @@ sub test_import
     # Interleaved data
     test_cmd($opts, out=>'import/2.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG test/import/2.interleaved.fq -T \"\"");
-    test_cmd($opts, out=>'import/2.expected.sam',
+    test_cmd($opts, out=>'import/3.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG test/import/3.interleaved.fq -i");
 
     # Non aux-tag comments (we don't use these, but also shouldn't choke).
@@ -3100,6 +3100,12 @@ sub test_import
              cmd=>"$$opts{bin}/samtools import --no-PG --i1 test/import/5-i1.fq --i2  test/import/5-i2.fq --r1 test/import/5-r1.fq --r2 test/import/5-r2.fq");
     test_cmd($opts, out=>'import/5-OX.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG --i1 test/import/5-i1.fq --i2  test/import/5-i2.fq --r1 test/import/5-r1.fq --r2 test/import/5-r2.fq --barcode-tag OX --quality-tag BZ");
+
+    # UMI tags
+    test_cmd($opts, out=>'import/UMI.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --no-PG -U test/bam2fq/UMI.fq.expected");
+    test_cmd($opts, out=>'import/UMI-OX.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --no-PG -U --UMI-tag OX test/bam2fq/UMI.fq.expected");
 }
 
 sub test_bam2fq
@@ -3225,6 +3231,12 @@ sub test_bam2fq
     test_cmd($opts, out=>'bam2fq/23.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -O --no-sc $$opts{path}/dat/bam2fq.sc.sam");
     #with no-sc with bkp as s1 and dump
     test_cmd($opts, out=>'bam2fq/24.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -O --no-sc --sc-aux s1 -T's0,s1' $$opts{path}/dat/bam2fq.sc.sam");
+
+    # UMI tags
+    test_cmd($opts, out=>'bam2fq/UMI.fq.expected',
+             cmd=>"$$opts{bin}/samtools fastq -U test/import/UMI.expected.sam");
+    test_cmd($opts, out=>'bam2fq/UMI.fq.expected',
+             cmd=>"$$opts{bin}/samtools fastq -U --UMI-tag RX,OX test/import/UMI-OX.expected.sam");
 }
 
 
