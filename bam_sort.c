@@ -3250,6 +3250,7 @@ static int set_sort_order(sam_hdr_t *h, int mapped) {
     const char *new_so = NULL;
     const char *new_go = NULL;
     const char *new_ss = NULL;
+    char sstag[64] = {0};
 
     switch (g_sam_order) {
         case Coordinate:
@@ -3271,7 +3272,14 @@ static int set_sort_order(sam_hdr_t *h, int mapped) {
             break;
         case TagQueryName:
         case TagCoordinate:
-            new_so = "unknown";
+            new_so = "unsorted";
+            snprintf(sstag, sizeof(sstag), "unsorted:%c%c:%s",
+                g_sort_tag[0], g_sort_tag[1],
+                g_sam_order == TagQueryName ?
+                    natural_sort ?
+                        "queryname:natural" : "queryname:lexicographical" :
+                    "coordinate");
+            new_ss = sstag;
             break;
         case TemplateCoordinate:
             new_so = "unsorted";
