@@ -3877,6 +3877,21 @@ sub test_split
              ignore_pg_header => 1,
              reorder_header => 1,
              cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -f $$opts{path}/split/split.tmp.d_nn.\%!.\%. -p 4 -d nn -u $$opts{path}/split/split.tmp.d_nn.0unk.sam  $$opts{path}/split/split_d_nn.sam");
+
+    #use sorted by tag data
+    test_cmd($opts,
+             out => "dat/empty.expected",
+             out_map => {
+                 "split/split.tmp.d_nn.-0002.sam" => "split/split.expected_d_nn_sorted.-2.sam",
+                 "split/split.tmp.d_nn.-0001.sam" => "split/split.expected_d_nn_sorted.-1.sam",
+                 "split/split.tmp.d_nn.0001.sam" => "split/split.expected_d_nn_sorted.1.sam",
+                 "split/split.tmp.d_nn.0002.sam" => "split/split.expected_d_nn_sorted.2.sam",
+                 "split/split.tmp.d_nn.0unk.sam" => "split/split.expected_d_nn_sorted.unk.sam",
+             },
+             ignore_pg_header => 1,
+             reorder_header => 1,
+             cmd => "$$opts{bin}/samtools sort $threads -t nn $$opts{path}/split/split_d_nn.sam |
+                $$opts{bin}/samtools split $threads --output-fmt sam -f $$opts{path}/split/split.tmp.d_nn.\%!.\%. -p 4 -d nn -u $$opts{path}/split/split.tmp.d_nn.0unk.sam - ");
 }
 
 sub test_ampliconclip
