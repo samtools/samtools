@@ -3462,6 +3462,9 @@ sub test_sort
     # TemplateCoordinate sort with cell barcode (CB tag): reads group by cell then by molecule within cell
     test_cmd($opts, out=>"sort/template-coordinate.cell-barcode.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} --template-coordinate -m 10M $$opts{path}/sort/template-coordinate.cell-barcode.sort.sam -O SAM -o -");
 
+    # TemplateCoordinate sort - verify hard clips are ignored (only soft clips affect sort position)
+    test_cmd($opts, out=>"sort/template-coordinate-hardclip.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} --template-coordinate -m 10M $$opts{path}/sort/template-coordinate-hardclip.sort.sam -O SAM -o -");
+
     # Minimiser sort, basic
     test_cmd($opts, out=>"sort/minimiser-basic.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{path}/dat/auto_indexed.tmp.bam | $$opts{bin}/samtools sort${threads} -m 10M -M -K10 -O SAM -o -");
 
