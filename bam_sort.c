@@ -2214,7 +2214,7 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
     if (!(b->core.flag & BAM_FUNMAP)) { // read is mapped, update coordinates
         key->tid1 = b->core.tid;
         key->neg1 = bam_is_rev(b);
-        key->pos1 = (key->neg1) ? unclipped_end(b) : unclipped_start(b);
+        key->pos1 = (key->neg1) ? unclipped_end(b, 0) : unclipped_start(b, 0);
     }
     if (b->core.flag & BAM_FPAIRED && !(b->core.flag & BAM_FMUNMAP)) { // mate is mapped, update coordinates
         char *cigar;
@@ -2229,7 +2229,7 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
         }
         key->tid2 = b->core.mtid;
         key->neg2 = bam_is_mrev(b);
-        key->pos2 = (key->neg2) ? unclipped_other_end(b->core.mpos, cigar) : unclipped_other_start(b->core.mpos, cigar);
+        key->pos2 = (key->neg2) ? unclipped_other_end(b->core.mpos, cigar, 0) : unclipped_other_start(b->core.mpos, cigar, 0);
     }
 
     if ((data = bam_aux_get(b, "CB"))) {
