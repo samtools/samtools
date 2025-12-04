@@ -27,6 +27,10 @@ New work and changes:
 * Optionally trim soft clips from reads in `samtools fastq` output.
   (PR #2233, fixes #1275.  Requested by Torsten Seemann)
 
+* If sam file is sorted by tag, `samtools split` will output data sequentially
+  to avoid having simultaneous open files.
+  (PR #2281, fixes #2276.  Requested by Clint Valentine)
+
 
 Documentation:
 
