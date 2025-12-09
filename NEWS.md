@@ -35,7 +35,7 @@ New work and changes:
 Documentation:
 
 * In the command help output add a link to the global options in samtools.1 page
-  on the [HTSlib](https://www.htslib.org) site.
+  on the [HTSlib](https://www.htslib.org/) site.
   (PR #2258, addresses #2236.  Reported by Chris Saunders)
 
 * Add a support section to README.md.  This mentions the GitHub issue tracker
