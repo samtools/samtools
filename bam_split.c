@@ -126,7 +126,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
         { NULL, 0, NULL, 0 }
     };
 
-    parsed_opts_t* retval = calloc(sizeof(parsed_opts_t), 1);
+    parsed_opts_t* retval = calloc(1, sizeof(parsed_opts_t));
     if (! retval ) { perror("cannot allocate option parsing memory"); return NULL; }
 
     retval->max_split = DEFAULT_MAX_SPLIT;
