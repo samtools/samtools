@@ -1,6 +1,75 @@
 Release a.b
 -----------
 
+New work and changes:
+
+* New reference stats in `samtools stats`. First line in RFS section gives
+  the total sequence count, count of regions, average GC,
+  min, max, average and total counts.  Second line onwards gives regions,
+  lengths, GC and unknown base count.
+  (PR #2224, implements #2139.  Requested by Filipe G. Vieira)
+
+* New, faster Python version of seq_cache_populate to create and update
+  REF_CACHE.
+  (PR #2231.  Thanks to Ruben Vorderman)
+
+* Add a minimum depth (`--min-depth`) option to `samtools coverage`.
+  (PR #2235, implements #1563.  Requested by Charles Foster)
+
+* Add an option to exclude reads (`--exclude-no-read-group`) that have no
+  read group from `samtools view` when the `-r` (or `-R`) options are used.
+  (PR #2271, fixes #2265.  Reported by Matt Sexton)
+
+* Add UMI support to `samtools fastq` and `samtools import`.
+  See samtools/htslib#1960.
+  (PR #2270, fixes #2259 amd #2262. Requested by Poshi)
+
+* Optionally trim soft clips from reads in `samtools fastq` output.
+  (PR #2233, fixes #1275.  Requested by Torsten Seemann)
+
+* If sam file is sorted by tag, `samtools split` will output data sequentially
+  to avoid having simultaneous open files.
+  (PR #2281, fixes #2276.  Requested by Clint Valentine)
+
+
+Documentation:
+
+* In the command help output add a link to the global options in samtools.1 page
+  on the [HTSlib](https://www.htslib.org/) site.
+  (PR #2258, addresses #2236.  Reported by Chris Saunders)
+
+* Add a support section to README.md.  This mentions the GitHub issue tracker
+  and an email address for security issues.
+  (PR #2267)
+
+
+Bug fixes:
+
+* Prevent `samtools coverage` from printing a coverage table on failure.
+  (PR #2247, fixes #2242.  Reported by Georges Kanaan)
+
+* Remove deprecated line style commands from plot-bamstats.
+  (PR #2251, fixes #2243.  Reported by Suhas Srinivasan)
+
+* Add missing sam_global_args_free calls to address (harmless) memory leaks.
+  (PR #2274)
+
+* Fix `samtools consensus` crash when used with threads and iterators.  See also
+  samtools/htslib#1959
+  (PR #2269)
+
+Non user-visible changes and build improvements:
+
+* Ignore and testclean test/stat/*.fa.fai
+  (PR #2241. Thanks to John Marshall)
+
+* Remove use of C variables starting in _ from bam_consensus.c.
+  (PR #2250, fixes #2248.  Reported by Ghanji125)
+
+* Add Replace RG check exit and add some comments to bam_addrprg.c.
+  (PR #2254.  Thanks to Martin Pollard)
+
+
 Release 1.22.1 (14th July 2025)
 -------------------------------
 
