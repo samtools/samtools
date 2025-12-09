@@ -13,11 +13,11 @@ New work and changes:
   REF_CACHE.
   (PR #2231.  Thanks to Ruben Vorderman)
 
-* Add a minimum depth (*--min-depth*) option to `samtools coverage`.
+* Add a minimum depth (`--min-depth`) option to `samtools coverage`.
   (PR #2235, implements #1563.  Requested by Charles Foster)
 
-* Add an option to exclude reads (*--exclude-no-read-group*) that have no
-  read group from `samtools view` when the *-r* (or *-R*) options are used.
+* Add an option to exclude reads (`--exclude-no-read-group`) that have no
+  read group from `samtools view` when the `-r` (or `-R`) options are used.
   (PR #2271, fixes #2265.  Reported by Matt Sexton)
 
 * Add UMI support to `samtools fastq` and `samtools import`.
