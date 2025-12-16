@@ -1,9 +1,9 @@
 '\" t
-.TH samtools 1 "14 July 2025" "samtools-1.22.1" "Bioinformatics tools"
+.TH samtools 1 "16 December 2025" "samtools-1.23" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
-.\" Copyright (C) 2008-2011, 2013-2024 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2025 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -1099,6 +1099,32 @@ FASTQ output only.  If set, paired reads will have "/1" and "/2"
 appended to their read names.  This has no effect on unpaired reads.
 When reading FASTQ these suffixes are automatically detected
 and processed irrespective of the \fBfastq_rnum\fR option.
+
+.TP
+.BI fastq_umi= TAGLIST
+FASTQ input and output only.  When reading from a FASTQ file this
+indicates to extract the UMI tag from the read name and to put it in
+the TAG specified (which defaults to `RX' if no tag name is given).
+The UMI is assumed to be the 8th colon-separated element, conforming
+to Illumina BCL to FASTQ conversion specifications.  However see the
+\fBfastq_umi_regexp\fR option for altering this.
+
+When converting from SAM to FASTQ, \fITAGLIST\fR is a comma separated
+list of tags which are checked in turn for their presence.  The string
+from the first tag found is then appended to the end of the read-name.
+There is no regexp available in this case and the data is always
+appended to the end of the name, or if hash-number is present (for
+example `name#49') to just prior to the hash character.  The
+\fITAGLIST\fR defaults to `OX,RX'.
+
+.TP
+.BI fastq_umi_regex= REGEX
+FASTQ input only.  Specifies the regular expression used for finding
+UMI strings in a read name.  Any text within the single bracketted
+element will be used as the UMI string.  Text matched by that string
+will be removed from the read name, with anything to the right of it
+being moved leftwards.
+This defaults to `^[^:]+:[^:]+:[^:]+:[^:]+:[^:]+:[^:]+:[^:]+:([^:#/]+)'.
 
 .RE
 .PP

@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-import 1 "14 July 2025" "samtools-1.22.1" "Bioinformatics tools"
+.TH samtools-import 1 "16 December 2025" "samtools-1.23" "Bioinformatics tools"
 .SH NAME
 samtools import \- converts FASTQ files to unmapped SAM/BAM/CRAM
 .\"
@@ -114,6 +114,16 @@ barcode (BC) and quality (QT) tags.
 .B -i
 Specifies that the Illumina CASAVA identifiers should be processed.
 This may set the READ1, READ2 and QCFAIL flags and add a barcode tag.
+
+.TP
+.B "-U, --UMI "
+Migrate the UMI sequence from the last read name component to the UMI
+bar code.
+
+.TP
+.BI "--UMI-tag " TAG
+Specifies which aux tag to place the UMI barcode into.
+default is `RX'.
 
 .TP
 .B -N, --name2

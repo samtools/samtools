@@ -1,7 +1,7 @@
 /* coverage.c -- samtools coverage subcommand
 
     Copyright (C) 2018,2019 Florian Breitwieser
-    Portions copyright (C) 2019-2021, 2023-2024 Genome Research Ltd.
+    Portions copyright (C) 2019-2021, 2023-2025 Genome Research Ltd.
 
     Author: Florian P Breitwieser <florian.bw@gmail.com>
 
@@ -119,6 +119,8 @@ static int usage(void) {
             "  -d, --depth INT         maximum allowed coverage depth [1000000].\n"
             "                          If 0, depth is set to the maximum integer value,\n"
             "                          effectively removing any depth limit.\n"
+            "      --min-depth INT     minimum coverage depth below which a position \n"
+            "                          to be ignored [1]\n"
             "Output options:\n"
             "  -m, --histogram         show histogram instead of tabular output\n"
             "  -D, --plot-depth        plot depth instead of tabular output\n"
@@ -195,7 +197,15 @@ static int read_bam(void *data, bam1_t *b) {
     return ret;
 }
 
-void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, int tid) {
+void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, int tid,
+    bool *header) {
+
+    if (*header) {
+        fputs("#rname\tstartpos\tendpos\tnumreads\tcovbases\tcoverage\tmeandepth\tmeanbaseq\tmeanmapq\n",
+         file_out);
+        *header = false;
+    }
+
     fputs(sam_hdr_tid2name(h, tid), file_out);
     double region_len = (double) stats[tid].end - stats[tid].beg;
     fprintf(file_out, "\t%"PRId64"\t%"PRId64"\t%u\t%llu\t%g\t%g\t%.3g\t%.3g\n",
@@ -317,7 +327,7 @@ int main_coverage(int argc, char *argv[]) {
     int fail_flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP); // Default fail flags
     int required_flags = 0;
     int print_value_warning = 0;
-
+    int mindepth = 1;   //min depth in file, below which pos is ignored
     int *n_plp = NULL;
     sam_hdr_t *h = NULL; // BAM header of the 1st input
 
@@ -351,6 +361,7 @@ int main_coverage(int argc, char *argv[]) {
         {"region", required_argument, NULL, 'r'},
         {"help", no_argument, NULL, 'h'},
         {"depth", required_argument, NULL, 'd'},
+        {"min-depth", required_argument, NULL, 3},
         { NULL, 0, NULL, 0 }
     };
 
@@ -367,6 +378,11 @@ int main_coverage(int argc, char *argv[]) {
                 if ((fail_flags = bam_str2flag(optarg)) < 0) {
                     fprintf(stderr,"Could not parse --ff %s\n", optarg); return EXIT_FAILURE;
                 }; break;
+            case 3: //min-depth
+                if ((i = atoi(optarg)) > 0) {
+                    mindepth = i;
+                }
+                break;
             case 'o': opt_output_file = optarg; opt_full_width = false; break;
             case 'l': opt_min_len = atoi(optarg); break;
             case 'q': opt_min_mapQ = atoi(optarg); break;
@@ -524,9 +540,6 @@ int main_coverage(int argc, char *argv[]) {
         }
     }
 
-    if (opt_print_tabular && opt_print_header)
-        fputs("#rname\tstartpos\tendpos\tnumreads\tcovbases\tcoverage\tmeandepth\tmeanbaseq\tmeanmapq\n", file_out);
-
     h = data[0]->hdr; // easy access to the header of the 1st BAM
     int n_targets = sam_hdr_nref(h);
     stats = calloc(n_targets, sizeof(stats_aux_t));
@@ -581,7 +594,7 @@ int main_coverage(int argc, char *argv[]) {
                     print_hist(file_out, h, stats, old_tid, hist, n_bins, opt_full_utf, opt_plot_coverage);
                     fputc('\n', file_out);
                 } else if (opt_print_tabular) {
-                    print_tabular_line(file_out, h, stats, old_tid);
+                    print_tabular_line(file_out, h, stats, old_tid, &opt_print_header);
                 }
 
                 if (opt_print_histogram)
@@ -607,6 +620,7 @@ int main_coverage(int argc, char *argv[]) {
         }
 
         bool count_base = false;
+        unsigned long long summed_baseQ = 0, quality_bases = 0, depth = 0;
         for (i = 0; i < n_bam_files; ++i) { // base level filters have to go here
             int depth_at_pos = n_plp[i];
             for (j = 0; j < n_plp[i]; ++j) {
@@ -618,8 +632,8 @@ int main_coverage(int argc, char *argv[]) {
                     if (bam_get_qual(p->b)[p->qpos] < opt_min_baseQ) {
                         --depth_at_pos; // low base quality
                     } else {
-                        stats[tid].summed_baseQ += bam_get_qual(p->b)[p->qpos];
-                        stats[tid].quality_bases++;
+                        summed_baseQ += bam_get_qual(p->b)[p->qpos];
+                        ++quality_bases;
                     }
                 } else {
                     print_value_warning = 1; // no quality at position
@@ -628,18 +642,27 @@ int main_coverage(int argc, char *argv[]) {
 
             if (depth_at_pos > 0) {
                 count_base = true;
-                stats[tid].summed_coverage += depth_at_pos;
+                depth += depth_at_pos;
             }
 
             if(current_bin < n_bins && opt_plot_coverage) {
                 hist[current_bin] += depth_at_pos;
             }
         }
-        if (count_base) {
+        if (count_base && depth >= mindepth) {
+            stats[tid].summed_coverage += depth;
+            stats[tid].summed_baseQ += summed_baseQ;
+            stats[tid].quality_bases += quality_bases;
+
             stats[tid].n_covered_bases++;
             if (opt_print_histogram && current_bin < n_bins && !opt_plot_coverage)
                 ++(hist[current_bin]); // Histogram based on breadth of coverage
         }
+    }
+
+    if (ret < 0) {
+        status = EXIT_FAILURE;
+        goto coverage_end;
     }
 
     if (tid == -1 && opt_reg && *opt_reg != '*')
@@ -650,7 +673,7 @@ int main_coverage(int argc, char *argv[]) {
         if (opt_print_histogram) {
             print_hist(file_out, h, stats, tid, hist, n_bins, opt_full_utf, opt_plot_coverage);
         } else if (opt_print_tabular) {
-            print_tabular_line(file_out, h, stats, tid);
+            print_tabular_line(file_out, h, stats, tid, &opt_print_header);
         }
     }
 
@@ -659,7 +682,7 @@ int main_coverage(int argc, char *argv[]) {
         for (i = 0; i < n_targets; ++i) {
             if (!stats[i].covered) {
                 stats[i].end = sam_hdr_tid2len(h, i);
-                print_tabular_line(file_out, h, stats, i);
+                print_tabular_line(file_out, h, stats, i, &opt_print_header);
             }
         }
     }
@@ -668,7 +691,6 @@ int main_coverage(int argc, char *argv[]) {
         print_error("coverage", "Warning:  Missing quality values in alignments.  Mean base quality calculated only on available values.");
     }
 
-    if (ret < 0) status = EXIT_FAILURE;
 
 coverage_end:
     if (n_plp) free(n_plp);

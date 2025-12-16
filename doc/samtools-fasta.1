@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-fasta 1 "14 July 2025" "samtools-1.22.1" "Bioinformatics tools"
+.TH samtools-fasta 1 "16 December 2025" "samtools-1.23" "Bioinformatics tools"
 .SH NAME
 samtools-fasta, samtools-fastq \- converts a SAM/BAM/CRAM file to FASTA or FASTQ
 .\"
-.\" Copyright (C) 2008-2011, 2013-2020, 2023-2024 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2020, 2023-2025 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -61,7 +61,7 @@ Note this command is attempting to reverse the alignment process, so
 if the aligner took a single input FASTQ and produced multiple SAM
 records via supplementary and/or secondary alignments, then converting
 back to FASTQ again should produce the original single FASTA / FASTQ
-record.  By default it will not attempt to records for supplementary
+record.  By default it will not attend to records of supplementary
 and secondary alignments, but see the \fB-F\fR option for more details.
 
 If the input contains read-pairs which are to be interleaved or
@@ -145,43 +145,50 @@ even when put into different files.
 .TP 8
 .B -O
 Use quality values from OQ tags in preference to standard quality string
-if available.
+if available. (FASTQ only)
 .TP 8
-.B -s FILE
-Write singleton reads to FILE.
+.BI "-v " INT
+Specifies a default quality score to use for sequences that have no
+quality. Defaults to 1. (FASTQ only)
+.TP 8
+.BI "-s " FILE
+Write singleton reads to \fIFILE\fR.
 .TP 8
 .B -t
 Copy RG, BC and QT tags to the FASTQ header line, if they exist.
 .TP 8
-.B -T TAGLIST
+.BI "-T " TAGLIST
 Specify a comma-separated list of tags to copy to the FASTQ header line, if
 they exist.
-\fBTAGLIST\fR can be blank or \fB*\fR to indicate all tags should be copied to
+\fITAGLIST\fR can be blank or \fB*\fR to indicate all tags should be copied to
 the output.
 If using \fB*\fR, be careful to quote it to avoid unwanted shell expansion.
 .TP 8
-.B -1 FILE
-Write reads with the READ1 FLAG set (and READ2 not set) to FILE instead of
-outputting them.
+.BI "-1 " FILE
+Write reads with the READ1 FLAG set (and READ2 not set) to \fIFILE\fR
+instead of outputting them.
 If the
 .B -s
 option is used, only paired reads will be written to this file.
 .TP 8
-.B -2 FILE
-Write reads with the READ2 FLAG set (and READ1 not set) to FILE instead of
-outputting them.
+.BI "-2 " FILE
+Write reads with the READ2 FLAG set (and READ1 not set) to \fIFILE\fR
+instead of outputting them.
 If the
 .B -s
 option is used, only paired reads will be written to this file.
 .TP 8
-.B -o FILE
-Write reads with either READ1 FLAG or READ2 flag set to FILE instead
-of outputting them to stdout.  This is equivalent to \fB-1\fR FILE
-\fB-2\fR FILE.
+.BI "-o " FILE
+Write reads with either READ1 FLAG or READ2 flag set to \fIFILE\fR instead
+of outputting them to stdout.  This is equivalent to \fB-1\fR \fIFILE\fR
+\fB-2\fR \fIFILE\fR.
 .TP 8
-.B -0 FILE
+.BI "-0 " FILE
 Write reads where the READ1 and READ2 FLAG bits set are either both set
-or both unset to FILE instead of outputting them.
+or both unset to \fIFILE\fR instead of outputting them.
+.TP 8
+.BI "-c " [0..9]
+set compression level when writing gz or bgzf fastq files.
 .TP 8
 .BI "-f " INT
 Only output alignments with all bits set in
@@ -191,7 +198,7 @@ present in the FLAG field.
 can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
 or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
 .TP 8
-.BI "-F " INT ", ", --excl-flags " INT ", --exclude-flags " INT
+.BI "-F " INT ", --excl-flags " INT ", --exclude-flags " INT
 Do not output alignments with any bits set in
 .I INT
 present in the FLAG field.
@@ -235,25 +242,30 @@ multiple times.
 .B -i
 add Illumina Casava 1.8 format entry to header (eg 1:N:0:ATCACG)
 .TP 8
-.B -c [0..9]
-set compression level when writing gz or bgzf fastq files.
+.B "-U, --UMI "
+Add UMI sequence to the end of read names, if found in the UMI tag list.
+Non alphabetical characters are converted to the `+' symbol.
 .TP 8
-.B --i1 FILE
-write first index reads to FILE
+.BI "--UMI-tag " TAGLIST
+Specifies which aux tags to search for UMI sequence as a
+comma-separated list.  The first tag found is used. The default is `OX,RX'.
 .TP 8
-.B --i2 FILE
-write second index reads to FILE
+.BI "--i1 " FILE
+write first index reads to \fIFILE\fR
 .TP 8
-.B --barcode-tag TAG
+.B "--i2 " FILE
+write second index reads to \fIFILE\fR
+.TP 8
+.BI "--barcode-tag " TAG
 aux tag to find index reads in [default: BC]
 .TP 8
-.B --quality-tag TAG
-aux tag to find index quality in [default: QT]
+.BI "--quality-tag " TAG
+aux tag to find index quality in [default: QT]. (FASTQ only)
 .TP
 .BI "-@, --threads " INT
 Number of input/output compression threads to use in addition to main thread [0].
 .TP 8
-.B --index-format STR
+.BI "--index-format " STR
 string to describe how to parse the barcode and quality tags. For example:
 
 .RS
@@ -270,6 +282,20 @@ mean 'read until the separator or end of tag', for example:
 .B n*i*
 ignore the left part of the tag until the separator, then use the second part
 .RE
+.TP 8
+.B --no-sc
+Remove data corresponding to soft-clips from cigar, bases and quality values of
+filtered output. The removed data are added as an aux tag, 'Z' type array, with
+tag 's0', when \fB--no-sc-bkp\fR is absent. The array will contain data in the
+order of cigar before the removal, bases removed and quality values removed,
+separated by ':'. With reversed reads, the cigar, bases and quality values are
+reversed; bases are flipped as well.
+.TP 8
+.BI "--sc-aux " TAG
+Tag with which to backup the removed soft-clip data, default is 's0'.
+.TP 8
+.B --no-sc-bkp
+Avoids backup of data removed as part of soft-clip removal, \fB--no-sc\fR option.
 
 .SH EXAMPLES
 Starting from a coordinate sorted file, output paired reads to

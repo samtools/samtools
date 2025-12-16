@@ -212,7 +212,7 @@ sam_utils.o: sam_utils.c config.h $(sam_utils_h)
 sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_kstring_h) $(htslib_hfile_h) $(htslib_thread_pool_h) $(htslib_hts_expr_h) $(samtools_h) $(sam_opts_h) $(bam_h) $(bedidx_h) $(sam_utils_h)
 sample.o: sample.c config.h $(sample_h) $(htslib_khash_h)
 stats_isize.o: stats_isize.c config.h $(stats_isize_h) $(htslib_khash_h)
-stats.o: stats.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) $(htslib_hts_defs_h) $(samtools_h) $(htslib_khash_h) $(htslib_kstring_h) $(stats_isize_h) $(sam_opts_h) $(bedidx_h)
+stats.o: stats.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) $(htslib_hts_defs_h) $(samtools_h) $(htslib_khash_h) $(htslib_kstring_h) $(stats_isize_h) $(sam_opts_h) $(bedidx_h) $(htslib_thread_pool_h)
 amplicon_stats.o: amplicon_stats.c config.h $(htslib_sam_h) $(htslib_khash_h) $(samtools_h) $(sam_opts_h) $(bam_ampliconclip_h)
 bam_markdup.o: bam_markdup.c config.h $(htslib_thread_pool_h) $(htslib_sam_h) $(sam_opts_h) $(samtools_h) $(htslib_khash_h) $(htslib_klist_h) $(htslib_kstring_h) $(tmp_file_h) $(bam_h)
 tmp_file.o: tmp_file.c config.h $(tmp_file_h) $(htslib_sam_h)
@@ -338,6 +338,7 @@ testclean:
 	-cd test/dat && rm -f test_input_*.bam.bai view.*.bam.bai
 	-cd test/mpileup && rm -f FAIL-*.out* PASS-*.out* *.fa.fai anomalous.[bc]*am indels.[bc]*am mpileup.*.[cs]*am mpileup.*.crai overlap50.[bc]*am expected/1.out xx#depth*.bam*
 	-cd test/reference && rm -f mpileup.*.fai
+	-cd test/stat && rm -f *.fa.fai
 
 mostlyclean: testclean
 	-rm -f *.o misc/*.o test/*.o test/*/*.o version.h $(LZ4OBJS)

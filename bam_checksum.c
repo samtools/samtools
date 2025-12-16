@@ -1,6 +1,6 @@
 /*  bam_checksum.c -- produces checksums on SAM/BAM/CRAM/FASTA/FASTQ data
 
-    Copyright (C) 2024 Genome Research Ltd.
+    Copyright (C) 2024-2025 Genome Research Ltd.
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
@@ -1317,6 +1317,8 @@ int main_checksum(int argc, char **argv) {
 
     if (ret)
         fprintf(stderr, "[checksum] Failed to process data\n");
+
+    sam_global_args_free(&ga);
 
     return ret;
 }

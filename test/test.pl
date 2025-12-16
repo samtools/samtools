@@ -79,6 +79,7 @@ test_ampliconstats($opts, threads=>2);
 test_reset($opts);
 test_checksum($opts);
 test_checksum($opts, threads=>2);
+test_coverage($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -3083,7 +3084,7 @@ sub test_import
     # Interleaved data
     test_cmd($opts, out=>'import/2.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG test/import/2.interleaved.fq -T \"\"");
-    test_cmd($opts, out=>'import/2.expected.sam',
+    test_cmd($opts, out=>'import/3.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG test/import/3.interleaved.fq -i");
 
     # Non aux-tag comments (we don't use these, but also shouldn't choke).
@@ -3099,6 +3100,12 @@ sub test_import
              cmd=>"$$opts{bin}/samtools import --no-PG --i1 test/import/5-i1.fq --i2  test/import/5-i2.fq --r1 test/import/5-r1.fq --r2 test/import/5-r2.fq");
     test_cmd($opts, out=>'import/5-OX.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG --i1 test/import/5-i1.fq --i2  test/import/5-i2.fq --r1 test/import/5-r1.fq --r2 test/import/5-r2.fq --barcode-tag OX --quality-tag BZ");
+
+    # UMI tags
+    test_cmd($opts, out=>'import/UMI.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --no-PG -U test/bam2fq/UMI.fq.expected");
+    test_cmd($opts, out=>'import/UMI-OX.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --no-PG -U --UMI-tag OX test/bam2fq/UMI.fq.expected");
 }
 
 sub test_bam2fq
@@ -3215,6 +3222,21 @@ sub test_bam2fq
     # -D TAG
     test_cmd($opts, out=>'bam2fq/20.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -D NM:test/dat/bam2fq.NM-D $$opts{path}/dat/bam2fq.001.sam");
     test_cmd($opts, out=>'bam2fq/19.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -D MD:test/dat/bam2fq.MD-D $$opts{path}/dat/bam2fq.001.sam");
+
+    #with no-sc w/o aux s0 overwrite and dump
+    test_cmd($opts, out=>'bam2fq/21.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -O --no-sc --no-sc-bkp -T 's0' $$opts{path}/dat/bam2fq.sc.sam");
+    #with no-sc with aux s0 overwrite and dump
+    test_cmd($opts, out=>'bam2fq/22.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -O --no-sc -T's0' $$opts{path}/dat/bam2fq.sc.sam");
+    #with no-sc with s0 overwrite and no dump
+    test_cmd($opts, out=>'bam2fq/23.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -O --no-sc $$opts{path}/dat/bam2fq.sc.sam");
+    #with no-sc with bkp as s1 and dump
+    test_cmd($opts, out=>'bam2fq/24.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -O --no-sc --sc-aux s1 -T's0,s1' $$opts{path}/dat/bam2fq.sc.sam");
+
+    # UMI tags
+    test_cmd($opts, out=>'bam2fq/UMI.fq.expected',
+             cmd=>"$$opts{bin}/samtools fastq -U test/import/UMI.expected.sam");
+    test_cmd($opts, out=>'bam2fq/UMI.fq.expected',
+             cmd=>"$$opts{bin}/samtools fastq -U --UMI-tag RX,OX test/import/UMI-OX.expected.sam");
 }
 
 
@@ -3322,6 +3344,22 @@ sub test_stats
     test_cmd($opts,out=>'stat/14.rg.grp3.expected',cmd=>"$$opts{bin}/samtools stats -I grp3 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/14.rg.Sample.expected',cmd=>"$$opts{bin}/samtools stats -I Sample $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/15.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/mpileup/ce.fa $$opts{path}/stat/15.big_del.sam | tail -n+4", exp_fix=>$efix);
+
+    #reference statistics tests
+    #with ref-stats, no ref file
+    test_cmd($opts,out=>'stat/16.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats $$opts{path}/stat/11_target.sam | grep -e\"^RFS\"", exp_fix=>$efix);
+    #with ref-stats, ref file - not covering all targets!
+    test_cmd($opts,expect_fail=>1, out=>'stat/16.stats.expected', cmd=>"$$opts{bin}/samtools stats --ref-stats $$opts{path}/stat/11_target.sam -r $$opts{path}/stat/test.fa", exp_fix=>$efix);
+    #with ref-stats, ref file
+    test_cmd($opts,out=>'stat/17.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats $$opts{path}/stat/11_target.sam -r $$opts{path}/stat/test1.fa | grep -e\"^RFS\"", exp_fix=>$efix);
+    #with ref-stats, ref file using chunk option
+    test_cmd($opts,out=>'stat/17.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats --ref-stats-chunk -1 $$opts{path}/stat/11_target.sam -r $$opts{path}/stat/test1.fa | grep -e\"^RFS\"", exp_fix=>$efix);
+    #with ref-stats, ref file with matching region
+    test_cmd($opts,out=>'stat/18.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats $$opts{path}/stat/11_target.bam -r $$opts{path}/stat/test1.fa alpha:10-20 | grep -e\"^RFS\"", exp_fix=>$efix);
+    #with ref-stats, ref file with target file
+    test_cmd($opts,out=>'stat/19.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats $$opts{path}/stat/11_target.sam -r $$opts{path}/stat/test1.fa -t $$opts{path}/stat/11.stats.targets  | grep -e\"^RFS\"", exp_fix=>$efix);
+    #with ref-stats, ref file with target file with unmatched region spec
+    test_cmd($opts,out=>'stat/19.stats.expected',cmd=>"$$opts{bin}/samtools stats --ref-stats $$opts{path}/stat/11_target.bam -r $$opts{path}/stat/test1.fa -t $$opts{path}/stat/11.stats.targets ref1 | grep -e\"^RFS\"", exp_fix=>$efix);
 }
 
 sub test_merge
@@ -3839,6 +3877,21 @@ sub test_split
              ignore_pg_header => 1,
              reorder_header => 1,
              cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -f $$opts{path}/split/split.tmp.d_nn.\%!.\%. -p 4 -d nn -u $$opts{path}/split/split.tmp.d_nn.0unk.sam  $$opts{path}/split/split_d_nn.sam");
+
+    #use sorted by tag data
+    test_cmd($opts,
+             out => "dat/empty.expected",
+             out_map => {
+                 "split/split.tmp.d_nn.-0002.sam" => "split/split.expected_d_nn_sorted.-2.sam",
+                 "split/split.tmp.d_nn.-0001.sam" => "split/split.expected_d_nn_sorted.-1.sam",
+                 "split/split.tmp.d_nn.0001.sam" => "split/split.expected_d_nn_sorted.1.sam",
+                 "split/split.tmp.d_nn.0002.sam" => "split/split.expected_d_nn_sorted.2.sam",
+                 "split/split.tmp.d_nn.0unk.sam" => "split/split.expected_d_nn_sorted.unk.sam",
+             },
+             ignore_pg_header => 1,
+             reorder_header => 1,
+             cmd => "$$opts{bin}/samtools sort $threads -t nn $$opts{path}/split/split_d_nn.sam |
+                $$opts{bin}/samtools split $threads --output-fmt sam -f $$opts{path}/split/split.tmp.d_nn.\%!.\%. -p 4 -d nn -u $$opts{path}/split/split.tmp.d_nn.0unk.sam - ");
 }
 
 sub test_ampliconclip
@@ -3967,4 +4020,23 @@ sub test_checksum
         cmd("$$opts{bin}/samtools checksum -a $$opts{path}/checksum/chk2-$rg.tmp -o $$opts{path}/checksum/chk2-$rg.tmp.chk");
     }
     test_cmd($opts, out=>"checksum/chk2.2.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk2-*.tmp.chk | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+}
+
+
+sub test_coverage
+{
+    my ($opts, %args) = @_;
+
+    #basic / existing
+    test_cmd($opts, out=>"coverage/1.expected", cmd=>"$$opts{bin}/samtools coverage $$opts{path}/dat/sample.sam");
+    #coverage --min-depth 1
+    test_cmd($opts, out=>"coverage/1.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 1 $$opts{path}/dat/sample.sam");
+    #coverage --min-depth 2
+    test_cmd($opts, out=>"coverage/2.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 2 $$opts{path}/dat/sample.sam");
+    #coverage --min-depth 2 -Q 8 -q 45
+    test_cmd($opts, out=>"coverage/3.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 2 -Q 8 -q 45 $$opts{path}/dat/sample.sam");
+    #shows coverage is based on all inputs
+    cmd("cat '$$opts{path}/dat/sample.sam' | sed '/A1/d' > $$opts{tmp}/sample1.sam");
+    test_cmd($opts, out=>"coverage/4.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 1 $$opts{path}/dat/sample.sam $$opts{tmp}/sample1.sam");
+    test_cmd($opts, out=>"coverage/5.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 4 $$opts{path}/dat/sample.sam $$opts{tmp}/sample1.sam");
 }

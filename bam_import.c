@@ -4,7 +4,7 @@
  *   samtools import a_1.fq a_2.fq
  *   samtools import a_interleaved.fq
  *
- * Copyright (C) 2020-2021, 2023-2024 Genome Research Ltd.
+ * Copyright (C) 2020-2021, 2023-2025 Genome Research Ltd.
  *
  * Author: James Bonfield <jkb@sanger.ac.uk>
  */
@@ -51,6 +51,9 @@ static int usage(FILE *fp, int exit_status) {
     fprintf(fp, "  --i1 FILE    Index-1 from FILE\n");
     fprintf(fp, "  --i2 FILE    Index-2 from FILE\n");
     fprintf(fp, "  -i           Parse CASAVA identifier\n");
+    fprintf(fp, "  -U, --UMI    Parse UMI from read name\n");
+    fprintf(fp, "  --UMI-tag TAG\n");
+    fprintf(fp, "               Tag to use for UMI sequences [RX]\n");
     fprintf(fp, "  --barcode-tag TAG\n");
     fprintf(fp, "               Tag to use with barcode sequences [BC]\n");
     fprintf(fp, "  --quality-tag TAG\n");
@@ -90,6 +93,8 @@ typedef struct {
     int casava;
     char *barcode_seq;
     char *barcode_qual;
+    int UMI;
+    char *UMI_tag;
     char *aux;
     char *rg;
     char *rg_line;
@@ -182,6 +187,8 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
             hts_set_opt(fp_in[i], FASTQ_OPT_NAME2, 1);
         if (opts->casava)
             hts_set_opt(fp_in[i], FASTQ_OPT_CASAVA, 1);
+        if (opts->UMI)
+            hts_set_opt(fp_in[i], FASTQ_OPT_UMI, opts->UMI_tag);
         if (opts->barcode_seq) // for auto-CASAVA parsing
             hts_set_opt(fp_in[i], FASTQ_OPT_BARCODE, opts->barcode_seq);
         if (opts->aux)
@@ -191,28 +198,28 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
 
         switch (i) {
         case FQ_I1:
-            kputs("--i1 I1.fastq ", &read_str);
+            kputs(" --i1 I1.fastq", &read_str);
             kputs("i*", &index_str);
             break;
         case FQ_I2:
-            kputs("--i2 I2.fastq ", &read_str);
+            kputs(" --i2 I2.fastq", &read_str);
             kputs("i*", &index_str);
             break;
 
         case FQ_R0:
-            kputs("-0 unpaired.fastq ", &read_str);
+            kputs(" -0 unpaired.fastq", &read_str);
             break;
 
         case FQ_R1:
-            kputs("-1 R1.fastq ", &read_str);
+            kputs(" -1 R1.fastq", &read_str);
             break;
 
         case FQ_R2:
-            kputs("-2 R2.fastq ", &read_str);
+            kputs(" -2 R2.fastq", &read_str);
             break;
 
         case FQ_SINGLE:
-            kputs("-N -o paired.fastq ", &read_str);
+            kputs(" -n -o paired.fastq", &read_str);
             break;
 
         default:
@@ -224,6 +231,15 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
         bam_destroy1(b);
         return usage(stdout, EXIT_SUCCESS);
     }
+
+    if (opts->casava) {
+        kputs(" -i", &read_str);
+        if (!index_str.l)
+            kputs(" --index-format 'i*i*'", &read_str);
+    }
+
+    if (opts->UMI)
+        ksprintf(&read_str, " -U --UMI-tag %s", opts->UMI_tag);
 
     char out_mode[10] = {'w', 0, 0};
     if (opts->compress_level != -1)
@@ -242,11 +258,11 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
     if (ks_len(&read_str)) {
         char CO[2100];
         if (ks_len(&index_str))
-            snprintf(CO, sizeof(CO), "@CO\tReverse with: samtools fastq %s "
+            snprintf(CO, sizeof(CO), "@CO\tReverse with: samtools fastq%s "
                     "--index-format=\"%s\"\n",
                     ks_str(&read_str), ks_str(&index_str));
         else
-            snprintf(CO, sizeof(CO), "@CO\tReverse with: samtools fastq %s\n",
+            snprintf(CO, sizeof(CO), "@CO\tReverse with: samtools fastq%s\n",
                     ks_str(&read_str));
 
         hdr_out = sam_hdr_parse(strlen(CO), CO);
@@ -450,8 +466,10 @@ int main_import(int argc, char *argv[]) {
         .fn = {NULL},
         .fn_out = "-",
         .casava = 0,
+        .UMI = 0,
         .barcode_seq = "BC",
         .barcode_qual = "QT",
+        .UMI_tag = "RX",
         .aux = NULL,
         .rg = NULL,
         .rg_line = NULL,
@@ -474,11 +492,13 @@ int main_import(int argc, char *argv[]) {
         {"order", required_argument, NULL, 3},
         {"barcode-tag", required_argument, NULL, 4},
         {"quality-tag", required_argument, NULL, 5},
+        {"UMI-tag", required_argument, NULL, 6},
         {"name2", no_argument, NULL, 'N'},
+        {"umi", no_argument, NULL, 'U'},
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "1:2:s:0:bhiT:r:R:o:O:u@:N", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "1:2:s:0:bhiT:r:R:o:O:u@:NU", lopts, NULL)) >= 0) {
         switch (c) {
         case 'b': opts.idx_both = 1; break;
         case '0': opts.fn[FQ_R0] = optarg; break;
@@ -489,8 +509,10 @@ int main_import(int argc, char *argv[]) {
         case 's': opts.fn[FQ_SINGLE] = optarg; break;
         case 'o': opts.fn_out = optarg; break;
         case 'i': opts.casava = 1; break;
+        case 'U': opts.UMI = 1; break;
         case  4:  opts.barcode_seq = optarg; break;
         case  5:  opts.barcode_qual = optarg; break;
+        case  6:  opts.UMI_tag = optarg; break;
         case 'T': opts.aux = optarg; break;
         case 'u': opts.compress_level = 0; break;
         case 'R': opts.rg = optarg; break;
@@ -538,6 +560,8 @@ int main_import(int argc, char *argv[]) {
 
     if (opts.p.pool)
         hts_tpool_destroy(opts.p.pool);
+
+    sam_global_args_free(&opts.ga);
 
     return ret;
 }

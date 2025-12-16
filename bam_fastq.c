@@ -1,6 +1,6 @@
 /*  bam_fastq.c -- FASTA and FASTQ file generation
 
-    Copyright (C) 2009-2017, 2019-2020, 2023-2024 Genome Research Ltd.
+    Copyright (C) 2009-2017, 2019-2020, 2023-2025 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -81,7 +81,10 @@ static void bam2fq_usage(FILE *to, const char *command)
 "               only include reads with any  of the FLAGs in INT present [0]\n"       // !(F&x == 0)
 "  -G INT       only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
 "  -n           don't append /1 and /2 to the read name\n"
-"  -N           always append /1 and /2 to the read name\n",
+"  -N           always append /1 and /2 to the read name\n"
+"  --no-sc      Remove soft-clips from output\n"
+"  --sc-aux TAG Tag with which to backup the removed soft-clip data [s0]\n"
+"  --no-sc-bkp  Do not backup removed soft-clips as aux tags\n",
     fq ? "FASTQ" : "FASTA");
     if (fq) fprintf(to,
 "  -O           output quality in the OQ tag if present\n");
@@ -93,15 +96,21 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  -T TAGLIST   copy arbitrary tags to the %s header line, '*' for all\n",
     fq ? "FASTQ" : "FASTA");
     if (fq) fprintf(to,
-"  -v INT       default quality score if not given in file [1]\n"
+"  -v INT       default quality score if not given in file [1]\n");
+    fprintf(to,
 "  -i           add Illumina Casava 1.8 format entry to header (eg 1:N:0:ATCACG)\n"
+"  -U, --UMI     add UMI to read name\n"
+"  --UMI-tag TAG-LIST\n"
+"               the list of aux tags to search for UMI barcode [RX,OX]\n"
 "  -c INT       compression level [0..9] to use when writing bgzf files [1]\n"
 "  --i1 FILE    write first index reads to FILE\n"
 "  --i2 FILE    write second index reads to FILE\n"
 "  --barcode-tag TAG\n"
-"               Barcode tag [" DEFAULT_BARCODE_TAG "]\n"
+"               Barcode tag [" DEFAULT_BARCODE_TAG "]\n");
+    if (fq) fprintf(to,
 "  --quality-tag TAG\n"
-"               Quality tag [" DEFAULT_QUALITY_TAG "]\n"
+"               Quality tag [" DEFAULT_QUALITY_TAG "]\n");
+    fprintf(to,
 "  --index-format STR\n"
 "               How to parse barcode and quality tags\n\n");
     sam_global_opt_help(to, "-.--.@-.");
@@ -144,7 +153,8 @@ typedef struct bam2fq_opts {
     char *fnse;
     char *fnr[3];
     char *fn_input; // pointer to input filename in argv do not free
-    bool has12, has12always, use_oq, copy_tags, illumina_tag;
+    bool has12, has12always, use_oq, copy_tags, illumina_tag, no_sc,
+     sc2aux;
     int flag_on, flag_off, flag_alloff, flag_anyon;
     sam_global_args ga;
     fastfile filetype;
@@ -157,6 +167,9 @@ typedef struct bam2fq_opts {
     char compression_level;
     const char *filter_tag;       // -d opt
     strhash_t *filter_tag_vals;
+    char *scauxtag;
+    int UMI;
+    char *UMI_tag;
 } bam2fq_opts_t;
 
 typedef struct bam2fq_state {
@@ -173,6 +186,8 @@ typedef struct bam2fq_state {
     char *index_sequence;
     char compression_level;
     htsThreadPool p;
+    int UMI;
+    char *UMI_tag;
 } bam2fq_state_t;
 
 // Adds a single tag value to the filter tag value hash
@@ -258,8 +273,14 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     opts->extra_tags = NULL;
     opts->compression_level = 1;
     opts->flag_off = BAM_FSECONDARY|BAM_FSUPPLEMENTARY;
+    opts->no_sc = false;
+    opts->sc2aux = true;
+    opts->UMI = 0;
+    opts->UMI_tag = "OX,RX";
 
     int c;
+    const char* type_str = argv[0];
+
     sam_global_args_init(&opts->ga);
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '@'),
@@ -282,9 +303,14 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         {"quality-tag", required_argument, NULL, 'q'},
         {"tag", required_argument, NULL, 'd'},
         {"tag-file", required_argument, NULL, 'D'},
+        {"no-sc", no_argument, NULL, 4},
+        {"no-sc-bkp", no_argument, NULL, 5},
+        {"sc-aux", required_argument, NULL, 6},
+        {"UMI", no_argument, NULL, 'U'},
+        {"UMI-tag", required_argument, NULL, LONGOPT('U')},
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "0:1:2:o:f:F:G:niNOs:c:tT:v:@:d:D:",
+    while ((c = getopt_long(argc, argv, "0:1:2:o:f:F:G:niNOs:c:tT:v:@:d:D:U",
                             lopts, NULL)) > 0) {
         switch (c) {
             case 'b': opts->barcode_tag = optarg; break;
@@ -308,6 +334,10 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
             case 's': opts->fnse = optarg; break;
             case 't': opts->copy_tags = true; break;
             case 'i': opts->illumina_tag = true; break;
+
+            case 'U': opts->UMI = true; break;
+            case LONGOPT('U'): opts->UMI_tag = optarg; break;
+
             case 'c':
                 opts->compression_level = atoi(optarg);
                 if (opts->compression_level < 0)
@@ -368,6 +398,22 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
                 opts->filter_tag = optarg;
                 break;
 
+            case 4: //no soft clips
+                opts->no_sc = true;
+                break;
+
+            case 5: //no soft clips bkp
+                opts->sc2aux = false;
+                break;
+            case 6: //no soft clips bkp
+                if (strlen(optarg) != 2) {
+                    print_error(!strcasecmp("fasta", type_str) ? "fasta" : "fastq",
+                        "Invalid backup tag");
+                    free_opts(opts);
+                    return false;
+                }
+                opts->scauxtag = optarg;
+                break;
             case '?':
                 bam2fq_usage(stderr, argv[0]);
                 free_opts(opts);
@@ -430,7 +476,6 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         return false;
     }
 
-    const char* type_str = argv[0];
     if (strcasecmp("fastq", type_str) == 0 ||
         strcasecmp("bam2fq", type_str) == 0) {
         opts->filetype = FASTQ;
@@ -469,6 +514,9 @@ void set_sam_opts(samFile *fp, bam2fq_state_t *state,
         hts_set_opt(fp, FASTQ_OPT_CASAVA, 1);
 
     hts_set_opt(fp, FASTQ_OPT_BARCODE, opts->barcode_tag);
+
+    if (state->UMI)
+        hts_set_opt(fp, FASTQ_OPT_UMI, state->UMI_tag);
 
     if (opts->extra_tags && (*opts->extra_tags == '*' || *opts->extra_tags == '\0'))
         hts_set_opt(fp, FASTQ_OPT_AUX, NULL);
@@ -532,6 +580,8 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     state->index_sequence = NULL;
     state->hstdout = NULL;
     state->compression_level = opts->compression_level;
+    state->UMI = opts->UMI;
+    state->UMI_tag = opts->UMI_tag;
 
     state->fp = sam_open_format(opts->fn_input, "r", &opts->ga.in);
     if (state->fp == NULL) {
@@ -964,7 +1014,184 @@ static int flush_rec(bam2fq_state_t *state, bam2fq_opts_t* opts,
  err:
     return -1;
 }
+/// removesoftclips - removes the soft clip data
+/** @param prg - shows invoked as part of fasta or fastq
+ *  @param b - pointer to bam record
+ *  @param clipbuf - buffer for removed data, to add as aux tag. No aux saving
+ *          if NULL.
+ *  @param scliptag - tag to store removed data, 's0' is used if NULL
+ * returns 0 on success and -1 on failure.
+ * Modifies cigar, seq and qual data by removing data corresponding to soft
+ * clips. Alignments without softclips are ignored; same cigar types adjacent to
+ * each other, after the removal, are combined as single one. No aux tag update,
+ * except addition of 's0' tag, is made and hence cigar,seq,qual data may not be
+ * in sync with aux data after softclip removal. Original cigar, removed bases
+ * and qual vals are added as aux data, with ':' separation, with tag scliptag.
+ * Doesn't deal with very large cigar in bcf-aux!
+ **/
+static int removesoftclips(const char *prg, bam1_t *b, kstring_t *clipbuf, const char *scliptag)
+{
+    int i, j, tmp, ncgr, odd = 0, ret = 0, off = 1;
+    uint8_t *ptr, *bptr, *qptr, *nbptr, *nqptr, op, prevop, *auxb = NULL,
+        *auxq = NULL;
+    uint32_t oplen, slen = 0, dlen = 0, *cptr;
+    int64_t auxlen = 0; //n64bit as later multipled with -1 in during ptr update
+    const char seq_nt16flip_str[] = "!TGKCYSBAWRDMHVN", *base = seq_nt16_str;
+    char tag[2] = {'s','0'};
+    if (!b) return -1;               //invalid params
+    if (!b->core.n_cigar) return 0;  //nothing to do!
 
+    //get soft-clip count
+    cptr = bam_get_cigar(b);
+    for (i = 0, tmp = 0; i < b->core.n_cigar; ++i) {
+        if (bam_cigar_op(cptr[i]) == BAM_CSOFT_CLIP) {
+            ++tmp;
+        }
+    }
+    if (!tmp)   return 0;            //nothing to remove!
+
+    if (clipbuf) {
+        if (scliptag) {
+            tag[0] = scliptag[0];
+            tag[1] = scliptag[1];
+        }
+        if ((ptr = bam_aux_get(b, tag))) {    //remove existing tag
+            if (bam_aux_del(b, ptr)) {
+                print_error(prg, "Failed to removed existing tag %c%c from data",
+                    tag[0], tag[1]);
+                return -1;
+            }
+        }
+        //dump cigar, removed bases and quals, separated by ':'
+        if (b->core.flag & BAM_FREVERSE) {
+            off = -1;
+            base = seq_nt16flip_str;    //use this to get bases in reverse strand
+        }
+        clipbuf->l = 0;
+        for (i = 0, j = off < 0 ? b->core.n_cigar - 1 : 0; i < b->core.n_cigar;
+             ++i) {
+            op = bam_cigar_op(cptr[j]);
+            oplen = bam_cigar_oplen(cptr[j]);
+            ret |= ksprintf(clipbuf, "%d%c",oplen, bam_cigar_opchr(op));
+            j += off;
+        }
+        ret |= ksprintf(clipbuf, ":");
+        //ensure space for bases, quals, ':' and NUL
+        if ((ret |= ks_resize(clipbuf, clipbuf->l + b->core.l_qseq * 2 + 2)) < 0) {
+            perror("[bam2fq] Failed to store removed data");
+            return false;
+        }
+        //to store bases n quals for auxdata
+        auxb = (uint8_t*)clipbuf->s + clipbuf->l +
+                (off < 0 ? b->core.l_qseq - 1 : 0);
+        auxq = (uint8_t*)auxb + 1 + b->core.l_qseq;
+    }
+    ncgr = b->core.n_cigar - tmp;       //updated cigar count
+
+    bptr = bam_get_seq(b);              //current bases
+    qptr = bam_get_qual(b);             //current qual vals
+    nbptr = bptr;                       //updated bases
+    nqptr = qptr;                       //updated qual vals
+
+
+    /*move mem as long as base count is even and update base by base once an odd
+    cigar is found*/
+    ptr = bptr;   //start of base data
+    for (i = 0; i < b->core.n_cigar; ++i) {
+        op = bam_cigar_op(cptr[i]);
+        if (!(bam_cigar_type(op) & 1))
+            continue;   //ignore cigar not affecting sequence - D/N/H/P/B
+
+        if ((oplen = bam_cigar_oplen(cptr[i])) & 1) {
+            odd = 1;
+        }
+        if (op != BAM_CSOFT_CLIP) {  //deal non-sclip data
+            if (!odd) {     //no odd yet, move current data to updated position
+                memmove(nbptr, bptr, oplen >> 1);
+                nbptr += oplen >> 1;
+                bptr += oplen >> 1;
+            } else {
+                //either already found odd or this is odd, deal base by base
+                for (j = 0; j < oplen; ++j) {
+                    bam_set_seqi(ptr, dlen + j, bam_seqi(ptr, slen + j));
+                    //nbptr, bptr not relevant anymore!
+                }
+            }
+            memmove(nqptr, qptr, oplen);    //move qual vals
+            nqptr += oplen;
+            dlen += oplen;
+        } else {    //softclips
+            if (clipbuf) {  //save as aux tag
+                //with reverse flag, reverse and flip as in fastq dump in htslib
+                for (j = 0; j < oplen; ++j) {
+                    *(auxb + ((auxlen + j) * off)) =
+                        base[bam_seqi(ptr, slen + j)];
+                    *(auxq + ((auxlen + j) * off)) = 33 + *(qptr+j);
+                }
+                auxlen += oplen;
+            }
+            if (!odd) {
+                /*soft clip with even length, update base ptr, not relevant with
+                odd oplen as they are dealt base by base*/
+                bptr += oplen >> 1;
+            }
+        }
+        //update current qual ptr and source lengths
+        qptr += oplen;
+        slen += oplen;
+    }
+    //bases and quals moved in memory, in their areas, move aux to end of quals
+    tmp = bam_get_l_aux(b);     //len aux data
+    memmove(nqptr, bam_get_aux(b), tmp);
+
+    //move quals and aux to end of bases
+    nbptr = ptr + ((dlen + 1) >> 1);    //end of bases
+    tmp += dlen;                        //len aux + quals
+    memmove(nbptr,bam_get_qual(b), tmp);
+
+    tmp += (dlen + 1)>>1;               //len aux + quals + bases
+
+    //update cigar, merge if required
+    prevop = 0xFF;
+    oplen = 0;
+    for (i = 0, j = 0; i < b->core.n_cigar; ++i) {
+        op = bam_cigar_op(cptr[i]);
+        if (op != BAM_CSOFT_CLIP) {
+            if (op != prevop && prevop != 0xFF) {   //different cigar
+                oplen = bam_cigar_oplen(cptr[i]);
+                cptr[++j] = bam_cigar_gen(oplen, op);
+            } else {    //same cigar or 1st one, update length
+                oplen += bam_cigar_oplen(cptr[i]);
+                cptr[j] = bam_cigar_gen(oplen, op);
+            }
+            prevop = op;
+        }
+    }
+    //move bases, quals and aux to end of cigar
+    j += ncgr ? 1 : 0;  //get to next position, if there are cigars
+    cptr += j;          //end of cigar
+    memmove(cptr, ptr, tmp);
+    b->core.n_cigar = j;    //updated cigar count
+    b->core.l_qseq = dlen;  //updated length
+    b->l_data = b->core.l_qname + j * sizeof(uint32_t) + tmp;   //total length
+
+    if (clipbuf) {  //save as aux tag
+        if (off > 0) {  //fwd
+            *(auxb + auxlen) = ':';
+            *(auxq + auxlen) = '\0';
+            memmove(auxb + auxlen + 1, auxq, auxlen + 1);
+        } else {    //rev
+            *(auxb + 1) = ':';
+            *(auxq + 1) = '\0';
+            memmove(auxb + 2, auxq - auxlen + 1, auxlen + 1);
+            memmove(clipbuf->s + clipbuf->l, auxb - auxlen + 1, 2 * auxlen + 2);
+        }
+        clipbuf->l += auxlen * 2 + 2;
+        bam_aux_append(b, tag, 'Z', clipbuf->l, (uint8_t*)clipbuf->s);
+    }
+
+    return 0;
+}
 static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
 {
     int n;
@@ -976,6 +1203,8 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
     int best[3] = {-1, -1, -1}; // map R0, R1, single to b[] indices;
                                 // indexed by [readpart]
     bam1_t *b[4];               // 3 readparts, plus current record
+    kstring_t clipbuffer = KS_INITIALIZE;
+    char *prg = opts->filetype == FASTA ? "fasta" : "fastq";
 
     for (n = 0; n < 4; n++) {
         if (!(b[n] = bam_init1())) {
@@ -996,8 +1225,6 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
         if (!at_eof && filter_it_out(b[n], state, opts))
             continue;
         if (!at_eof) {
-            ++n_reads;
-
             // Handle -O option: use OQ for qual
             uint8_t *oq;
             if (state->use_oq && (oq = bam_aux_get(b[n],"OQ")) && *oq == 'Z') {
@@ -1006,6 +1233,17 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
                 for (i = 0; i < l && i < b[n]->core.l_qseq; i++)
                     qual[i] = oq[i] - '!';
             }
+            // Handle soft clips, if set to
+            if (opts->no_sc) {
+                if (removesoftclips(prg, b[n], opts->sc2aux ? &clipbuffer : NULL, opts->scauxtag)) {
+                    print_error(prg, "Failed to remove softclips");
+                    goto err;
+                }
+                if (!b[n]->core.l_qseq) {   //discard empty seqs
+                    continue;
+                }
+            }
+            ++n_reads;
         }
 
         if (at_eof
@@ -1052,6 +1290,8 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
             __func__, n_singletons);
     fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n",
             __func__, n_reads);
+
+    ks_free(&clipbuffer);
 
     return valid;
 }

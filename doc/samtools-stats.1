@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-stats 1 "14 July 2025" "samtools-1.22.1" "Bioinformatics tools"
+.TH samtools-stats 1 "16 December 2025" "samtools-1.23" "Bioinformatics tools"
 .SH NAME
 samtools stats \- produces comprehensive statistics from alignment file
 .\"
@@ -88,6 +88,7 @@ ID	Indel size distribution
 IC	Indels per cycle
 COV	Coverage (depth) distribution
 GCD	GC-depth
+RFS	Reference Statistics
 .TE
 
 The "cycle" terminology used here originates from the Illumina
@@ -391,6 +392,18 @@ of GC content.  Subsequent columns list the coverage depth at 10th,
 percentage, revealing any GC bias in mapping.  These columns are
 averaged depths, so are floating point with no maximum value.
 
+RFS reports statistics of the reference data.  The first line gives the overall
+statistics for the reference.  This comprises of the total number of targets in
+the input file and the number covered; followed by the average GC content,
+minimum, maximum, average and total lengths of targets in the report.
+The second and subsequent lines contain the statistics for each target.  Targets
+are regions either specified on the command line or given in the target file
+(\fB-t\fR option).  If no regions are chosen then all the reference data is used.
+Each line gives the name of target, length, GC content and number of unknown
+bases.  For the GC content and the number of unknown bases a reference file is
+required (\fB-t\fR option), otherwise the value is set to -1.  The lengths are
+from the region specification and from file header.
+
 .SH OPTIONS
 .TP 8
 .BI "-c, --coverage " MIN , MAX , STEP
@@ -484,6 +497,12 @@ Example usage: samtools stats [options] -X /data_folder/data.bam /index_folder/d
 .TP
 .BI "-@, --threads " INT
 Number of input/output compression threads to use in addition to main thread [0].
+.TP
+.B "--ref-stats"
+Create statistics on reference data.
+.TP
+.BI "--ref-stats-chunk " INT
+Number of reference bases to read at a time, in Mbs, for reference statistics [1].
 
 .SH AUTHOR
 .PP
