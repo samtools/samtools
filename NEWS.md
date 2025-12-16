@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.23 (16th December 2025)
+---------------------------------
+
 New work and changes:
 
 * New reference stats in `samtools stats`. First line in RFS section gives
