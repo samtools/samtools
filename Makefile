@@ -78,6 +78,7 @@ MISC_SCRIPTS = \
 	misc/fasta-sanitize.pl misc/interpolate_sam.pl misc/novo2sam.pl \
 	misc/plot-ampliconstats misc/plot-bamstats misc/psl2sam.pl \
 	misc/sam2vcf.pl misc/samtools.pl misc/seq_cache_populate.pl \
+	misc/seq_cache_populate.py \
 	misc/soap2sam.pl misc/wgsim_eval.pl misc/zoom2sam.pl
 
 TEST_PROGRAMS = \
