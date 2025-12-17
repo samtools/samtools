@@ -329,7 +329,7 @@ def main():
         number_of_subdirs=args.subdirs,
     )
     logging.info(
-        f"\nUse environment REF_CACHE=$root_dir{'/%2s' * args.subdirs}/%s for "
+        f"\nUse environment REF_CACHE={os.path.normpath(args.root)}{'/%2s' * args.subdirs}/%s for "
         f"accessing these files."
     )
     logging.info(
