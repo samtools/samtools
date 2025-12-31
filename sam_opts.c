@@ -27,7 +27,43 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <stdbool.h>
 #include "sam_opts.h"
+
+/*
+ * Parse an integer from a value passed on the command-line. Return true on 
+ * success, false if the string was not a valid integer.
+*/
+bool parse_int_value(const char *optarg, int *value) {
+    char *endptr;
+    if (!optarg) return false;
+    errno = 0;
+    long result = strtol(optarg, &endptr, 10);
+    if (endptr == optarg) return false; // No integer was parsed "hello"
+    if (*endptr != '\0') return false; // Extra characters "1hello"
+    if (errno) return false; // Out of long range, parsed value not valid
+    if (result < INT_MIN || result > INT_MAX) return false; // Out of int range
+    *value = result;
+    return true;
+}
+
+/*
+ * Parse an long int from a value passed on the command-line. Return true on 
+ * success, false if the string was not a valid long int.
+*/
+bool parse_long_value(const char *optarg, long *value, int base) {
+    char *endptr;
+    if (!optarg) return false;
+    errno = 0;
+    // Typically base is 10, or 0 to allow parsing strings like 0xff
+    long result = strtol(optarg, &endptr, base);
+    if (endptr == optarg) return false; // No integer was parsed "hello"
+    if (*endptr != '\0') return false; // Extra characters "1hello"
+    if (errno) return false; // Out of long range, parsed value not valid
+    *value = result;
+    return true;
+}
 
 /*
  * Processes a standard "global" samtools long option.
@@ -88,13 +124,21 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
             free(ref);
             break;
         } else if (strcmp(lopt->name, "threads") == 0) {
-            ga->nthreads = atoi(optarg);
+            if (!parse_int_value(optarg, &ga->nthreads)) 
+            {
+                fprintf(stderr, "Invalid threads value.\n");
+                return -1;
+            }
             break;
         } else if (strcmp(lopt->name, "write-index") == 0) {
             ga->write_index = 1;
             break;
         } else if (strcmp(lopt->name, "verbosity") == 0) {
-            hts_verbose = atoi(optarg);
+            if (!parse_int_value(optarg, &hts_verbose)) 
+            {
+                fprintf(stderr, "Invalid verbosity value.\n");
+                return -1;
+            }            
             break;
         }
     }

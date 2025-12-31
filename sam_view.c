@@ -989,9 +989,17 @@ int main_samview(int argc, char *argv[])
             }
             settings.count_rf |= SAM_QNAME;
             break;
-        case LONGOPT('S'): settings.subsam_seed = atoi(optarg); break;
+        case LONGOPT('S'): 
+            if (!parse_long_value(optarg, &settings.subsam_seed, 0)) {
+                print_error("view", "Incorrect seed \"%s\"", optarg);
+                goto view_end;
+            }
+            break;
         case 'm':
-            settings.min_qlen = atoi(optarg);
+            if (!parse_int_value(optarg, &settings.min_qlen)) {
+                print_error("view", "Incorrect min_qlen \"%s\"", optarg);
+                goto view_end;
+            }
             settings.count_rf |= SAM_SEQ;
             break;
         case 'c': settings.is_count = 1; break;
@@ -1051,7 +1059,10 @@ int main_samview(int argc, char *argv[])
             settings.count_rf |= SAM_FLAG | SAM_RNEXT;
             break;
         case 'q':
-            settings.min_mapQ = atoi(optarg);
+            if (!parse_int_value(optarg, &settings.min_mapQ)) {
+                print_error("view", "Incorrect min_mapQ \"%s\"", optarg);
+                goto view_end;
+            }
             settings.count_rf |= SAM_MAPQ;
             break;
         case 'u': compress_level = 0; break;
