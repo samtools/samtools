@@ -40,10 +40,10 @@ bool parse_int_value(const char *optarg, int *value) {
     if (!optarg) return false;
     errno = 0;
     long result = strtol(optarg, &endptr, 10);
-    if (endptr == optarg) return false; // No integer was parsed "hello"
-    if (*endptr != '\0') return false; // Extra characters "1hello"
-    if (errno) return false; // Out of long range, parsed value not valid
-    if (result < INT_MIN || result > INT_MAX) return false; // Out of int range
+    if (endptr == optarg) return false; // No integer was parsed
+    if (*endptr != '\0') return false; // Extra characters ("1hello")
+    if (errno) return false; // Out of long range, result not valid
+    if (result < INT_MIN || result > INT_MAX) return false; // result out of int range
     *value = result;
     return true;
 }
@@ -58,9 +58,9 @@ bool parse_long_value(const char *optarg, long *value, int base) {
     errno = 0;
     // Typically base is 10, or 0 to allow parsing strings like 0xff
     long result = strtol(optarg, &endptr, base);
-    if (endptr == optarg) return false; // No integer was parsed "hello"
-    if (*endptr != '\0') return false; // Extra characters "1hello"
-    if (errno) return false; // Out of long range, parsed value not valid
+    if (endptr == optarg) return false; // No integer was parsed
+    if (*endptr != '\0') return false; // Extra characters ("1hello")
+    if (errno) return false; // Out of long range, result not valid
     *value = result;
     return true;
 }
