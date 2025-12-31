@@ -1654,6 +1654,7 @@ int bam_merge(int argc, char *argv[])
         case 'l': 
             if (!parse_int_value(optarg, &level)) {
                 fprintf(stderr, "Invalid compression level\n");
+                ret = 1; goto end;
             }
             break;
         case 'c': flag |= MERGE_COMBINE_RG; break;
@@ -1661,6 +1662,7 @@ int bam_merge(int argc, char *argv[])
         case 's': 
             if (!parse_long_value(optarg, &random_seed, 10)) {
                 fprintf(stderr, "Invalid random seed\n");
+                ret = 1; goto end;
             }
             break;        
         case 'X': has_index_file = 1; break; // -X flag for index filename
@@ -3789,6 +3791,7 @@ int bam_sort(int argc, char *argv[])
         case 'l': 
             if (!parse_int_value(optarg, &level)) {
                 fprintf(stderr, "Invalid compression level\n");
+                sort_usage(stderr); ret = EXIT_FAILURE; goto sort_end;
             }
             break;
         case 'u': level = 0; break;
