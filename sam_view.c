@@ -961,6 +961,7 @@ int main_samview(int argc, char *argv[])
 
     char *tmp;
     int tmp_flag;
+    long temp_value;
 
     while ((c = getopt_long(argc, argv,
                             "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:pPz:n",
@@ -990,10 +991,11 @@ int main_samview(int argc, char *argv[])
             settings.count_rf |= SAM_QNAME;
             break;
         case LONGOPT('S'): 
-            if (!parse_long_value(optarg, &settings.subsam_seed, 0)) {
-                print_error("view", "Incorrect seed \"%s\"", optarg);
+            if (!parse_long_value(optarg, &temp_value, 0)) {
+                print_error("view", "Incorrect seed argument \"%s\"", optarg);
                 goto view_end;
             }
+            settings.subsam_seed = temp_value;
             break;
         case 'm':
             if (!parse_int_value(optarg, &settings.min_qlen)) {
