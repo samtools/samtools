@@ -990,7 +990,7 @@ int main_samview(int argc, char *argv[])
             }
             settings.count_rf |= SAM_QNAME;
             break;
-        case LONGOPT('S'): 
+        case LONGOPT('S'):
             if (!parse_long_value(optarg, &temp_value, 0)) {
                 print_error("view", "Incorrect seed argument \"%s\"", optarg);
                 goto view_end;
