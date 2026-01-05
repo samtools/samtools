@@ -1651,7 +1651,7 @@ int bam_merge(int argc, char *argv[])
         case '1': flag |= MERGE_LEVEL1; level = 1; break;
         case 'u': flag |= MERGE_UNCOMP; level = 0; break;
         case 'R': reg = strdup(optarg); break;
-        case 'l': 
+        case 'l':
             if (!parse_int_value(optarg, &level)) {
                 fprintf(stderr, "Invalid compression level\n");
                 ret = 1; goto end;
@@ -1659,12 +1659,12 @@ int bam_merge(int argc, char *argv[])
             break;
         case 'c': flag |= MERGE_COMBINE_RG; break;
         case 'p': flag |= MERGE_COMBINE_PG; break;
-        case 's': 
+        case 's':
             if (!parse_long_value(optarg, &random_seed, 10)) {
                 fprintf(stderr, "Invalid random seed\n");
                 ret = 1; goto end;
             }
-            break;        
+            break;
         case 'X': has_index_file = 1; break; // -X flag for index filename
         case 'L': fn_bed = optarg; break;
         case 'b': {
@@ -3788,7 +3788,7 @@ int bam_sort(int argc, char *argv[])
                 break;
             }
         case 'T': kputs(optarg, &tmpprefix); break;
-        case 'l': 
+        case 'l':
             if (!parse_int_value(optarg, &level)) {
                 fprintf(stderr, "Invalid compression level\n");
                 sort_usage(stderr); ret = EXIT_FAILURE; goto sort_end;
@@ -3804,7 +3804,7 @@ int bam_sort(int argc, char *argv[])
             break;
         case 'H': no_squash = 0; break;
 
-        case 'w': 
+        case 'w':
             if (!parse_int_value(optarg, &window)) {
                 fprintf(stderr, "Invalid window\n");
                 sort_usage(stderr); ret = EXIT_FAILURE; goto sort_end;

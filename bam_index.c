@@ -93,7 +93,7 @@ int bam_index(int argc, char *argv[])
         switch (c) {
         case 'b': csi = 0; break;
         case 'c': csi = 1; break;
-        case 'm': 
+        case 'm':
             csi = 1;
             if (!parse_int_value(optarg, &min_shift)) {
                 print_error("index", "invalid min_shift");
@@ -103,7 +103,7 @@ int bam_index(int argc, char *argv[])
             break;
         case 'M': multiple = 1; break;
         case 'o': fn_idx = optarg; break;
-        case '@': 
+        case '@':
             if (!parse_int_value(optarg, &n_threads)) {
                 print_error("index", "invalid thread count");
                 index_usage(stderr);

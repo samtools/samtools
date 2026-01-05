@@ -87,13 +87,13 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
                          sam_global_args *ga);
 
 /*
- * Parse an integer from a value passed on the command-line. Return true on 
+ * Parse an integer from a value passed on the command-line. Return true on
  * success, false if the string was not a valid integer.
 */
 bool parse_int_value(const char *optarg, int *value);
 
 /*
- * Parse an long int from a value passed on the command-line. Return true on 
+ * Parse an long int from a value passed on the command-line. Return true on
  * success, false if the string was not a valid long int.
 */
 bool parse_long_value(const char *optarg, long *value, int base);

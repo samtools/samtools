@@ -323,19 +323,19 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
             case '1': opts->fnr[1] = optarg; break;
             case '2': opts->fnr[2] = optarg; break;
             case 'o': opts->fnr[1] = optarg; opts->fnr[2] = optarg; break;
-            case 'f': 
+            case 'f':
                 if (!parse_long_value(optarg, &parsed_number, 0)) {
-                    print_error("fastq", 
-                    "invalid -f value \"%s\"", 
+                    print_error("fastq",
+                    "invalid -f value \"%s\"",
                     optarg);
                     return false;
                 }
                 opts->flag_on |= parsed_number;
                 break;
-            case 'F': 
+            case 'F':
                 if (!parse_long_value(optarg, &parsed_number, 0)) {
-                    print_error("fastq", 
-                    "invalid -F value \"%s\"", 
+                    print_error("fastq",
+                    "invalid -F value \"%s\"",
                     optarg);
                     return false;
                 }
@@ -344,19 +344,19 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
                 opts->flag_off = parsed_number;
                 break;
 
-            case 'G': 
+            case 'G':
                 if (!parse_long_value(optarg, &parsed_number, 0)) {
-                    print_error("fastq", 
-                    "invalid -f value \"%s\"", 
+                    print_error("fastq",
+                    "invalid -f value \"%s\"",
                     optarg);
                     return false;
                 }
                 opts->flag_alloff |= parsed_number;
                 break;
-            case LONGOPT('g'): 
+            case LONGOPT('g'):
                 if (!parse_long_value(optarg, &parsed_number, 0)) {
-                    print_error("fastq", 
-                    "invalid -f value \"%s\"", 
+                    print_error("fastq",
+                    "invalid -f value \"%s\"",
                     optarg);
                     return false;
                 }
@@ -372,7 +372,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
             case 'U': opts->UMI = true; break;
             case LONGOPT('U'): opts->UMI_tag = optarg; break;
 
-            case 'c': 
+            case 'c':
                 opts->compression_level = atoi(optarg);
                 if (opts->compression_level < 0)
                     opts->compression_level = 0;
@@ -380,11 +380,11 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
                     opts->compression_level = 9;
                 break;
             case 'T': opts->extra_tags = optarg; break;
-            case 'v': 
+            case 'v':
                 if (!parse_int_value(optarg, &opts->def_qual)) {
                     print_error("fastq",
                                 "Invalid -v value: \"%s\"",
-                                optarg);                    
+                                optarg);
                     free_opts(opts);
                     return false;
                 }

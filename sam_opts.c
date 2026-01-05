@@ -32,7 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "sam_opts.h"
 
 /*
- * Parse an integer from a value passed on the command-line. Return true on 
+ * Parse an integer from a value passed on the command-line. Return true on
  * success, false if the string was not a valid integer.
 */
 bool parse_int_value(const char *optarg, int *value) {
@@ -49,7 +49,7 @@ bool parse_int_value(const char *optarg, int *value) {
 }
 
 /*
- * Parse an long int from a value passed on the command-line. Return true on 
+ * Parse an long int from a value passed on the command-line. Return true on
  * success, false if the string was not a valid long int.
 */
 bool parse_long_value(const char *optarg, long *value, int base) {
@@ -124,7 +124,7 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
             free(ref);
             break;
         } else if (strcmp(lopt->name, "threads") == 0) {
-            if (!parse_int_value(optarg, &ga->nthreads)) 
+            if (!parse_int_value(optarg, &ga->nthreads))
             {
                 fprintf(stderr, "Invalid threads value.\n");
                 return -1;
@@ -134,11 +134,11 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
             ga->write_index = 1;
             break;
         } else if (strcmp(lopt->name, "verbosity") == 0) {
-            if (!parse_int_value(optarg, &hts_verbose)) 
+            if (!parse_int_value(optarg, &hts_verbose))
             {
                 fprintf(stderr, "Invalid verbosity value.\n");
                 return -1;
-            }            
+            }
             break;
         }
     }
