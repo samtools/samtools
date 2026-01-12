@@ -128,10 +128,10 @@ int main(int argc, char**argv)
     check_stdout = fopen(tempfname_stdout, "r");
     check_stderr = fopen(tempfname_stderr, "r");
     if ( !result_1
-        && kgetline(&res_stdout, (kgets_func *)fgets, check_stdout) >= 0
+        && kfgetline(&res_stdout, check_stdout) >= 0
         && !feof(check_stdout)
         && res_stdout.l > 0
-        && kgetline(&res_stderr, (kgets_func *)fgets, check_stderr) < 0
+        && kfgetline(&res_stderr, check_stderr) < 0
         && (feof(check_stderr) || res_stderr.l == 0)) {
         ++success;
     } else {
@@ -180,9 +180,9 @@ int main(int argc, char**argv)
     check_stderr = fopen(tempfname_stderr, "r");
     if ( result_2
         && check_test_2(result_2)
-        && kgetline(&res_stdout, (kgets_func *)fgets, check_stdout) < 0
+        && kfgetline(&res_stdout, check_stdout) < 0
         && (feof(check_stdout) || res_stdout.l == 0)
-        && kgetline(&res_stderr, (kgets_func *)fgets, check_stderr) < 0
+        && kfgetline(&res_stderr, check_stderr) < 0
         && (feof(check_stderr) || res_stderr.l == 0)) {
         ++success;
     } else {
