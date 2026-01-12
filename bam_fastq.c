@@ -218,7 +218,7 @@ static int add_tag_file(bam2fq_opts_t *opts, char *fn) {
         return -1;
     }
 
-    while (ks.l = 0, kgetline(&ks, (kgets_func *)fgets, fp) >= 0) {
+    while (ks.l = 0, kfgetline(&ks, fp) >= 0) {
         if (add_tag_value(opts, ks.s) < 0) {
             ks_free(&ks);
             return -1;

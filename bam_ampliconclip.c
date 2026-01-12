@@ -104,7 +104,7 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
     }
 
 
-    while (line.l = 0, kgetline(&line, (kgets_func *)hgets, fp) >= 0) {
+    while (line.l = 0, khgetline(&line, fp) >= 0) {
         line_count++;
         int hret;
 

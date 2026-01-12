@@ -852,7 +852,7 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
     } header[11] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, -1};
     crcs_t crcs = {1,1,1,1,1,1,1};
 
-    while (line.l = 0, kgetline(&line, (kgets_func *)fgets, fp) >= 0) {
+    while (line.l = 0, kfgetline(&line, fp) >= 0) {
         if (strncmp(line.s, "# Checksum", 10) == 0) {
             int major, minor;
             if (sscanf(line.s, "# Checksum %d.%d", &major, &minor) == 2) {

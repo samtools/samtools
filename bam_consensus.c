@@ -699,7 +699,7 @@ int load_qcal(qcal_t *q, const char *fn) {
     kstring_t line = KS_INITIALIZE;
     int max = 0;
     int last_qual = 0;
-    while (line.l = 0, kgetline(&line, (kgets_func *)hgets, fp) >= 0) {
+    while (line.l = 0, khgetline(&line, fp) >= 0) {
         int v, s, u, o;
         if (*line.s == '#')
             continue;

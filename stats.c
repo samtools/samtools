@@ -1924,7 +1924,7 @@ static void init_regions(stats_t *stats, const char *file, stats_info_t* info)
     int warned = 0, r, p, new_p;
     int prev_tid=-1;
     hts_pos_t prev_pos=-1LL;
-    while (line.l = 0, kgetline(&line, (kgets_func *)fgets, fp) >= 0)
+    while (line.l = 0, kfgetline(&line, fp) >= 0)
     {
         if ( line.s[0] == '#' ) continue;
 
