@@ -134,6 +134,14 @@ Limit the query to region
 .IR REG .
 This requires an index.
 .TP
+.BI "--regions-file " BED-FILE
+Creates consensus sequences for each region listed in the BED file,
+although not necessarily in the same chromosomal order.
+As with single regoin queries, without \fB-a\fR the sequences may be
+truncated or absent if not covered.
+This requires an index.
+This is incompatible with the \fB-r\fR option.
+.TP
 .BI "-f " FMT ", --format " FMT
 Produce format
 .IR FMT ,
