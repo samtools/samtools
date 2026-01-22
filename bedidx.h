@@ -37,7 +37,7 @@ DEALINGS IN THE SOFTWARE.  */
 /*
  * Bed file reading.  The main functions are bed_read and bed_destroy.
  * The void* return value from bed_read is the same "void *reg_hash" used in
- * bed_overlap, bed_hash_regions, bed_get and bed_reglist.
+ * bed_overlap, bed_hash_regions, bed_unify and bed_reglist.
  *
  * Due to the data structures used, the order of chromosomes in the BED file
  * is not preserved and iterators will return chromosomes in hash key order.

@@ -2348,12 +2348,13 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         if (c->last_tid != -1) {
             if (opts->all_bases) {
                 // Fill in remainder of previous reference
-                int i, N;
+                int i;
+                hts_pos_t N;
                 if (c->iter) {
                     c->last_pos = MAX(c->last_pos, c->iter->beg-1);
                     N = c->iter->end;
                 } else {
-                    N = INT_MAX;
+                    N = HTS_POS_MAX;
                 }
                 N = MIN(N, sam_hdr_tid2len(opts->h, c->last_tid))
                     - c->last_pos;
@@ -2568,7 +2569,7 @@ int append_cons(ctx *c, kstring_t *seq, kstring_t *qual,
         kputsn(ks_qual, ks_qual_l, qual);
 
         // Any post Ns
-        int Nlen = c->end - c->last_pos;
+        hts_pos_t Nlen = c->end - c->last_pos;
         *used_end = seq->l;
         *used_start = 0;
         if (Nlen) {
@@ -2584,9 +2585,11 @@ int append_cons(ctx *c, kstring_t *seq, kstring_t *qual,
     return  0;
 }
 
-static inline void next_interval(hts_reglist_t *rl,
-                                 int *curr_reg, int *curr_int,
-                                 int *chr, hts_pos_t *start, hts_pos_t *end) {
+static inline int next_interval(hts_reglist_t *rl, int nregs,
+                                int *curr_reg, int *curr_int,
+                                int *chr, hts_pos_t *start, hts_pos_t *end) {
+    if (*curr_reg >= nregs)
+        return -1;
     *chr   = rl[*curr_reg].tid;
     *start = rl[*curr_reg].intervals[*curr_int].beg;
     *end   = rl[*curr_reg].intervals[*curr_int].end;
@@ -2594,6 +2597,8 @@ static inline void next_interval(hts_reglist_t *rl,
         *curr_int = 0;
         (*curr_reg)++;
     }
+
+    return 0;
 }
 
 // Correct for the uninitialised tid field.  This also filters based on
@@ -2609,6 +2614,7 @@ static int fill_reglist_tid(sam_hdr_t *h, hts_reglist_t *rl, int *nregs) {
             }
             hts_log_warning("Region '%s' specifies an unknown reference name",
                             rl[i].reg);
+            free(rl[i].intervals);
         } else {
             rl[i].tid = tid;
             rl[nout++] = rl[i];
@@ -2670,6 +2676,8 @@ int pileup_loop_parallel(consensus_opts *opts) {
             goto err;
         if (fill_reglist_tid(opts->h, reglist, &nregs) < 0)
             goto err;
+        if (nregs <= 0)
+            goto err;
     }
 
     for (;;) {
@@ -2678,9 +2686,28 @@ int pileup_loop_parallel(consensus_opts *opts) {
         used_end = 0;
         char name[1024];
 
-        if (opts->reg) {
-            // a single specified region
-            sam_parse_region(opts->h, opts->reg, &chr, &start, &end, 0);
+        if (opts->reg || nregs) {
+            if (opts->reg) {
+                // a single specified region
+                if (!sam_parse_region(opts->h, opts->reg, &chr, &start, &end, 0)) {
+                    print_error("consensus", "Failed to parse region \"%s\"",
+                                opts->reg);
+                    goto err;
+                }
+            } else {
+                // next interval in current or next region
+                if (next_interval(reglist, nregs, &reg_num, &reg_ivl, &chr,
+                                  &start, &end) < 0)
+                    break; // no more regions
+
+                if (start > end || start > opts->h->target_len[chr]) {
+                    fprintf(stderr, "[consensus] Warning: Invalid region \""
+                                "%s:%"PRIhts_pos"-%"PRIhts_pos"\"\n",
+                                sam_hdr_tid2name(opts->h, chr), start, end);
+                    continue;
+                }
+            }
+
             if (start < 0)
                 start = 0;
             if (end > opts->h->target_len[chr])
@@ -2691,13 +2718,6 @@ int pileup_loop_parallel(consensus_opts *opts) {
             else
                 snprintf(name, 1024, "%s:%"PRIhts_pos"-%"PRIhts_pos,
                          sam_hdr_tid2name(opts->h, chr), start+1, end);
-        } else if (nregs) {
-            // next interval in current or next region
-            next_interval(reglist, &reg_num, &reg_ivl, &chr, &start, &end);
-            snprintf(name, 1024, "%s:%"PRIhts_pos"-%"PRIhts_pos,
-                     sam_hdr_tid2name(opts->h, chr), start+1, end);
-            //fprintf(stderr, "Processing tid %d range %ld-%ld\n",
-            //        chr, start+1, end);
         } else {
             // otherwise everything.
             for (; chr < sam_hdr_nref(opts->h); chr++) {
@@ -2897,7 +2917,6 @@ int pileup_loop_serial(consensus_opts *opts) {
         .ref_tid     = -1,
         .iter        = NULL
     };
-    ctx c_reset = c;
 
     hts_reglist_t *reglist = NULL;
     int nregs = 0, reg_num = 0, reg_ivl = 0;
@@ -2907,6 +2926,8 @@ int pileup_loop_serial(consensus_opts *opts) {
         if (!reglist)
             goto err;
         if (fill_reglist_tid(opts->h, reglist, &nregs) < 0)
+            goto err;
+        if (nregs <= 0)
             goto err;
 
     } else if (opts->reg) {
@@ -2923,13 +2944,32 @@ int pileup_loop_serial(consensus_opts *opts) {
             if (c.iter)
                 hts_itr_destroy(c.iter);
 
-            memcpy(&c, &c_reset, sizeof(c));
+            // Reset the context
+            ks_clear(&c.ks_pileup);
+            ks_clear(&c.ks_ins_seq);
+            ks_clear(&c.ks_ins_qual);
+            c.last_tid = c.last_pos = c.ref_tid = -1;
+            c.iter = NULL;
 
             int chr;
             hts_pos_t start, end;
-            next_interval(reglist, &reg_num, &reg_ivl, &chr, &start, &end);
-            //fprintf(stderr, "Processing tid %d range %ld-%ld\n",
-            //        chr, start+1, end);
+            if (next_interval(reglist, nregs, &reg_num, &reg_ivl, &chr,
+                              &start, &end) < 0)
+                break; // no more regions
+
+
+            if (start > end || start > opts->h->target_len[chr]) {
+                    fprintf(stderr, "[consensus] Warning: Invalid region \""
+                            "%s:%"PRIhts_pos"-%"PRIhts_pos"\"\n",
+                            sam_hdr_tid2name(opts->h, chr), start, end);
+                    continue;
+            }
+
+            if (start < 0)
+                start = 0;
+            if (end > opts->h->target_len[chr])
+                end = opts->h->target_len[chr];
+
             c.iter = sam_itr_queryi(opts->tdata[0].idx, chr, start, end);
             if (!c.iter) {
                 print_error("consensus", "Failed to find region \""
@@ -2950,8 +2990,8 @@ int pileup_loop_serial(consensus_opts *opts) {
 
             if (opts->all_bases) {
                 int tid = c.iter ? c.iter->tid : c.last_tid;
-                int len = sam_hdr_tid2len(opts->h, tid);
-                int pos = c.last_pos;
+                hts_pos_t len = sam_hdr_tid2len(opts->h, tid);
+                hts_pos_t pos = c.last_pos;
                 if (c.iter) {
                     len = MIN(c.iter->end, len);
                     pos = MAX(c.iter->beg, pos);
@@ -2977,8 +3017,8 @@ int pileup_loop_serial(consensus_opts *opts) {
             if (opts->all_bases) {
                 // fill out terminator
                 int tid = c.iter ? c.iter->tid : c.last_tid;
-                int len = sam_hdr_tid2len(opts->h, tid);
-                int pos = c.last_pos;
+                hts_pos_t len = sam_hdr_tid2len(opts->h, tid);
+                hts_pos_t pos = c.last_pos;
                 if (c.iter) {
                     len = MIN(c.iter->end, len);
                     pos = MAX(c.iter->beg, pos);
@@ -3003,10 +3043,12 @@ int pileup_loop_serial(consensus_opts *opts) {
             }
             if (c.last_tid >= 0) {
                 char name[1024];
-                if (c.iter)
+                int tid = c.iter ? c.iter->tid : c.last_tid;
+                int len = sam_hdr_tid2len(opts->h, tid);
+                if (c.iter && (c.iter->beg > 0 || c.iter->end < len))
                     snprintf(name, 1024, "%s:%"PRIhts_pos"-%"PRIhts_pos,
                              sam_hdr_tid2name(opts->h, c.last_tid),
-                             c.iter->beg+1, c.iter->end);
+                             c.iter->beg+1, MIN(c.iter->end,len));
                 else
                     snprintf(name, 1024, "%s",
                              sam_hdr_tid2name(opts->h, c.last_tid));
@@ -3026,7 +3068,10 @@ int pileup_loop_serial(consensus_opts *opts) {
     } while (reg_num < nregs);  // A non-loop only if no BED file given
 
     ret = 0;
+
  err:
+    if (reglist)
+        hts_reglist_free(reglist, nregs);
 
     ks_free(&c.ks_pileup);
     ks_free(&c.ks_ins_seq);
@@ -3241,7 +3286,6 @@ int main_consensus(int argc, char **argv) {
                                   optarg);
                 return 1;
             }
-            //bed_unify(opts.bed);
             break;
 
         case 'C': opts.cons_cutoff = atoi(optarg); break;

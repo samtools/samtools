@@ -133,12 +133,14 @@ General options that apply to both algorithms:
 Limit the query to region
 .IR REG .
 This requires an index.
+This is incompatible with the \fB--regions-file\fR option.
 .TP
 .BI "--regions-file " BED-FILE
-Creates consensus sequences for each region listed in the BED file,
+Creates consensus sequences for each region listed in the \fIBED-FILE\fR,
 although not necessarily in the same chromosomal order.
-As with single regoin queries, without \fB-a\fR the sequences may be
+As with single region queries, without \fB-a\fR the sequences may be
 truncated or absent if not covered.
+Note this does not deduplicate regions or merge overlapping regions.
 This requires an index.
 This is incompatible with the \fB-r\fR option.
 .TP
