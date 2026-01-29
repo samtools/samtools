@@ -3983,6 +3983,12 @@ sub test_reset
     test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.flg.1.expected"}, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{bin}/test/reset/seq.sam -o $$opts{bin}/test/reset/output");
     #flag update default
     test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.flg.2.expected"}, cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/reset/seq.sam -o $$opts{bin}/test/reset/output");
+    #cram reference support
+    cmd("cp $$opts{path}/dat/view.001.fa $$opts{bin}/test/reset/view.tmp.fa");
+    cmd("$$opts{bin}/samtools view $$opts{path}/dat/view.001.sam -T $$opts{bin}/test/reset/view.tmp.fa -o $$opts{bin}/test/reset/view.tmp.cram");
+    cmd("rm $$opts{bin}/test/reset/view.tmp.fa");
+    test_cmd($opts, out=>"reset/cram.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/reset/view.tmp.cram -T $$opts{path}/dat/view.001.fa --input-fmt-option=filter=\"pos>35\" --output-fmt-option=version=3.0 -o $$opts{bin}/test/reset/view30.tmp.cram; $$opts{bin}/samtools view -h $$opts{bin}/test/reset/view30.tmp.cram");
+    test_cmd($opts, out=>"reset/cram.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/reset/view.tmp.cram -T $$opts{path}/dat/view.001.fa --input-fmt-option=filter=\"pos>35\" --output-fmt-option=version=3.1 -o $$opts{bin}/test/reset/view31.tmp.cram; $$opts{bin}/samtools view -h $$opts{bin}/test/reset/view31.tmp.cram");
 }
 
 sub test_checksum

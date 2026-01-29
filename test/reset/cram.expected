@@ -1,0 +1,13 @@
+@HD	VN:1.6
+@RG	ID:grp1	DS:Group 1	LB:Library 1	SM:Sample
+@RG	ID:grp2	DS:Group 2	LB:Library 2	SM:Sample
+@RG	ID:grp3	DS:Group 3	SM:Sample
+ref12_grp1_p001	77	*	0	0	*	*	0	0	TGCAGGCATG	AAAAAAAAAA	RG:Z:grp1
+ref1_grp1_p004	141	*	0	0	*	*	0	0	GCATGCCTGC	3333333333	RG:Z:grp1
+ref1_grp2_p004	141	*	0	0	*	*	0	0	TTGCATGCCT	4444444444	RG:Z:grp2
+ref1_grp1_p005	141	*	0	0	*	*	0	0	GCTTGCATGC	5555555555	RG:Z:grp1
+ref1_grp2_p005	141	*	0	0	*	*	0	0	AAGCTTGCAT	6666666666	RG:Z:grp2
+ref1_grp1_p006	141	*	0	0	*	*	0	0	TCAAGCTTGC	7777777777	RG:Z:grp1
+ref12_grp2_p001	77	*	0	0	*	*	0	0	CAAGCTTGAG	AAAAAAAAAA	RG:Z:grp2
+ref1_grp2_p006	141	*	0	0	*	*	0	0	ACTCAAGCTT	8888888888	RG:Z:grp2
+ref2_grp3_p002	77	*	0	0	*	*	0	0	CTGTTTCCTGTGTGA	{{{{{{{{{{{{{{{	RG:Z:grp3

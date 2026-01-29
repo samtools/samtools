@@ -69,7 +69,7 @@ static void usage(FILE *fp)
       --dupflag\n\
                Keeps the duplicate flag as it is\n");
 
-    sam_global_opt_help(fp, "--O--@--");
+    sam_global_opt_help(fp, "-.O.T@--");
     return;
 }
 
@@ -462,7 +462,7 @@ returns 1 on failure 0 on success
 int main_reset(int argc, char *argv[])
 {
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', '-', 'O', '-', '-', '@'),       //let output format and thread count be given by user - long options
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T', '@'),
         {"keep-tag", required_argument, NULL, LONG_OPT('x')},       //aux tags to be retained, supports ^ STR
         {"remove-tag", required_argument, NULL, 'x'},               //aux tags to be removed
         {"no-RG", no_argument, NULL, 1},                            //no RG lines in output, default is to keep them
@@ -480,8 +480,7 @@ int main_reset(int argc, char *argv[])
     char outmode[4] = "w", *args = NULL;
     conf_data resetconf = {1, 0, 0, NULL, NULL, NULL};              //keep RGs and PGs by default, ctrlflags = 0
 
-    //samtools reset -o outfile -x/--remove-tag ... --keep-tag ... --threads=n --output-fmt=fmt --no-RG --reject-PG pgid --no-PG [<infile>]
-    while ((c = getopt_long(argc, argv, "o:@:x:O:", lopts, NULL)) >= 0)
+    while ((c = getopt_long(argc, argv, "o:@:x:O:T:", lopts, NULL)) >= 0)
     {
         switch (c)
         {
@@ -581,7 +580,7 @@ int main_reset(int argc, char *argv[])
     sam_open_mode(outmode + 1, outname, NULL);
 
     //open input and output files
-    infile = sam_open(inname, "r");
+    infile = sam_open_format(inname, "r", &ga.in);
     outfile = sam_open_format(outname, outmode, &ga.out);
     if (!infile || !outfile) {
         fprintf(stderr, "Could not open %s%s%s\n", !infile ? inname : "", (!infile && !outfile)? ", " : "", !outfile ? outname : "");
