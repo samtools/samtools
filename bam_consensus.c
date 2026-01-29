@@ -145,6 +145,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sam_opts.h"
 #include "bam_plbuf.h"
 #include "consensus_pileup.h"
+#include "bedidx.h"
 
 #ifdef __SSE__
 #   include <xmmintrin.h>
@@ -246,6 +247,7 @@ typedef struct {
     char *ref_fn;
     int ref_qual;
     int span; // base block size for threads
+    void *bed;
 
     // Internal state, shared between threads
     char *fn;
@@ -1813,8 +1815,12 @@ int calculate_consensus_gap5m(hts_pos_t pos, int flags, int depth,
     calculate_consensus_gap5(pos, flags, depth, plp, opts,
                              &consR, default_qual, cp_r);
 
-#define MIN(a,b) ((a)<(b)?(a):(b))
-#define MAX(a,b) ((a)>(b)?(a):(b))
+#ifndef MIN
+#    define MIN(a,b) ((a)<(b)?(a):(b))
+#endif
+#ifndef MAX
+#    define MAX(a,b) ((a)>(b)?(a):(b))
+#endif
 
     // Initial starting point is precise mode
     memcpy(cons, &consP, sizeof(consP));
@@ -2342,12 +2348,13 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         if (c->last_tid != -1) {
             if (opts->all_bases) {
                 // Fill in remainder of previous reference
-                int i, N;
+                int i;
+                hts_pos_t N;
                 if (c->iter) {
                     c->last_pos = MAX(c->last_pos, c->iter->beg-1);
                     N = c->iter->end;
                 } else {
-                    N = INT_MAX;
+                    N = HTS_POS_MAX;
                 }
                 N = MIN(N, sam_hdr_tid2len(opts->h, c->last_tid))
                     - c->last_pos;
@@ -2562,7 +2569,7 @@ int append_cons(ctx *c, kstring_t *seq, kstring_t *qual,
         kputsn(ks_qual, ks_qual_l, qual);
 
         // Any post Ns
-        int Nlen = c->end - c->last_pos;
+        hts_pos_t Nlen = c->end - c->last_pos;
         *used_end = seq->l;
         *used_start = 0;
         if (Nlen) {
@@ -2578,6 +2585,46 @@ int append_cons(ctx *c, kstring_t *seq, kstring_t *qual,
     return  0;
 }
 
+static inline int next_interval(hts_reglist_t *rl, int nregs,
+                                int *curr_reg, int *curr_int,
+                                int *chr, hts_pos_t *start, hts_pos_t *end) {
+    if (*curr_reg >= nregs)
+        return -1;
+    *chr   = rl[*curr_reg].tid;
+    *start = rl[*curr_reg].intervals[*curr_int].beg;
+    *end   = rl[*curr_reg].intervals[*curr_int].end;
+    if (++*curr_int >= rl[*curr_reg].count) {
+        *curr_int = 0;
+        (*curr_reg)++;
+    }
+
+    return 0;
+}
+
+// Correct for the uninitialised tid field.  This also filters based on
+// unknown chromosome names.
+static int fill_reglist_tid(sam_hdr_t *h, hts_reglist_t *rl, int *nregs) {
+    int nout = 0;
+    for (int i = 0; i < *nregs; i++) {
+        int tid = bam_name2id(h, rl[i].reg);
+        if (tid < 0) {
+            if (tid < -1) {
+                hts_log_error("Failed to parse header");
+                return -1;
+            }
+            hts_log_warning("Region '%s' specifies an unknown reference name",
+                            rl[i].reg);
+            free(rl[i].intervals);
+        } else {
+            rl[i].tid = tid;
+            rl[nout++] = rl[i];
+        }
+    }
+    *nregs = nout;
+
+    return 0;
+}
+
 // Parallel consensus generation.
 //
 // Executes in the main thread but despatches jobs to the worker thread to
@@ -2588,8 +2635,9 @@ int pileup_loop_parallel(consensus_opts *opts) {
     hts_pos_t end;
     hts_tpool *pool = NULL;
     hts_tpool_process *q = NULL;
-
     hts_pos_t used_start, used_end;
+    hts_reglist_t *reglist = NULL;
+    int nregs = 0, reg_num = 0, reg_ivl = 0;
 
     //printf("Reg %s:%ld-%ld\n", opts->h->target_name[chr], start, end);
     int counter = 0, received = 0;
@@ -2622,18 +2670,56 @@ int pileup_loop_parallel(consensus_opts *opts) {
     hts_tpool_result *r;
     opts->pool = pool;
 
-    do {
+    if (opts->bed) {
+        reglist = bed_reglist(opts->bed, ALL, &nregs);
+        if (!reglist)
+            goto err;
+        if (fill_reglist_tid(opts->h, reglist, &nregs) < 0)
+            goto err;
+        if (nregs <= 0)
+            goto err;
+    }
+
+    for (;;) {
         // next chromosome
         used_start = -1;
         used_end = 0;
+        char name[1024];
 
-        if (opts->reg) {
-            sam_parse_region(opts->h, opts->reg, &chr, &start, &end, 0);
+        if (opts->reg || nregs) {
+            if (opts->reg) {
+                // a single specified region
+                if (!sam_parse_region(opts->h, opts->reg, &chr, &start, &end, 0)) {
+                    print_error("consensus", "Failed to parse region \"%s\"",
+                                opts->reg);
+                    goto err;
+                }
+            } else {
+                // next interval in current or next region
+                if (next_interval(reglist, nregs, &reg_num, &reg_ivl, &chr,
+                                  &start, &end) < 0)
+                    break; // no more regions
+
+                if (start > end || start > opts->h->target_len[chr]) {
+                    fprintf(stderr, "[consensus] Warning: Invalid region \""
+                                "%s:%"PRIhts_pos"-%"PRIhts_pos"\"\n",
+                                sam_hdr_tid2name(opts->h, chr), start, end);
+                    continue;
+                }
+            }
+
             if (start < 0)
                 start = 0;
             if (end > opts->h->target_len[chr])
                 end = opts->h->target_len[chr];
+
+            if (start <= 0 && end >= opts->h->target_len[chr])
+                snprintf(name, 1024, "%s", sam_hdr_tid2name(opts->h, chr));
+            else
+                snprintf(name, 1024, "%s:%"PRIhts_pos"-%"PRIhts_pos,
+                         sam_hdr_tid2name(opts->h, chr), start+1, end);
         } else {
+            // otherwise everything.
             for (; chr < sam_hdr_nref(opts->h); chr++) {
                 hts_itr_t *itr = sam_itr_queryi(tdata[0].idx, chr, 0,
                                                 HTS_POS_MAX);
@@ -2673,6 +2759,7 @@ int pileup_loop_parallel(consensus_opts *opts) {
 
             start = 0;
             end = opts->h->target_len[chr];
+            snprintf(name, 1024, "%s", sam_hdr_tid2name(opts->h, chr));
         }
 
         hts_pos_t sub_start = start;
@@ -2751,17 +2838,31 @@ int pileup_loop_parallel(consensus_opts *opts) {
         }
 
         if (opts->fmt != PILEUP)
-            dump_fastq(opts, sam_hdr_tid2name(opts->h, chr),
-                       seq.s, used_end, qual.s, used_end);
+            dump_fastq(opts, name, seq.s, used_end, qual.s, used_end);
 
         ks_free(&seq);
         ks_free(&qual);
 
-    } while (!opts->reg && ++chr < sam_hdr_nref(opts->h));
+        if (opts->reg)
+            break;
+
+        if (reglist) {
+            // bed file
+            if (reg_num >= nregs)
+                break;
+        } else {
+            // no region, iterate over whole file
+            if (++chr >= sam_hdr_nref(opts->h))
+                break;
+        }
+    }
 
  ret_0:
     err = 0;
  err:
+
+    if (reglist)
+        hts_reglist_free(reglist, nregs);
 
     // Discard any inflight jobs.  Can this happen?  Perhaps on error.
     while (received < counter) {
@@ -2817,7 +2918,19 @@ int pileup_loop_serial(consensus_opts *opts) {
         .iter        = NULL
     };
 
-    if (opts->reg) {
+    hts_reglist_t *reglist = NULL;
+    int nregs = 0, reg_num = 0, reg_ivl = 0;
+
+    if (opts->bed) {
+        reglist = bed_reglist(opts->bed, ALL, &nregs);
+        if (!reglist)
+            goto err;
+        if (fill_reglist_tid(opts->h, reglist, &nregs) < 0)
+            goto err;
+        if (nregs <= 0)
+            goto err;
+
+    } else if (opts->reg) {
         c.iter = sam_itr_querys(opts->tdata[0].idx, opts->h, opts->reg);
         if (!c.iter) {
             print_error("consensus", "Failed to parse region \"%s\"",
@@ -2826,82 +2939,139 @@ int pileup_loop_serial(consensus_opts *opts) {
         }
     }
 
-    if (opts->fmt == PILEUP) {
-        if (pileup_loop(tdata->fp, opts->h, readaln2,
-                        opts->mode != MODE_SIMPLE ? nm_init : NULL,
-                        basic_pileup,
-                        opts->mode != MODE_SIMPLE ? nm_free : NULL,
-                        &c) < 0)
-            goto err;
+    do {
+        if (reglist) {
+            if (c.iter)
+                hts_itr_destroy(c.iter);
 
-        if (opts->all_bases) {
-            int tid = c.iter ? c.iter->tid : c.last_tid;
-            int len = sam_hdr_tid2len(opts->h, tid);
-            int pos = c.last_pos;
-            if (c.iter) {
-                len = MIN(c.iter->end, len);
-                pos = MAX(c.iter->beg, pos);
-            }
-            if (empty_pileup2(&c, opts->h, tid, 0, pos, len) < 0)
-                goto err;
-        }
-        while (!c.iter && opts->all_bases > 1 &&
-               ++c.last_tid < opts->h->n_targets) {
-            int len = sam_hdr_tid2len(opts->h, c.last_tid);
-            if (empty_pileup2(&c, opts->h, c.last_tid, 0, 0, len) < 0)
-                goto err;
-        }
-    } else {
-        if (pileup_loop(tdata->fp, opts->h, readaln2,
-                        opts->mode != MODE_SIMPLE ? nm_init : NULL,
-                        basic_fasta,
-                        opts->mode != MODE_SIMPLE ? nm_free : NULL,
-                        &c) < 0)
-            goto err;
+            // Reset the context
+            ks_clear(&c.ks_pileup);
+            ks_clear(&c.ks_ins_seq);
+            ks_clear(&c.ks_ins_qual);
+            c.last_tid = c.last_pos = c.ref_tid = -1;
+            c.iter = NULL;
 
-    next_ref_q:
-        if (opts->all_bases) {
-            // fill out terminator
-            int tid = c.iter ? c.iter->tid : c.last_tid;
-            int len = sam_hdr_tid2len(opts->h, tid);
-            int pos = c.last_pos;
-            if (c.iter) {
-                len = MIN(c.iter->end, len);
-                pos = MAX(c.iter->beg, pos);
-                c.last_tid = c.iter->tid;
+            int chr;
+            hts_pos_t start, end;
+            if (next_interval(reglist, nregs, &reg_num, &reg_ivl, &chr,
+                              &start, &end) < 0)
+                break; // no more regions
+
+
+            if (start > end || start > opts->h->target_len[chr]) {
+                    fprintf(stderr, "[consensus] Warning: Invalid region \""
+                            "%s:%"PRIhts_pos"-%"PRIhts_pos"\"\n",
+                            sam_hdr_tid2name(opts->h, chr), start, end);
+                    continue;
             }
-            if (pos < len) {
-                if (update_ref(&c, c.last_tid) < 0)
-                    goto err;
-                if (ks_expand(&c.ks_ins_seq,  len-pos+1) < 0)
-                    goto err;
-                if (ks_expand(&c.ks_ins_qual, len-pos+1) < 0)
-                    goto err;
-                while (pos++ < len) {
-                    c.ks_ins_seq.s [c.ks_ins_seq.l++]  =
-                        c.ref ? c.ref[pos-1] : 'N';
-                    c.ks_ins_qual.s[c.ks_ins_qual.l++] =
-                        (c.ref ? opts->ref_qual : 0) + '!';
+
+            if (start < 0)
+                start = 0;
+            if (end > opts->h->target_len[chr])
+                end = opts->h->target_len[chr];
+
+            c.iter = sam_itr_queryi(opts->tdata[0].idx, chr, start, end);
+            if (!c.iter) {
+                print_error("consensus", "Failed to find region \""
+                            "%s:%"PRIhts_pos"-%"PRIhts_pos"\"",
+                            sam_hdr_tid2name(opts->h, chr), start, end);
+                goto err;
+            }
+            c.last_pos = c.iter->beg;
+        }
+
+        if (opts->fmt == PILEUP) {
+            if (pileup_loop(tdata->fp, opts->h, readaln2,
+                            opts->mode != MODE_SIMPLE ? nm_init : NULL,
+                            basic_pileup,
+                            opts->mode != MODE_SIMPLE ? nm_free : NULL,
+                            &c) < 0)
+                goto err;
+
+            if (opts->all_bases) {
+                int tid = c.iter ? c.iter->tid : c.last_tid;
+                hts_pos_t len = sam_hdr_tid2len(opts->h, tid);
+                hts_pos_t pos = c.last_pos;
+                if (c.iter) {
+                    len = MIN(c.iter->end, len);
+                    pos = MAX(c.iter->beg, pos);
                 }
-                c.ks_ins_seq.s [c.ks_ins_seq.l] = 0;
-                c.ks_ins_qual.s[c.ks_ins_qual.l] = 0;
+                if (empty_pileup2(&c, opts->h, tid, 0, pos, len) < 0)
+                    goto err;
+            }
+            while (!c.iter && opts->all_bases > 1 &&
+                   ++c.last_tid < opts->h->n_targets) {
+                int len = sam_hdr_tid2len(opts->h, c.last_tid);
+                if (empty_pileup2(&c, opts->h, c.last_tid, 0, 0, len) < 0)
+                    goto err;
+            }
+        } else {
+            if (pileup_loop(tdata->fp, opts->h, readaln2,
+                            opts->mode != MODE_SIMPLE ? nm_init : NULL,
+                            basic_fasta,
+                            opts->mode != MODE_SIMPLE ? nm_free : NULL,
+                            &c) < 0)
+                goto err;
+
+        next_ref_q:
+            if (opts->all_bases) {
+                // fill out terminator
+                int tid = c.iter ? c.iter->tid : c.last_tid;
+                hts_pos_t len = sam_hdr_tid2len(opts->h, tid);
+                hts_pos_t pos = c.last_pos;
+                if (c.iter) {
+                    len = MIN(c.iter->end, len);
+                    pos = MAX(c.iter->beg, pos);
+                    c.last_tid = c.iter->tid;
+                }
+                if (pos < len) {
+                    if (update_ref(&c, c.last_tid) < 0)
+                        goto err;
+                    if (ks_expand(&c.ks_ins_seq,  len-pos+1) < 0)
+                        goto err;
+                    if (ks_expand(&c.ks_ins_qual, len-pos+1) < 0)
+                        goto err;
+                    while (pos++ < len) {
+                        c.ks_ins_seq.s [c.ks_ins_seq.l++]  =
+                            c.ref ? c.ref[pos-1] : 'N';
+                        c.ks_ins_qual.s[c.ks_ins_qual.l++] =
+                            (c.ref ? opts->ref_qual : 0) + '!';
+                    }
+                    c.ks_ins_seq.s [c.ks_ins_seq.l] = 0;
+                    c.ks_ins_qual.s[c.ks_ins_qual.l] = 0;
+                }
+            }
+            if (c.last_tid >= 0) {
+                char name[1024];
+                int tid = c.iter ? c.iter->tid : c.last_tid;
+                int len = sam_hdr_tid2len(opts->h, tid);
+                if (c.iter && (c.iter->beg > 0 || c.iter->end < len))
+                    snprintf(name, 1024, "%s:%"PRIhts_pos"-%"PRIhts_pos,
+                             sam_hdr_tid2name(opts->h, c.last_tid),
+                             c.iter->beg+1, MIN(c.iter->end,len));
+                else
+                    snprintf(name, 1024, "%s",
+                             sam_hdr_tid2name(opts->h, c.last_tid));
+
+                dump_fastq(opts, name,
+                           c.ks_ins_seq.s,  c.ks_ins_seq.l,
+                           c.ks_ins_qual.s, c.ks_ins_qual.l);
+            }
+
+            if (!c.iter && opts->all_bases > 1 &&
+                ++c.last_tid < opts->h->n_targets) {
+                c.last_pos = 0;
+                c.ks_ins_seq.l = c.ks_ins_qual.l = 0;
+                goto next_ref_q;
             }
         }
-        if (c.last_tid >= 0)
-            dump_fastq(opts, sam_hdr_tid2name(opts->h, c.last_tid),
-                       c.ks_ins_seq.s,  c.ks_ins_seq.l,
-                       c.ks_ins_qual.s, c.ks_ins_qual.l);
-
-        if (!c.iter && opts->all_bases > 1 &&
-            ++c.last_tid < opts->h->n_targets) {
-            c.last_pos = 0;
-            c.ks_ins_seq.l = c.ks_ins_qual.l = 0;
-            goto next_ref_q;
-        }
-    }
+    } while (reg_num < nregs);  // A non-loop only if no BED file given
 
     ret = 0;
+
  err:
+    if (reglist)
+        hts_reglist_free(reglist, nregs);
 
     ks_free(&c.ks_pileup);
     ks_free(&c.ks_ins_seq);
@@ -2919,6 +3089,8 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "Usage: samtools consensus [options] <in.bam>\n");
     fprintf(fp, "\nOptions:\n");
     fprintf(fp, "  -r, --region REG      Limit query to REG. Requires an index\n");
+    fprintf(fp, "      --regions-file FILE\n"
+                "                        Output regions listed in the BED FILE\n");
     fprintf(fp, "  -f, --format FMT      Output in format FASTA, FASTQ or PILEUP [FASTA]\n");
     fprintf(fp, "  -l, --line-len INT    Wrap FASTA/Q at line length INT [70]\n");
     fprintf(fp, "  -o, --output FILE     Output consensus to FILE\n");
@@ -3019,6 +3191,8 @@ int main_consensus(int argc, char **argv) {
         .homopoly_redux = 0.01,
         .ref_qual     = 0,
         .span         = 500000,
+        .reg          = NULL,
+        .bed          = NULL,
 
         // Internal state
         .fp_out       = stdout,
@@ -3046,6 +3220,7 @@ int main_consensus(int argc, char **argv) {
         {"call-fract",         required_argument, NULL, 'c'},
         {"het-fract",          required_argument, NULL, 'H'},
         {"region",             required_argument, NULL, 'r'},
+        {"regions-file",       required_argument, NULL, 'r'+1000},
         {"format",             required_argument, NULL, 'f'},
         {"cutoff",             required_argument, NULL, 'C'},
         {"ambig",              no_argument,       NULL, 'A'},
@@ -3090,7 +3265,29 @@ int main_consensus(int argc, char **argv) {
         case 'd': opts.min_depth = atoi(optarg); break;
         case 'c': opts.call_fract = atof(optarg); break;
         case 'H': opts.het_fract = atof(optarg); break;
-        case 'r': opts.reg = optarg; break;
+
+        case 'r':
+            if (opts.bed) {
+                print_error("consensus", "option -r and --regions-file "
+                            "are incompatible");
+                return 1;
+            }
+            opts.reg = optarg;
+            break;
+
+        case 'r'+1000:
+            if (opts.reg) {
+                print_error("consensus", "option -r and --regions-file "
+                            "are incompatible");
+                return 1;
+            }
+            if (!(opts.bed = bed_read(optarg))) {
+                print_error_errno("consensus", "Could not read file \"%s\"",
+                                  optarg);
+                return 1;
+            }
+            break;
+
         case 'C': opts.cons_cutoff = atoi(optarg); break;
         case 'A': opts.ambig = 1; break;
         case 'p': opts.homopoly_fix = P_HOMOPOLY; break;
@@ -3340,7 +3537,7 @@ int main_consensus(int argc, char **argv) {
         goto err;
     }
 
-    if (opts.reg) {
+    if (opts.reg || opts.bed) {
         opts.tdata[0].idx = sam_index_load(opts.tdata[0].fp, argv[optind]);
         if (!opts.tdata[0].idx) {
             print_error("consensus", "Cannot load index for input file \"%s\"",
@@ -3394,6 +3591,9 @@ int main_consensus(int argc, char **argv) {
         print_error("consensus", "failed");
 
     free(opts.tdata);
+
+    if (opts.bed)
+        bed_destroy(opts.bed);
 
     return ret;
 }

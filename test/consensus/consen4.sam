@@ -1,0 +1,29 @@
+@SQ	SN:c1	LN:10	DS:ACGTAACCGT
+@SQ	SN:c2	LN:10	DS:-AGTAACCT-
+@SQ	SN:c3	LN:10
+@SQ	SN:c4	LN:10
+@SQ	SN:c5	LN:10	DS:CACG--TATC
+s1	0	c1	1	60	1M	*	0	0	A	I
+s2	0	c1	2	60	1M	*	0	0	C	I
+s3	0	c1	3	60	1M	*	0	0	G	I
+s4	0	c1	4	60	1M	*	0	0	T	I
+s5	0	c1	5	60	1M	*	0	0	A	I
+s6	0	c1	6	60	1M	*	0	0	A	I
+s7	0	c1	7	60	1M	*	0	0	C	I
+s8	0	c1	8	60	1M	*	0	0	C	I
+s9	0	c1	9	60	1M	*	0	0	G	I
+s0	0	c1	10	60	1M	*	0	0	T	I
+t2	0	c2	2	60	1M	*	0	0	A	I
+t3	0	c2	3	60	1M	*	0	0	G	I
+t4	0	c2	4	60	1M	*	0	0	T	I
+t5	0	c2	5	60	1M	*	0	0	A	I
+t6	0	c2	6	60	1M	*	0	0	A	I
+t7	0	c2	7	60	1M	*	0	0	C	I
+t8	0	c2	8	60	1M	*	0	0	C	I
+t9	0	c2	9	60	1M	*	0	0	T	I
+u1	0	c5	1	60	2M	*	0	0	CA	AB
+u2	0	c5	2	60	2M	*	0	0	AC	AB
+u3	0	c5	3	60	2M	*	0	0	CG	AB
+u7	0	c5	7	60	2M	*	0	0	TA	AB
+u8	0	c5	8	60	2M	*	0	0	AT	AB
+u9	0	c5	9	60	2M	*	0	0	TC	AB

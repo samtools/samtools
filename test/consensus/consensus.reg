@@ -6,6 +6,7 @@ INIT x $samtools view --write-index consen1b.sam -o consen1b.bam
 INIT x $samtools view --write-index consen1c.sam -o consen1c.bam
 INIT x $samtools view --write-index consen2.sam -o consen2.bam
 INIT x $samtools view --write-index consen3.sam -o consen3.bam
+INIT x $samtools view --write-index consen4.sam -o consen4.bam
 
 INIT x $samtools view --write-index consen2.bam -o consen2.tmp.bam
 
@@ -110,8 +111,8 @@ P empty.out $samtools consensus $PARAM -f fastq  consen2.tmp.bam -m simple    -r
 P empty.out $samtools consensus $PARAM -f fastq  consen2.tmp.bam -m simple    -r c2:13-14
 P empty.out $samtools consensus $PARAM -f pileup consen2.tmp.bam -m simple    -r c2:1-2
 P empty.out $samtools consensus $PARAM -f pileup consen2.tmp.bam -m simple    -r c2:13-14
-P 14q.out   $samtools consensus $PARAM -f fastq  consen2.tmp.bam -m simple -a -r c2:1-2
-P 14q.out   $samtools consensus $PARAM -f fastq  consen2.tmp.bam -m simple -a -r c2:14-15
+P 14q1.out   $samtools consensus $PARAM -f fastq  consen2.tmp.bam -m simple -a -r c2:1-2
+P 14q2.out   $samtools consensus $PARAM -f fastq  consen2.tmp.bam -m simple -a -r c2:14-15
 P 14p.out   $samtools consensus $PARAM -f pileup consen2.tmp.bam -m simple -a -r c2:1-2
 P 15p.out   $samtools consensus $PARAM -f pileup consen2.tmp.bam -m simple -a -r c2:14-15
 
@@ -163,3 +164,11 @@ P 41.out $samtools consensus $PARAM -a -f pileup --show-del yes --show-ins no  -
 P 41T.out $samtools consensus $PARAM -a -f pileup --show-del yes --show-ins no  -m bayesian -C0 --ref-qual 20 consen1c.bam -T consen1c.fa
 P 42.out $samtools consensus $PARAM -aa -f pileup --show-del yes --show-ins no  -m bayesian -C0 consen1c.bam
 P 42T.out $samtools consensus $PARAM -aa -f pileup --show-del yes --show-ins no  -m bayesian -C0 --ref-qual 20 consen1c.bam -T consen1c.fa
+
+#-----------------------------------------------------------------------------
+# Using a bed file
+
+P bf1.out $samtools consensus $PARAM    --regions-file consen4.bed consen4.bam
+P bf2.out $samtools consensus $PARAM -a --regions-file consen4.bed consen4.bam
+P bp1.out $samtools consensus $PARAM -f pileup    --regions-file consen4.bed consen4.bam
+P bp2.out $samtools consensus $PARAM -f pileup -a --regions-file consen4.bed consen4.bam

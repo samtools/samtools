@@ -580,21 +580,6 @@ void *bed_hash_regions(void *reg_hash, char **regs, int first, int last, int *op
     return NULL;
 }
 
-const char* bed_get(void *reg_hash, int i, int filter) {
-
-    reghash_t *h;
-    bed_reglist_t *p;
-
-    if (!reg_hash)
-        return NULL;
-
-    h = (reghash_t *)reg_hash;
-    if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || (p->filter < filter))
-        return NULL;
-
-    return kh_key(h, i);
-}
-
 /**
  * Create a region list from a the region hash table
  * @param  reg_hash  The region hash table
