@@ -401,9 +401,9 @@ static int mplp_func(void *data, bam1_t *b)
     mplp_aux_t *ma = (mplp_aux_t*)data;
     int ret, skip = 0;
     hts_pos_t ref_len;
+    int has_ref = 0, last_tid = -1;
 
     do {
-        int has_ref;
         ret = ma->iter? sam_itr_next(ma->fp, ma->iter, b) : sam_read1(ma->fp, ma->h, b);
         if (ret < 0) break;
         // The 'B' cigar operation is not part of the specification, considering as obsolete.
@@ -431,7 +431,10 @@ static int mplp_func(void *data, bam1_t *b)
         }
 
         if (ma->conf->fai && b->core.tid >= 0) {
-            has_ref = mplp_get_ref(ma, b->core.tid, &ref, &ref_len);
+            if (!has_ref || last_tid != b->core.tid) {
+                has_ref = mplp_get_ref(ma, b->core.tid, &ref, &ref_len);
+                last_tid = b->core.tid;
+            }
             if (has_ref && ref_len <= b->core.pos) { // exclude reads outside of the reference sequence
                 fprintf(stderr,"[%s] Skipping because %"PRIhts_pos" is outside of %"PRIhts_pos" [ref:%d]\n",
                         __func__, (int64_t) b->core.pos, ref_len, b->core.tid);
@@ -591,7 +594,7 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
 
     bam_mplp_set_maxcnt(iter, max_depth);
     int ret;
-    int last_tid = -1;
+    int last_tid = -1, got_ref = 0;
     hts_pos_t last_pos = -1;
     int one_seq = 0;
 
@@ -615,15 +618,19 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
                     }
                 }
                 last_tid++;
+                got_ref = 0;
                 last_pos = -1;
                 if (conf->all < 2)
                     break;
                 if (tid > last_tid)
                     // multiple missing references and -aa used
-                    mplp_get_ref(data[0], last_tid, &ref, &ref_len);
+                    got_ref = mplp_get_ref(data[0], last_tid, &ref, &ref_len);
             }
         }
-        mplp_get_ref(data[0], tid, &ref, &ref_len);
+        if (!got_ref || last_tid != tid) {
+            got_ref = mplp_get_ref(data[0], tid, &ref, &ref_len);
+            last_tid = tid;
+        }
 
         if (conf->all) {
             // Deal with missing portion of current tid
@@ -635,7 +642,6 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
                 fwrite(buf.s, 1, buf.l, pileup_fp);
                 ks_clear(&buf);
             }
-            last_tid = tid;
             last_pos = pos;
         }
         if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, sam_hdr_tid2name(h, tid), pos, pos+1)) continue;
