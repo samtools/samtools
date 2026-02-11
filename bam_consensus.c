@@ -2278,7 +2278,7 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         if (p->next && p->next->next)
             _mm_prefetch(p->next->next, _MM_HINT_T0);
         if (p->b_is_rev) {
-            *cp++ = p->base == '*' ? '#' : tolower(p->base);
+            *cp++ = p->base == '*' ? '#' : tolower_c(p->base);
         } else {
             *cp++ = p->base;
         }
