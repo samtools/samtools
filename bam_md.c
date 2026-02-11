@@ -103,7 +103,7 @@ static int bam_fillmd1_core(const char *ref_name, bam1_t *b, char *ref,
                     ++matched;
                 } else {
                     err |= kputw(matched, &str) < 0;
-                    err |= kputc(toupper(ref[rpos+j]), &str) < 0;
+                    err |= kputc(toupper_c(ref[rpos+j]), &str) < 0;
                     matched = 0; ++nm;
                 }
             }
@@ -114,7 +114,7 @@ static int bam_fillmd1_core(const char *ref_name, bam1_t *b, char *ref,
             err |= kputc('^', &str) < 0;
             for (j = 0; j < oplen; ++j) {
                 if (rpos+j >= ref_len || ref[rpos+j] == '\0') break;
-                err |= kputc(toupper(ref[rpos+j]), &str) < 0;
+                err |= kputc(toupper_c(ref[rpos+j]), &str) < 0;
             }
             matched = 0;
             rpos += j; nm += j;
@@ -180,7 +180,7 @@ static int bam_fillmd1_core(const char *ref_name, bam1_t *b, char *ref,
             int is_diff = 0;
             if (strlen((char*)old_md+1) == str.l) {
                 for (i = 0; i < str.l; ++i)
-                    if (toupper(old_md[i+1]) != toupper(str.s[i]))
+                    if (toupper(old_md[i+1]) != toupper_c(str.s[i]))
                         break;
                 if (i < str.l) is_diff = 1;
             } else is_diff = 1;

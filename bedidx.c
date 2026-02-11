@@ -36,6 +36,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/ksort.h"
 
 #include "htslib/kseq.h"
+#include "sam_utils.h"
+
 KSTREAM_INIT(gzFile, gzread, 8192)
 
 static inline int lt_pair_pos(hts_pair_pos_t a, hts_pair_pos_t b) {
@@ -280,11 +282,11 @@ void *bed_read(const char *fn)
             continue; // skip blank lines
 
         line++;
-        while (*ref && isspace(*ref)) ref++;
+        while (*ref && isspace_c(*ref)) ref++;
         if ('\0' == *ref) continue;  // Skip blank lines
         if ('#'  == *ref) continue;  // Skip BED file comments
         ref_end = ref;   // look for the end of the reference name
-        while (*ref_end && !isspace(*ref_end)) ref_end++;
+        while (*ref_end && !isspace_c(*ref_end)) ref_end++;
         if ('\0' != *ref_end) {
             *ref_end = '\0';  // terminate ref and look for start, end
             num = sscanf(ref_end + 1, "%"SCNu64" %"SCNu64, &beg, &end);
