@@ -25,6 +25,7 @@ DEALINGS IN THE SOFTWARE.  */
 #ifndef SAM_UTIL_H
 #define SAM_UTIL_H
 
+#include <ctype.h>
 #include "htslib/khash.h"
 #include "htslib/sam.h"
 
@@ -77,6 +78,21 @@ void release_autoflush(htsFile *fp);
  *         NULL on failure.
  */
 char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header);
+
+// <ctype.h> wrappers, borrowed from htslib's textutils_internal.h
+// The <ctype.h> functions operate on ints such as are returned by fgetc(),
+// i.e., characters represented as unsigned-char-valued ints, or EOF.
+// To operate on plain chars (and to avoid warnings on some platforms),
+// technically one must cast to unsigned char everywhere (see CERT STR37-C)
+// or less painfully use these *_c() functions that operate on plain chars
+// (but not EOF, which must be considered separately where it is applicable).
+static inline int isalpha_c(char c) { return isalpha((unsigned char) c); }
+static inline int isdigit_c(char c) { return isdigit((unsigned char) c); }
+static inline int isprint_c(char c) { return isprint((unsigned char) c); }
+static inline int isspace_c(char c) { return isspace((unsigned char) c); }
+static inline char tolower_c(char c) { return tolower((unsigned char) c); }
+static inline char toupper_c(char c) { return toupper((unsigned char) c); }
+
 
 #endif  //SAM_UTIL_H
 

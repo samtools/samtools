@@ -77,7 +77,7 @@ static void write_dict(const char *fn, args_t *args)
     while ((l = kseq_read(seq)) >= 0) {
         for (i = k = 0; i < seq->seq.l; ++i) {
             if (seq->seq.s[i] >= '!' && seq->seq.s[i] <= '~')
-                seq->seq.s[k++] = toupper(seq->seq.s[i]);
+                seq->seq.s[k++] = toupper_c(seq->seq.s[i]);
         }
         hts_md5_reset(md5);
         hts_md5_update(md5, (unsigned char*)seq->seq.s, k);
