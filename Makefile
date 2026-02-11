@@ -196,7 +196,7 @@ bam_flags.o: bam_flags.c config.h $(htslib_sam_h) $(samtools_h)
 bamshuf.o: bamshuf.c config.h $(htslib_sam_h) $(htslib_hts_h) $(htslib_ksort_h) $(samtools_h) $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_khash_h)
 bamtk.o: bamtk.c config.h $(htslib_hts_h) $(htslib_hfile_h) $(samtools_h) version.h
 bedcov.o: bedcov.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h) $(htslib_kseq_h)
-bedidx.o: bedidx.c config.h $(bedidx_h) $(htslib_ksort_h) $(htslib_kseq_h) $(htslib_khash_h)
+bedidx.o: bedidx.c config.h $(bedidx_h) $(htslib_ksort_h) $(htslib_kseq_h) $(htslib_khash_h) $(sam_utils_h)
 consensus_pileup.o: consensus_pileup.c config.h $(htslib_sam_h) $(consensus_pileup_h)
 cram_size.o: cram_size.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(htslib_kstring_h) $(htslib_khash_h) $(samtools_h) $(sam_opts_h) $(htslib_hfile_h)
 cut_target.o: cut_target.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(samtools_h) $(sam_opts_h)
@@ -310,7 +310,7 @@ misc/wgsim: misc/wgsim.o $(HTSLIB)
 	$(CC) $(ALL_LDFLAGS) -o $@ misc/wgsim.o -lm $(HTSLIB_LIB) $(ALL_LIBS)
 
 misc/ace2sam.o: misc/ace2sam.c config.h $(htslib_kstring_h) $(htslib_kseq_h)
-misc/md5fa.o: misc/md5fa.c config.h $(htslib_kseq_h) $(htslib_hts_h)
+misc/md5fa.o: misc/md5fa.c config.h $(htslib_kseq_h) $(htslib_hts_h) $(sam_utils_h)
 misc/md5sum-lite.o: misc/md5sum-lite.c config.h $(htslib_hts_h)
 misc/wgsim.o: misc/wgsim.c config.h version.h $(htslib_kseq_h) $(htslib_hts_os_h)
 

@@ -135,7 +135,7 @@ int pileup_seq(kstring_t *ks_seq, const bam_pileup1_t *p, hts_pos_t pos,
                     if (ks->s[j] == '[') in_mod = 1;
                     else if (ks->s[j] == ']') in_mod = 0;
                     err |= kputc_(ks->s[j] != '*'
-                                  ? (in_mod ? ks->s[j] : tolower(ks->s[j]))
+                                  ? (in_mod ? ks->s[j] : tolower_c(ks->s[j]))
                                   : pad, ks_seq) < 0;
                 }
             } else {
@@ -143,7 +143,7 @@ int pileup_seq(kstring_t *ks_seq, const bam_pileup1_t *p, hts_pos_t pos,
                 for (j = 0; j < ks->l; j++) {
                     if (ks->s[j] == '[') in_mod = 1;
                     if (ks->s[j] == ']') in_mod = 0;
-                    err |= kputc_(in_mod ? ks->s[j] : toupper(ks->s[j]),
+                    err |= kputc_(in_mod ? ks->s[j] : toupper_c(ks->s[j]),
                                   ks_seq) < 0;
                 }
             }
@@ -156,7 +156,7 @@ int pileup_seq(kstring_t *ks_seq, const bam_pileup1_t *p, hts_pos_t pos,
         if (!no_del) {
             for (j = 1; j <= del_len; ++j) {
                 int c = (ref && (int)pos+j < ref_len)? ref[pos+j] : 'N';
-                err |= kputc_(bam_is_rev(p->b)? tolower(c) : toupper(c),
+                err |= kputc_(bam_is_rev(p->b)? tolower_c(c) : toupper_c(c),
                               ks_seq) < 0;
             }
         }
@@ -908,7 +908,7 @@ int read_file_list(const char *file_list,int *n,char **argv[])
     {
         // allow empty lines and trailing spaces
         len = strlen(buf);
-        while ( len>0 && isspace(buf[len-1]) ) len--;
+        while ( len>0 && isspace_c(buf[len-1]) ) len--;
         if ( !len ) continue;
 
         // check sanity of the file list
@@ -918,7 +918,7 @@ int read_file_list(const char *file_list,int *n,char **argv[])
             // no such file, check if it is safe to print its name
             int i, safe_to_print = 1;
             for (i=0; i<len; i++)
-                if (!isprint(buf[i])) { safe_to_print = 0; break; }
+                if (!isprint_c(buf[i])) { safe_to_print = 0; break; }
             if ( safe_to_print )
                 fprintf(stderr,"The file list \"%s\" appears broken, could not locate: %s\n", file_list,buf);
             else

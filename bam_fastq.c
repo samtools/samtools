@@ -842,7 +842,7 @@ int output_index(bam1_t *b1, bam1_t *b2, bam2fq_state_t *state,
             break; // ran out of index-format
 
         long len, rem = 0;
-        if (isdigit(*ifmt)) {
+        if (isdigit_c(*ifmt)) {
             rem = len = strtol(ifmt, &ifmt, 10);
         } else {
             ifmt++;
@@ -851,10 +851,10 @@ int output_index(bam1_t *b1, bam1_t *b2, bam2fq_state_t *state,
 
         char *bc_end = bc, *qt_end = qt;
         if (qt) {
-            while (len ? *bc_end && rem-- : isalpha(*bc_end))
+            while (len ? *bc_end && rem-- : isalpha_c(*bc_end))
                 bc_end++, qt_end++;
         } else {
-            while (len ? *bc_end && rem-- : isalpha(*bc_end))
+            while (len ? *bc_end && rem-- : isalpha_c(*bc_end))
                 bc_end++;
         }
 

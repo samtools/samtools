@@ -1879,7 +1879,7 @@ static void init_regions(stats_t *stats, const char *file, stats_info_t* info)
         if ( line.s[0] == '#' ) continue;
 
         int i = 0;
-        while ( i<line.l && !isspace(line.s[i]) ) i++;
+        while ( i<line.l && !isspace_c(line.s[i]) ) i++;
         if ( i>=line.l ) error("Could not parse the file: %s [%s]\n", file, line.s);
         line.s[i] = '\0';
 

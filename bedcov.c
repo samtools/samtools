@@ -227,7 +227,7 @@ int main_bedcov(int argc, char *argv[])
            be followed by a tab in that case). */
         if (strncmp(str.s, "track ", 6) == 0) continue;
         if (strncmp(str.s, "browser ", 8) == 0) continue;
-        for (p = q = str.s; *p && !isspace(*p); ++p);
+        for (p = q = str.s; *p && !isspace_c(*p); ++p);
         if (*p == 0) goto bed_error;
         char c = *p;
         *p = 0; tid = bam_name2id(aux[0]->header, q); *p = c;
