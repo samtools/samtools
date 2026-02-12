@@ -2708,7 +2708,7 @@ int pileup_loop_parallel(consensus_opts *opts) {
                 ctx *c = (ctx *)hts_tpool_result_data(r);
                 if (opts->fmt == PILEUP) {
                     kstring_t *ks = &c->ks_pileup;
-                    if (fwrite(ks->s, 1, ks->l, opts->fp_out) != ks->l)
+                    if (ks->l && fwrite(ks->s, 1, ks->l, opts->fp_out)!=ks->l)
                         goto err;
                     ks_free(ks);
                 } else {
