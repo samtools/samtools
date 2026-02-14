@@ -3087,6 +3087,10 @@ sub test_import
     test_cmd($opts, out=>'import/3.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG test/import/3.interleaved.fq -i");
 
+    # Single-end with CASAVA tags; should have flag 4 (not 77) and BC tag
+    test_cmd($opts, out=>'import/6.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --no-PG -i -0 test/import/6.single_casava.fq");
+
     # Non aux-tag comments (we don't use these, but also shouldn't choke).
     test_cmd($opts, out=>'import/4.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG test/import/4.aux.fq -T \"*\"");
