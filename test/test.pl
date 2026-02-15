@@ -3114,6 +3114,26 @@ sub test_import
              cmd=>"$$opts{bin}/samtools import --no-PG -U test/bam2fq/UMI.fq.expected");
     test_cmd($opts, out=>'import/UMI-OX.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG -U --UMI-tag OX test/bam2fq/UMI.fq.expected");
+
+    # Read name consistency checking
+    # Two-file mode: R1 vs R2 name mismatch should fail
+    test_cmd($opts, out=>'dat/empty.expected',
+             cmd=>"$$opts{bin}/samtools import --no-PG -1 test/import/mismatch-r1.fq -2 test/import/mismatch-r2.fq -o /dev/null",
+             want_fail=>1);
+
+    # Two-file mode with --no-name-check should succeed
+    test_cmd($opts, out=>'dat/empty.expected',
+             cmd=>"$$opts{bin}/samtools import --no-PG --no-name-check -1 test/import/mismatch-r1.fq -2 test/import/mismatch-r2.fq -o /dev/null");
+
+    # Interleaved mode: name mismatch should fail
+    test_cmd($opts, out=>'dat/empty.expected',
+             cmd=>"$$opts{bin}/samtools import --no-PG -s test/import/mismatch-interleaved.fq -o /dev/null",
+             want_fail=>1);
+
+    # Index vs main read name mismatch should fail
+    test_cmd($opts, out=>'dat/empty.expected',
+             cmd=>"$$opts{bin}/samtools import --no-PG --i1 test/import/mismatch-i1-swap.fq --r1 test/import/5-r1.fq --r2 test/import/5-r2.fq -o /dev/null",
+             want_fail=>1);
 }
 
 sub test_bam2fq
