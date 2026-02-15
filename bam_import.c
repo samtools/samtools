@@ -354,24 +354,40 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
                 const char *qname = bam_get_qname(b);
 
                 if (ids[i] == FQ_SINGLE) {
-                    // Interleaved: check mate name against saved name
+                    // Interleaved: check mate grouping
                     int is_r1 = b->core.flag & BAM_FREAD1;
                     int is_r2 = b->core.flag & BAM_FREAD2;
-                    int mate_flag = is_r1 ? BAM_FREAD2 : BAM_FREAD1;
-                    if ((is_r1 || is_r2)
-                        && check_name.l > 0
-                        && (check_name_flag & mate_flag)) {
-                        if (strcmp(qname, check_name.s) != 0) {
+                    if ((is_r1 || is_r2) && check_name.l > 0) {
+                        int mate_flag = is_r1 ? BAM_FREAD2
+                                              : BAM_FREAD1;
+                        if (check_name_flag & mate_flag) {
+                            // Expected mate direction: names
+                            // must match
+                            if (strcmp(qname, check_name.s) != 0) {
+                                print_error("import",
+                                    "read name mismatch in "
+                                    "interleaved input at record "
+                                    "%"PRIu64": \"%s\" vs \"%s\"",
+                                    iter_count, check_name.s,
+                                    qname);
+                                ret = -1;
+                                goto err;
+                            }
+                            check_name.l = 0;
+                            check_name_flag = 0;
+                        } else {
+                            // Same direction: not properly
+                            // interleaved
                             print_error("import",
-                                "read name mismatch in interleaved "
-                                "input at record %"PRIu64
-                                ": \"%s\" vs \"%s\"",
+                                "adjacent read%d records in "
+                                "interleaved input at record "
+                                "%"PRIu64": \"%s\" followed "
+                                "by \"%s\"",
+                                is_r1 ? 1 : 2,
                                 iter_count, check_name.s, qname);
                             ret = -1;
                             goto err;
                         }
-                        check_name.l = 0;
-                        check_name_flag = 0;
                     } else if (is_r1 || is_r2) {
                         check_name.l = 0;
                         kputs(qname, &check_name);

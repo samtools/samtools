@@ -3030,10 +3030,12 @@ sub test_import
              out_map=>{"0.fq" => 'bam2fq/1.1.fq.expected'},
              cmd=>"$$opts{bin}/samtools import --no-PG -s test/bam2fq/1.1.fq.expected  | $$opts{bin}/samtools fastq -0 $$opts{path}/0.fq");
 
-    # Just 1 end, as half of a paired-end sample.  Can be either explicit via
+    # Just 1 end, as half of a paired-end sample.  Use --no-name-check as
+    # these are not interleaved pairs (consecutive read1 records would
+    # otherwise fail the grouping check).
     test_cmd($opts, out=>'dat/empty.expected',
              out_map=>{"s.fq" => 'bam2fq/5.s.fq.expected'},
-             cmd=>"$$opts{bin}/samtools import --no-PG -s test/bam2fq/5.s.fq.expected  | $$opts{bin}/samtools fastq -s $$opts{path}/s.fq");
+             cmd=>"$$opts{bin}/samtools import --no-PG --no-name-check -s test/bam2fq/5.s.fq.expected  | $$opts{bin}/samtools fastq -s $$opts{path}/s.fq");
 
     # Normal read 1 / read 2
     test_cmd($opts, out=>'dat/empty.expected',
@@ -3128,6 +3130,11 @@ sub test_import
     # Interleaved mode: name mismatch should fail
     test_cmd($opts, out=>'dat/empty.expected',
              cmd=>"$$opts{bin}/samtools import --no-PG -s test/import/mismatch-interleaved.fq -o /dev/null",
+             want_fail=>1);
+
+    # Interleaved mode: consecutive read1 records should fail (broken grouping)
+    test_cmd($opts, out=>'dat/empty.expected',
+             cmd=>"$$opts{bin}/samtools import --no-PG -s test/import/mismatch-consecutive-r1.fq -o /dev/null",
              want_fail=>1);
 
     # Index vs main read name mismatch should fail
