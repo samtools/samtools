@@ -184,7 +184,7 @@ hts_pos_t unclipped_other_start(hts_pos_t op, char *cigar) {
     while (*c && *c != '*') {
         long num = 0;
 
-        if (isdigit((int)*c)) {
+        if (isdigit((unsigned char)*c)) {
             num = strtol(c, &c, 10);
         } else {
             num = 1;
@@ -236,7 +236,7 @@ hts_pos_t unclipped_other_end(int64_t op, char *cigar) {
     while (*c && *c != '*') {
         long num = 0;
 
-        if (isdigit((int)*c)) {
+        if (isdigit((unsigned char)*c)) {
             num = strtol(c, &c, 10);
         } else {
             num = 1;
