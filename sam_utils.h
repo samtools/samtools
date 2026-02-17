@@ -90,8 +90,8 @@ static inline int isalpha_c(char c) { return isalpha((unsigned char) c); }
 static inline int isdigit_c(char c) { return isdigit((unsigned char) c); }
 static inline int isprint_c(char c) { return isprint((unsigned char) c); }
 static inline int isspace_c(char c) { return isspace((unsigned char) c); }
-static inline char tolower_c(char c) { return tolower((unsigned char) c); }
-static inline char toupper_c(char c) { return toupper((unsigned char) c); }
+static inline char tolower_c(char c) { return (char) tolower((unsigned char) c); }
+static inline char toupper_c(char c) { return (char) toupper((unsigned char) c); }
 
 
 #endif  //SAM_UTIL_H
