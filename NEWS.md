@@ -1,6 +1,66 @@
 Release a.b
 -----------
 
+Bug fixes:
+
+* This release bundles HTSlib 1.21.1, which includes many important
+  bug fixes.  Please see htslib/NEWS for details.
+
+* Fix use-after-free bug in `samtools mpileup -a` due to reference
+  sequences being discarded too early.  This could happen when the `-a`
+  option was used, and all the alignments for one of the references started
+  at the same position.  This caused mpileup to try to load the next reference
+  before it had finished writing data for the previous one out. (CVE-2026-31972)
+  (PR #2229, fixes #2227.  Reported by Pouya Kheradpour)
+
+* Fix `samtools fastq -i` to force CRAM aux tag decoding.
+  (PR #2155, fixes #2154.  Reported by Alex Leonard)
+
+* Improve `plot-bamstats` quality plots.
+  (PR #2143 combined with PR #2116.  Thanks to James Gilbert)
+
+* Fix depth counts when overlap removal is enabled.
+  (PR #2171, fixes #2170.  Reported by Yangqi Su)
+
+* Protect against merging CRAM files with different headers.
+  (PR#2220, fixes #2218.  Reported by Kevin Lewis)
+
+* Prevent `samtools coverage` from printing a coverage table on failure.
+  (PR #2247, fixes #2242. Reported by Georges Kanaan)
+
+* Remove deprecated line style commands from `plot-bamstats`.
+  (PR #2251, fixes #2243. Reported by Suhas Srinivasan)
+
+* Check for file close errors in `samtools addreplacerg`.
+  (PR #2254. Thanks to Martin Pollard)
+
+* Add missing sam_global_args_free calls to address memory leaks.
+  (PR #2274)
+
+* Wrap ctype.h functions to avoid array subscript warnings, and add
+  casts to prevent sign extension where arrays are indexed with char values.
+  (PR #2306)
+
+* Make `samtools cram-size` exit cleanly instead of crashing if it
+  reads an invalid CRAM header. (CVE-2026-31973)
+  (PR #2313)
+
+Build changes:
+
+* Fix broken tests due to MSYS2 changes. Due to changes in how MSYS2 perl
+  reported the identity of the OS it was built for, our tests were failing to
+  adapt to the Windows style file locations.
+  (PR #2196)
+
+* Added settings to limit memory used by `samtools sort` when running tests.
+  (PR #2226)
+
+* Ensure test files are cleaned up.
+  (PR #2241. Thanks to John Marshall)
+
+* Reordered options for grep commands in tests so the input file is at the end.
+  (PR #2311)
+
 Release 1.21 (12th September 2024)
 ----------------------------------
 
