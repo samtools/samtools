@@ -1,6 +1,33 @@
 Release a.b
 -----------
 
+Bug fixes:
+
+* This release bundles HTSlib 1.23.1, which includes many important
+  bug fixes.  Please see htslib/NEWS for details.
+
+* Fix incorrect variable expansion in seq_cache_populate.py
+  (PR #2291.  Thanks to Ruben Vorderman)
+
+* Don't try to write out empty strings in threaded consensus pileup mode.
+  (PR #2305)
+
+* Wrap ctype.h functions to avoid array subscript warnings, and add
+  casts to prevent sign extension where arrays are indexed with char values.
+  (PR #2306)
+
+* Make `samtools cram-size` exit cleanly instead of crashing if it
+  reads an invalid CRAM header. (CVE-2026-31973)
+  (PR #2313)
+
+Build changes:
+
+* Reordered options for grep commands in tests so the input file is at the end.
+  (PR #2311)
+
+* Limit memory used by samtools sort in tests.
+  (PR #2312)
+
 Release 1.23 (16th December 2025)
 ---------------------------------
 
@@ -82,7 +109,7 @@ Bug fixes:
   sequences being discarded too early.  This could happen when the `-a`
   option was used, and all the alignments for one of the references started
   at the same position.  This caused mpileup to try to load the next reference
-  before it had finished writing data for the previous one out.
+  before it had finished writing data for the previous one out. (CVE-2026-31972)
   (PR #2229, fixes #2227.  Reported by Pouya Kheradpour)
 
 * This release bundles htslib-1.22.1 and htscodecs v1.6.4.  Fixes
