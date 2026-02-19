@@ -1,6 +1,42 @@
 Release a.b
 -----------
 
+Bug fixes:
+
+* This release bundles HTSlib 1.22.2, which includes many important
+  bug fixes.  Please see htslib/NEWS for details.
+
+* Prevent `samtools coverage` from printing a coverage table on failure.
+  (PR #2247, fixes #2242. Reported by Georges Kanaan)
+
+* Remove deprecated line style commands from `plot-bamstats`.
+  (PR #2251, fixes #2243. Reported by Suhas Srinivasan)
+
+* Check for file close errors in `samtools addreplacerg`.
+  (PR #2254. Thanks to Martin Pollard)
+
+* Add missing sam_global_args_free calls to address memory leaks.
+  (PR #2274)
+
+* Don't try to write out empty strings in threaded consensus pileup mode.
+  (PR #2305)
+
+* Wrap ctype.h functions to avoid array subscript warnings, and add
+  casts to prevent sign extension where arrays are indexed with char values.
+  (PR #2306)
+
+* Make `samtools cram-size` exit cleanly instead of crashing if it
+  reads an invalid CRAM header. (CVE-2026-31973)
+  (PR #2313)
+
+Build changes:
+
+* Ensure test files are cleaned up.
+  (PR #2241. Thanks to John Marshall)
+
+* Reordered options for grep commands in tests so the input file is at the end.
+  (PR #2311)
+
 Release 1.22.1 (14th July 2025)
 -------------------------------
 
@@ -10,7 +46,7 @@ Bug fixes:
   sequences being discarded too early.  This could happen when the `-a`
   option was used, and all the alignments for one of the references started
   at the same position.  This caused mpileup to try to load the next reference
-  before it had finished writing data for the previous one out.
+  before it had finished writing data for the previous one out. (CVE-2026-31972)
   (PR #2229, fixes #2227.  Reported by Pouya Kheradpour)
 
 * This release bundles htslib-1.22.1 and htscodecs v1.6.4.  Fixes
