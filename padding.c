@@ -145,7 +145,7 @@ int load_unpadded_ref(faidx_t *fai, const char *ref_name, hts_pos_t ref_len, kst
             // Map gaps to null to match unpad_seq function
             seq->s[seq->l++] = 0;
         } else {
-            int i = seq_nt16_table[(int)base];
+            int i = seq_nt16_table[(uint8_t)base];
             if (i == 0 || i==16) { // Equals maps to 0, anything unexpected to 16
                 fprintf(stderr, "[depad] ERROR: Invalid character %c (ASCII %i) in FASTA sequence %s\n", base, (int)base, ref_name);
                 free(fai_ref);
@@ -178,7 +178,7 @@ hts_pos_t get_unpadded_len(faidx_t *fai, const char *ref_name, hts_pos_t padded_
         if (base == '-' || base == '*') {
             gaps += 1;
         } else {
-            int i = seq_nt16_table[(int)base];
+            int i = seq_nt16_table[(uint8_t)base];
             if (i == 0 || i==16) { // Equals maps to 0, anything unexpected to 16
                 fprintf(stderr, "[depad] ERROR: Invalid character %c (ASCII %i) in FASTA sequence '%s'\n", base, (int)base, ref_name);
                 free(fai_ref);
