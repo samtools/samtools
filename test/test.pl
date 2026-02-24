@@ -3890,7 +3890,7 @@ sub test_split
              },
              ignore_pg_header => 1,
              reorder_header => 1,
-             cmd => "$$opts{bin}/samtools sort $threads -t nn $$opts{path}/split/split_d_nn.sam |
+             cmd => "$$opts{bin}/samtools sort $threads -m 10M -t nn $$opts{path}/split/split_d_nn.sam |
                 $$opts{bin}/samtools split $threads --output-fmt sam -f $$opts{path}/split/split.tmp.d_nn.\%!.\%. -p 4 -d nn -u $$opts{path}/split/split.tmp.d_nn.0unk.sam - ");
 }
 
