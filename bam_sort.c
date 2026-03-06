@@ -68,6 +68,7 @@ typedef struct {
     bool neg1;
     bool neg2;
     const char *library;
+    char *cid;
     char *mid;
     char *name;
     bool is_upper_of_pair;
@@ -2198,6 +2199,7 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
     key->tid1 = key->tid2 = INT32_MAX;
     key->pos1 = key->pos2 = HTS_POS_MAX;
     key->neg1 = key->neg2 = false;
+    key->cid  = "";
     key->mid  = "";
 
     // update values
@@ -2228,6 +2230,13 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
         key->tid2 = b->core.mtid;
         key->neg2 = bam_is_mrev(b);
         key->pos2 = (key->neg2) ? unclipped_other_end(b->core.mpos, cigar) : unclipped_other_start(b->core.mpos, cigar);
+    }
+
+    if ((data = bam_aux_get(b, "CB"))) {
+        if (!(key->cid=bam_aux2Z(data))) {
+            fprintf(stderr, "[bam_sort] error: CB tag wrong type (not a string).\n");
+            return NULL;
+        }
     }
 
     if ((data = bam_aux_get(b, "MI"))) {
@@ -2268,9 +2277,10 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
 // 1. the earlier unclipped 5' coordinate of the read pair
 // 2. the higher unclipped 5' coordinate of the read pair
 // 3. library (from read group)
-// 4. the molecular identifier (if present)
-// 5. read name
-// 6. if unpaired, or if R1 has the lower coordinates of the pair
+// 4. the cellular barcode (CB tag, if present)
+// 5. the molecular identifier (MI tag, if present)
+// 6. read name
+// 7. if unpaired, or if R1 has the lower coordinates of the pair
 // Returns a value less than, equal to or greater than zero if a is less than,
 // equal to or greater than b, respectively.
 static inline int bam1_cmp_template_coordinate(const bam1_tag a, const bam1_tag b)
@@ -2289,6 +2299,7 @@ static inline int bam1_cmp_template_coordinate(const bam1_tag a, const bam1_tag 
     if (0 == retval) retval = key_a->neg1 == key_b->neg1 ? 0 : (key_a->neg1 ? -1 : 1);
     if (0 == retval) retval = key_a->neg2 == key_b->neg2 ? 0 : (key_a->neg2 ? -1 : 1);
     if (0 == retval) retval = strcmp(key_a->library, key_b->library);
+    if (0 == retval) retval = strcmp(key_a->cid, key_b->cid);
     if (0 == retval) retval = template_coordinate_key_compare_mid(key_a->mid, key_b->mid);
     if (0 == retval) retval = strcmp(key_a->name, key_b->name);
     if (0 == retval) retval = key_a->is_upper_of_pair == key_b->is_upper_of_pair ? 0 : (key_a->is_upper_of_pair ? 1 : -1);
