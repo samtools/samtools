@@ -174,7 +174,8 @@ int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void
 {
     tview_t *tv = (tview_t*)data;
     hts_pos_t cp;
-    int i, j, c, rb, attr, max_ins = 0, interval;
+    int i, j, attr, max_ins = 0, interval;
+    char chr, rb;
     uint32_t call = 0;
     kstring_t ks = KS_INITIALIZE;
     if (pos < tv->left_pos || tv->ccol > tv->mcol) return 0; // out of screen
@@ -183,8 +184,8 @@ int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void
     for (cp = tv->last_pos + 1; cp < pos; ++cp) {
         interval = cp < TEN_DIGITS ? 10 : 20;
         if (cp%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, cp+1);
-        c = tv->ref? tv->ref[cp - tv->left_pos] : 'N';
-        tv->my_mvaddch(tv,1, tv->ccol++, c);
+        chr = tv->ref? tv->ref[cp - tv->left_pos] : 'N';
+        tv->my_mvaddch(tv,1, tv->ccol++, (uint8_t) chr);
     }
     interval = pos < TEN_DIGITS ? 10 : 20;
     if (pos%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, pos+1);
@@ -193,27 +194,27 @@ int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void
         memset(&bcr, 0, sizeof bcr);
         int qsum[4], a1, a2, tmp;
         double p[3], prior = 30;
-        bcf_call_glfgen(n, pl, seq_nt16_table[rb], tv->bca, &bcr);
+        bcf_call_glfgen(n, pl, seq_nt16_table[(uint8_t) rb], tv->bca, &bcr);
         for (i = 0; i < 4; ++i) qsum[i] = ((int)bcr.qsum[i])<<2 | i;
         for (i = 1; i < 4; ++i) // insertion sort
             for (j = i; j > 0 && qsum[j] > qsum[j-1]; --j)
                 tmp = qsum[j], qsum[j] = qsum[j-1], qsum[j-1] = tmp;
         a1 = qsum[0]&3; a2 = qsum[1]&3;
         p[0] = bcr.p[a1*5+a1]; p[1] = bcr.p[a1*5+a2] + prior; p[2] = bcr.p[a2*5+a2];
-        if ("ACGT"[a1] != toupper(rb)) p[0] += prior + 3;
-        if ("ACGT"[a2] != toupper(rb)) p[2] += prior + 3;
+        if ("ACGT"[a1] != toupper_c(rb)) p[0] += prior + 3;
+        if ("ACGT"[a2] != toupper_c(rb)) p[2] += prior + 3;
         if (p[0] < p[1] && p[0] < p[2]) call = (1<<a1)<<16 | (int)((p[1]<p[2]?p[1]:p[2]) - p[0] + .499);
         else if (p[2] < p[1] && p[2] < p[0]) call = (1<<a2)<<16 | (int)((p[0]<p[1]?p[0]:p[1]) - p[2] + .499);
         else call = (1<<a1|1<<a2)<<16 | (int)((p[0]<p[2]?p[0]:p[2]) - p[1] + .499);
     }
     attr = tv->my_underline(tv);
-    c = ",ACMGRSVTWYHKDBN"[call>>16&0xf];
+    chr = ",ACMGRSVTWYHKDBN"[call>>16&0xf];
     i = (call&0xffff)/10+1;
     if (i > 4) i = 4;
     attr |= tv->my_colorpair(tv,i);
-    if (c == toupper(rb)) c = '.';
+    if (chr == toupper_c(rb)) chr = '.';
     tv->my_attron(tv,attr);
-    tv->my_mvaddch(tv,2, tv->ccol, c);
+    tv->my_mvaddch(tv,2, tv->ccol, (uint8_t) chr);
     tv->my_attroff(tv,attr);
     if(tv->ins) {
         // calculate maximum insert
@@ -235,21 +236,21 @@ int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void
             if (j == 0) {
                 if (!p->is_del) {
                     if (tv->base_for == TV_BASE_COLOR_SPACE &&
-                            (c = bam_aux_getCSi(p->b, p->qpos))) {
+                            (chr = bam_aux_getCSi(p->b, p->qpos))) {
                         // assume that if we found one color, we will be able to get the color error
-                        if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos)) c = bam_is_rev(p->b)? ',' : '.';
+                        if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos)) chr = bam_is_rev(p->b)? ',' : '.';
                     } else {
                         if (tv->show_name) {
                             char *name = bam_get_qname(p->b);
-                            c = (p->qpos + 1 >= p->b->core.l_qname)? ' ' : name[p->qpos];
+                            chr = (p->qpos + 1 >= p->b->core.l_qname)? ' ' : name[p->qpos];
                        } else {
-                            c = p->qpos < p->b->core.l_qseq
+                            chr = p->qpos < p->b->core.l_qseq
                                 ? seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos)]
                                 : 'N';
-                            if (tv->is_dot && toupper(c) == toupper(rb)) c = bam_is_rev(p->b)? ',' : '.';
+                            if (tv->is_dot && toupper_c(chr) == toupper_c(rb)) chr = bam_is_rev(p->b)? ',' : '.';
                         }
                     }
-                } else c = p->is_refskip? (bam_is_rev(p->b)? '<' : '>') : '*';
+                } else chr = p->is_refskip? (bam_is_rev(p->b)? '<' : '>') : '*';
             } else { // padding
                 int len = bam_plp_insertion(p, &ks, NULL);
                 if (len < 0) {
@@ -257,19 +258,19 @@ int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void
                     exit(1);
                 }
 
-                if (j > len) c = '*';
+                if (j > len) chr = '*';
                 else { // insertion
                     if (tv->base_for ==  TV_BASE_NUCL) {
                         if (tv->show_name) {
                             char *name = bam_get_qname(p->b);
-                            c = (p->qpos + j + 1 >= p->b->core.l_qname)? ' ' : name[p->qpos + j];
+                            chr = (p->qpos + j + 1 >= p->b->core.l_qname)? ' ' : name[p->qpos + j];
                         } else {
-                            c = ks.s[j-1];
-                            if (j == 0 && tv->is_dot && toupper(c) == toupper(rb)) c = bam_is_rev(p->b)? ',' : '.';
+                            chr = ks.s[j-1];
+                            if (j == 0 && tv->is_dot && toupper_c(chr) == toupper_c(rb)) chr = bam_is_rev(p->b)? ',' : '.';
                         }
                     } else {
-                        c = bam_aux_getCSi(p->b, p->qpos + j);
-                        if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos + j)) c = bam_is_rev(p->b)? ',' : '.';
+                        chr = bam_aux_getCSi(p->b, p->qpos + j);
+                        if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos + j)) chr = bam_is_rev(p->b)? ',' : '.';
                     }
                 }
             }
@@ -311,17 +312,17 @@ int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void
                     attr |= tv->my_colorpair(tv,x);
                 }
                 tv->my_attron(tv,attr);
-                tv->my_mvaddch(tv,row, tv->ccol, bam_is_rev(p->b)? tolower(c) : toupper(c));
+                tv->my_mvaddch(tv,row, tv->ccol, (uint8_t) (bam_is_rev(p->b)? tolower_c(chr) : toupper_c(chr)));
                 tv->my_attroff(tv,attr);
             }
         }
-        c = j? '*' : rb;
-        if (c == '*') {
+        chr = j? '*' : rb;
+        if (chr == '*') {
             attr = tv->my_colorpair(tv,8);
             tv->my_attron(tv,attr);
-            tv->my_mvaddch(tv,1, tv->ccol++, c);
+            tv->my_mvaddch(tv,1, tv->ccol++, (uint8_t) chr);
             tv->my_attroff(tv,attr);
-        } else tv->my_mvaddch(tv,1, tv->ccol++, c);
+        } else tv->my_mvaddch(tv,1, tv->ccol++, (uint8_t) chr);
     }
     tv->last_pos = pos;
     ks_free(&ks);

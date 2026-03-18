@@ -28,6 +28,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <zlib.h>
 #include "htslib/kseq.h"
 #include "htslib/hts.h"
+#include "../sam_utils.h"
 
 KSEQ_INIT(gzFile, gzread)
 
@@ -59,7 +60,7 @@ static void md5_one(const char *fn)
     while ((l = kseq_read(seq)) >= 0) {
         for (i = k = 0; i < seq->seq.l; ++i) {
             if (seq->seq.s[i] >= '!' && seq->seq.s[i] <= '~')
-                seq->seq.s[k++] = toupper(seq->seq.s[i]);
+                seq->seq.s[k++] = toupper_c(seq->seq.s[i]);
         }
         hts_md5_reset(md5_one);
         hts_md5_update(md5_one, (unsigned char*)seq->seq.s, k);

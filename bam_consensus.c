@@ -2277,7 +2277,7 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
         if (p->next && p->next->next)
             _mm_prefetch(p->next->next, _MM_HINT_T0);
         if (p->b_is_rev) {
-            *cp++ = p->base == '*' ? '#' : tolower(p->base);
+            *cp++ = p->base == '*' ? '#' : tolower_c(p->base);
         } else {
             *cp++ = p->base;
         }
@@ -2708,7 +2708,7 @@ int pileup_loop_parallel(consensus_opts *opts) {
                 ctx *c = (ctx *)hts_tpool_result_data(r);
                 if (opts->fmt == PILEUP) {
                     kstring_t *ks = &c->ks_pileup;
-                    if (fwrite(ks->s, 1, ks->l, opts->fp_out) != ks->l)
+                    if (ks->l && fwrite(ks->s, 1, ks->l, opts->fp_out)!=ks->l)
                         goto err;
                     ks_free(ks);
                 } else {

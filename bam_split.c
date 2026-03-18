@@ -126,7 +126,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
         { NULL, 0, NULL, 0 }
     };
 
-    parsed_opts_t* retval = calloc(sizeof(parsed_opts_t), 1);
+    parsed_opts_t* retval = calloc(1, sizeof(parsed_opts_t));
     if (! retval ) { perror("cannot allocate option parsing memory"); return NULL; }
 
     retval->max_split = DEFAULT_MAX_SPLIT;
@@ -512,7 +512,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
 {
     kstring_t ss = KS_INITIALIZE;
     char ss_req[32] = {0};
-    state_t* retval = calloc(sizeof(state_t), 1);
+    state_t* retval = calloc(1, sizeof(state_t));
     if (!retval) {
         print_error_errno("split", "Initialisation failed");
         return NULL;

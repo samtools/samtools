@@ -3890,7 +3890,7 @@ sub test_split
              },
              ignore_pg_header => 1,
              reorder_header => 1,
-             cmd => "$$opts{bin}/samtools sort $threads -t nn $$opts{path}/split/split_d_nn.sam |
+             cmd => "$$opts{bin}/samtools sort $threads -m 10M -t nn $$opts{path}/split/split_d_nn.sam |
                 $$opts{bin}/samtools split $threads --output-fmt sam -f $$opts{path}/split/split.tmp.d_nn.\%!.\%. -p 4 -d nn -u $$opts{path}/split/split.tmp.d_nn.0unk.sam - ");
 }
 
@@ -3960,11 +3960,11 @@ sub test_reset
     #basic op 6, cram input
     test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, out_map=>{"reset/output.tmp.sam" => 'reset/basic.cram.input.expected'}, ignore_pg_header=>1, cmd=>"$$opts{bin}/samtools reset  --dupflag -o $$opts{bin}/test/reset/output.tmp.sam $$opts{bin}/test/dat/test_input_1_a.cram");
     #reject-PG 1, reject all
-    test_cmd($opts, out=>"reset/reject.1.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset  --dupflag --reject-PG bwa_index $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.tmp.sam; grep $$opts{bin}/test/reset/output.tmp.sam -e\"\@PG\tID\:samtools\tPN\:samtools\" | wc -l | sed 's/ //g'");
+    test_cmd($opts, out=>"reset/reject.1.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset  --dupflag --reject-PG bwa_index $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.tmp.sam; grep -e\"\@PG\tID\:samtools\tPN\:samtools\" $$opts{bin}/test/reset/output.tmp.sam | wc -l | sed 's/ //g'");
     #reject-PG 2 keep bwa and remove samtools onwards
-    test_cmd($opts, out=>"reset/reject.2.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset  --dupflag --reject-PG sam_to_fixed_bam $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.tmp.sam; grep $$opts{bin}/test/reset/output.tmp.sam -e\"\@PG\tID\:\" | wc -l | sed 's/ //g'");
+    test_cmd($opts, out=>"reset/reject.2.expected", err=>"reset/empty.expected", cmd=>"$$opts{bin}/samtools reset  --dupflag --reject-PG sam_to_fixed_bam $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.tmp.sam; grep -e\"\@PG\tID\:\" $$opts{bin}/test/reset/output.tmp.sam | wc -l | sed 's/ //g'");
     #no-PG, grep should fail as no PG entry found
-    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", want_fail=>1, cmd=>"$$opts{bin}/samtools reset  --dupflag --reject-PG bwa_index --no-PG $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.tmp.sam; grep $$opts{bin}/test/reset/output.tmp.sam -e\"\@PG\"");
+    test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", want_fail=>1, cmd=>"$$opts{bin}/samtools reset  --dupflag --reject-PG bwa_index --no-PG $$opts{bin}/test/dat/mpileup.1.sam -o $$opts{bin}/test/reset/output.tmp.sam; grep -e\"\@PG\" $$opts{bin}/test/reset/output.tmp.sam");
     #no-RG, no @RG
     test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.nRG.1.expected"}, cmd=>"$$opts{bin}/samtools reset  --dupflag --reject-PG bwa_index $$opts{bin}/test/dat/mpileup.1.sam --no-RG -o $$opts{bin}/test/reset/output");
     #no-RG, no RG:Z even with keep-tag
