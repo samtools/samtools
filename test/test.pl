@@ -3030,10 +3030,12 @@ sub test_import
              out_map=>{"0.fq" => 'bam2fq/1.1.fq.expected'},
              cmd=>"$$opts{bin}/samtools import --no-PG -s test/bam2fq/1.1.fq.expected  | $$opts{bin}/samtools fastq -0 $$opts{path}/0.fq");
 
-    # Just 1 end, as half of a paired-end sample.  Can be either explicit via
+    # Just 1 end, as half of a paired-end sample.  Use --no-name-check as
+    # these are not interleaved pairs (consecutive read1 records would
+    # otherwise fail the grouping check).
     test_cmd($opts, out=>'dat/empty.expected',
              out_map=>{"s.fq" => 'bam2fq/5.s.fq.expected'},
-             cmd=>"$$opts{bin}/samtools import --no-PG -s test/bam2fq/5.s.fq.expected  | $$opts{bin}/samtools fastq -s $$opts{path}/s.fq");
+             cmd=>"$$opts{bin}/samtools import --no-PG --no-name-check -s test/bam2fq/5.s.fq.expected  | $$opts{bin}/samtools fastq -s $$opts{path}/s.fq");
 
     # Normal read 1 / read 2
     test_cmd($opts, out=>'dat/empty.expected',
@@ -3087,6 +3089,14 @@ sub test_import
     test_cmd($opts, out=>'import/3.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG test/import/3.interleaved.fq -i");
 
+    # Single-end with CASAVA tags; should have flag 4 (not 77) and BC tag
+    test_cmd($opts, out=>'import/6.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --no-PG -i -0 test/import/6.single_casava.fq");
+
+    # Paired interleaved with CASAVA tags via -s; should have flags 77/141 and BC tag
+    test_cmd($opts, out=>'import/7.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --no-PG -i -s test/import/7.paired_casava.fq");
+
     # Non aux-tag comments (we don't use these, but also shouldn't choke).
     test_cmd($opts, out=>'import/4.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG test/import/4.aux.fq -T \"*\"");
@@ -3106,6 +3116,31 @@ sub test_import
              cmd=>"$$opts{bin}/samtools import --no-PG -U test/bam2fq/UMI.fq.expected");
     test_cmd($opts, out=>'import/UMI-OX.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG -U --UMI-tag OX test/bam2fq/UMI.fq.expected");
+
+    # Read name consistency checking
+    # Two-file mode: R1 vs R2 name mismatch should fail
+    test_cmd($opts, out=>'dat/empty.expected',
+             cmd=>"$$opts{bin}/samtools import --no-PG -1 test/import/mismatch-r1.fq -2 test/import/mismatch-r2.fq -o /dev/null",
+             want_fail=>1);
+
+    # Two-file mode with --no-name-check should succeed
+    test_cmd($opts, out=>'dat/empty.expected',
+             cmd=>"$$opts{bin}/samtools import --no-PG --no-name-check -1 test/import/mismatch-r1.fq -2 test/import/mismatch-r2.fq -o /dev/null");
+
+    # Interleaved mode: name mismatch should fail
+    test_cmd($opts, out=>'dat/empty.expected',
+             cmd=>"$$opts{bin}/samtools import --no-PG -s test/import/mismatch-interleaved.fq -o /dev/null",
+             want_fail=>1);
+
+    # Interleaved mode: consecutive read1 records should fail (broken grouping)
+    test_cmd($opts, out=>'dat/empty.expected',
+             cmd=>"$$opts{bin}/samtools import --no-PG -s test/import/mismatch-consecutive-r1.fq -o /dev/null",
+             want_fail=>1);
+
+    # Index vs main read name mismatch should fail
+    test_cmd($opts, out=>'dat/empty.expected',
+             cmd=>"$$opts{bin}/samtools import --no-PG --i1 test/import/mismatch-i1-swap.fq --r1 test/import/5-r1.fq --r2 test/import/5-r2.fq -o /dev/null",
+             want_fail=>1);
 }
 
 sub test_bam2fq
