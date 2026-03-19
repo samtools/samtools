@@ -3726,6 +3726,7 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/16_optical_barcode_rgx_name_test_2.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-rgx '^([!-9;-?A-~]+):[0-9]+:' --read-coords '^[!-9;-?A-~]+:([0-9]{4})([0-9]{4})' --coords-order xy -O sam --no-PG $$opts{path}/markdup/16_optical_barcode_rgx_name_test_2.sam -");
     test_cmd($opts, out=>'markdup/17_read_group.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -d 100 --mode s -t --use-read-groups -O sam --no-PG $$opts{path}/markdup/17_read_group.sam -");
     test_cmd($opts, out=>'markdup/18_primary_duplicate_count.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} --mode t -t -O sam --no-PG --duplicate-count --barcode-tag BC -S $$opts{path}/markdup/18_primary_duplicate_count.sam -");
+    test_cmd($opts, out=>'markdup/19_move_umi_to_tag.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG --barcode-name --move-umi-to-tag $$opts{path}/markdup/19_move_umi_to_tag.sam -");
 }
 
 sub test_bedcov
