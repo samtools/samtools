@@ -77,6 +77,7 @@ typedef struct {
     int read_groups;
     int json;
     int dc;
+    int move_umi;
 } md_param_t;
 
 typedef struct {
@@ -629,6 +630,86 @@ static void make_single_key(md_param_t *param, key_data_t *key, bam1_t *bam, int
     key->orientation   = orientation;
     key->barcode       = barcode;
     key->read_group    = rg_num;
+}
+
+
+/* Move UMI from read name to RX aux tag.
+   Re-runs the barcode regex on the QNAME, extracts the matched
+   substring, adds it as an RX:Z tag, and truncates the QNAME
+   to remove the UMI and its preceding delimiter. */
+
+static int move_umi_to_tag(md_param_t *param, bam1_t *b) {
+    regmatch_t matches[3];
+    size_t max_matches = 2;
+    char *qname = bam_get_qname(b);
+    int result;
+
+    if (!param->bc_rgx)
+        return 0;
+
+    result = regexec(param->bc_rgx, qname, max_matches, matches, 0);
+
+    if (result != 0 || matches[1].rm_so == -1)
+        return 0;  // no match, nothing to do
+
+    int bc_start = matches[1].rm_so;
+    int bc_end   = matches[1].rm_eo;
+    int umi_len  = bc_end - bc_start;
+
+    // Extract the UMI substring
+    char *umi = malloc(umi_len + 1);
+    if (!umi) {
+        print_error("markdup", "error, unable to allocate memory for UMI string.\n");
+        return -1;
+    }
+    memcpy(umi, qname + bc_start, umi_len);
+    umi[umi_len] = '\0';
+
+    // Add/update the RX tag
+    if (bam_aux_update_str(b, "RX", umi_len + 1, umi)) {
+        print_error("markdup", "error, unable to add RX tag.\n");
+        free(umi);
+        return -1;
+    }
+    free(umi);
+
+    // Truncate the QNAME: remove from the delimiter before the UMI to the end.
+    // Find the last ':' before bc_start to remove the delimiter too.
+    // Re-fetch qname as bam_aux_update_str may have reallocated.
+    qname = bam_get_qname(b);
+    int trunc_pos = bc_start;
+    if (trunc_pos > 0 && qname[trunc_pos - 1] == ':')
+        trunc_pos--;
+
+    if (trunc_pos > 0 && trunc_pos < b->core.l_qname - 1) {
+        // We need to shorten the qname in-place.
+        // The BAM record stores l_qname including the NUL and any
+        // extra-NULs for 4-byte alignment.
+        int old_l_qname = b->core.l_qname;  // includes NUL + padding
+        int new_l_extqname = trunc_pos + 1;  // new length with one NUL
+        // Pad to 4-byte alignment
+        int new_l_qname = (new_l_extqname + 3) & ~3;
+        int delta = old_l_qname - new_l_qname;
+
+        if (delta > 0) {
+            // Null-terminate at the truncation point
+            qname[trunc_pos] = '\0';
+            // Fill padding with NULs
+            for (int i = trunc_pos + 1; i < new_l_qname; i++)
+                qname[i] = '\0';
+
+            // Shift the rest of the data (cigar, seq, qual, aux) left by delta
+            uint8_t *data_start = (uint8_t *)qname + old_l_qname;
+            int data_len = b->l_data - ((data_start) - b->data);
+            memmove((uint8_t *)qname + new_l_qname, data_start, data_len);
+
+            b->core.l_qname = new_l_qname;
+            b->core.l_extranul = new_l_qname - new_l_extqname;
+            b->l_data -= delta;
+        }
+    }
+
+    return 0;
 }
 
 
@@ -1961,6 +2042,10 @@ static int bam_mark_duplicates(md_param_t *param) {
                 if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
                     bam_aux_update_int(in_read->b, "dc", in_read->dc);
                 }
+                if (param->move_umi) {
+                    if (move_umi_to_tag(param, in_read->b) < 0)
+                        goto fail;
+                }
                 if (param->supp) {
                     if (tmp_file_write(&temp, in_read->b)) {
                         print_error("markdup", "error, writing temp output failed.\n");
@@ -2026,6 +2111,10 @@ static int bam_mark_duplicates(md_param_t *param) {
             if (!param->remove_dups || !(in_read->b->core.flag & BAM_FDUP)) {
                 if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
                     bam_aux_update_int(in_read->b, "dc",  in_read->dc);
+                }
+                if (param->move_umi) {
+                    if (move_umi_to_tag(param, in_read->b) < 0)
+                        goto fail;
                 }
 
                 if (param->supp) {
@@ -2102,6 +2191,10 @@ static int bam_mark_duplicates(md_param_t *param) {
                 if (param->dc && (b->core.flag & BAM_FDUP)) {
                     uint8_t* data = bam_aux_get(b, "dc");
                     if(data) bam_aux_del(b, data);
+                }
+                if (param->move_umi) {
+                    if (move_umi_to_tag(param, b) < 0)
+                        goto fail;
                 }
                 if (sam_write1(param->out, header, b) < 0) {
                     print_error("markdup", "error, writing final output failed.\n");
@@ -2300,6 +2393,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  --barcode-tag STR  Use barcode a tag that duplicates much match.\n");
     fprintf(stderr, "  --barcode-name     Use the UMI/barcode in the read name (eigth colon delimited part).\n");
     fprintf(stderr, "  --barcode-rgx STR  Regex for barcode in the readname (alternative to --barcode-name).\n");
+    fprintf(stderr, "  --move-umi-to-tag  Move UMI from read name to RX tag (use with --barcode-name/--barcode-rgx).\n");
     fprintf(stderr, "  --use-read-groups  Use the read group tags in duplicate matching.\n");
     fprintf(stderr, "  -t                 Mark primary duplicates with the name of the original in a \'do\' tag."
                                         " Mainly for information and debugging.\n");
@@ -2325,7 +2419,7 @@ int bam_markdup(int argc, char **argv) {
     char *regex = NULL, *bc_regex = NULL;
     char *regex_order = "txy";
     md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL, 0, 0, 0};
+                        1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL, 0, 0, 0, 0};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -2341,6 +2435,7 @@ int bam_markdup(int argc, char **argv) {
         {"use-read-groups", no_argument, NULL, 1009},
         {"json", no_argument, NULL, 1010},
         {"duplicate-count", no_argument, NULL, 1011},
+        {"move-umi-to-tag", no_argument, NULL, 1012},
         {NULL, 0, NULL, 0}
     };
 
@@ -2378,6 +2473,7 @@ int bam_markdup(int argc, char **argv) {
             case 1009: param.read_groups = 1; break;
             case 1010: param.json = 1; param.do_stats = 1; break;
             case 1011: param.dc = 1; break;
+            case 1012: param.move_umi = 1; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
@@ -2390,6 +2486,18 @@ int bam_markdup(int argc, char **argv) {
     if (param.barcode && bc_name) {
         print_error("markdup", "error, cannot specify --barcode-tag and "
                         "--barcode-name (or --barcode-rgx) at same time.\n");
+        return 1;
+    }
+
+    if (param.move_umi && !bc_name) {
+        print_error("markdup", "error, --move-umi-to-tag requires "
+                        "--barcode-name or --barcode-rgx.\n");
+        return 1;
+    }
+
+    if (param.move_umi && param.barcode) {
+        print_error("markdup", "error, --move-umi-to-tag cannot be used with "
+                        "--barcode-tag (UMI is already in a tag).\n");
         return 1;
     }
 
