@@ -2684,7 +2684,7 @@ int main_stats(int argc, char *argv[])
         {"help", no_argument, NULL, 'h'},
         {"remove-dups", no_argument, NULL, 'd'},
         {"sam", no_argument, NULL, 's'},
-        {"customized-index-file", required_argument, NULL, 'X'},
+        {"customized-index-file", no_argument, NULL, 'X'},
         {"ref-seq", required_argument, NULL, 'r'},
         {"coverage", required_argument, NULL, 'c'},
         {"read-length", required_argument, NULL, 'l'},
