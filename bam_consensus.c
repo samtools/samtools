@@ -2244,9 +2244,6 @@ static int basic_pileup(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
     if (consensus_base(opts, p, pos, depth, &cb, &cq) < 0)
         return -1;
 
-    if (!p)
-        return 0;
-
     if (!opts->show_del && cb == '*')
         return 0;
 
@@ -2403,9 +2400,6 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
 
     if (consensus_base(opts, p, pos, depth, &cb, &cq) < 0)
         return -1;
-
-    if (!p)
-        return 0;
 
     if (!opts->show_del && cb == '*') {
         c->last_pos = pos;
