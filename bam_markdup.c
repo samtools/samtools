@@ -2051,10 +2051,6 @@ static int bam_mark_duplicates(md_param_t *param) {
                 if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
                     bam_aux_update_int(in_read->b, "dc", in_read->dc);
                 }
-                if (param->move_umi) {
-                    if (move_umi_to_tag(param, in_read->b) < 0)
-                        goto fail;
-                }
                 if (param->supp) {
                     if (tmp_file_write(&temp, in_read->b)) {
                         print_error("markdup", "error, writing temp output failed.\n");
