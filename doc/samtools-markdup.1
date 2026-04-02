@@ -182,6 +182,12 @@ Use the UMI/barcode embedded in the read name (eigth colon delimited part).
 .BI "--barcode-rgx " REGEX
 Regex for barcode in the readname (alternative to --barcode-name).
 .TP
+.B --move-umi-to-tag
+Move UMI from read name to RX tag (use with \fB--barcode-name\fR or \fB--barcode-rgx\fR).
+.TP
+.BI "--umi-separator " CHAR
+Character to use as separator for the UMI in the read name (default is ':'). If the UMI is at the end or beginning of the read name, the adjacent separator is removed. If the UMI is in the middle of the read name, it and one adjacent separator are removed, merging the remaining parts.
+.TP
 .B --use-read-groups
 The @RG tags must now also match to be a duplicate.
 .TP

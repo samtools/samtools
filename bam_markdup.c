@@ -78,6 +78,7 @@ typedef struct {
     int json;
     int dc;
     int move_umi;
+    char umi_sep;
 } md_param_t;
 
 typedef struct {
@@ -673,39 +674,47 @@ static int move_umi_to_tag(md_param_t *param, bam1_t *b) {
     }
     free(umi);
 
-    // Truncate the QNAME: remove from the delimiter before the UMI to the end.
-    // Find the last ':' before bc_start to remove the delimiter too.
+    // Truncate the QNAME: remove the UMI and one adjacent separator (if present).
     // Re-fetch qname as bam_aux_update_str may have reallocated.
     qname = bam_get_qname(b);
-    int trunc_pos = bc_start;
-    if (trunc_pos > 0 && qname[trunc_pos - 1] == ':')
-        trunc_pos--;
+    
+    int r_start = bc_start;
+    int r_end = bc_end;
 
-    if (trunc_pos > 0 && trunc_pos < b->core.l_qname - 1) {
-        // We need to shorten the qname in-place.
-        // The BAM record stores l_qname including the NUL and any
-        // extra-NULs for 4-byte alignment.
+    if (r_start > 0 && qname[r_start - 1] == param->umi_sep) {
+        r_start--;
+    } else if (r_end < b->core.l_qname - 1 && qname[r_end] == param->umi_sep) {
+        r_end++;
+    }
+
+    int delta = r_end - r_start;
+    if (delta > 0) {
         int old_l_qname = b->core.l_qname;  // includes NUL + padding
-        int new_l_extqname = trunc_pos + 1;  // new length with one NUL
+        int old_l_extqname = b->core.l_qname - b->core.l_extranul;
+        
+        // Shift the characters in qname
+        memmove(qname + r_start, qname + r_end, old_l_extqname - r_end);
+
+        int new_l_extqname = old_l_extqname - delta;
         // Pad to 4-byte alignment
         int new_l_qname = (new_l_extqname + 3) & ~3;
-        int delta = old_l_qname - new_l_qname;
+        int pad_delta = old_l_qname - new_l_qname;
 
-        if (delta > 0) {
-            // Null-terminate at the truncation point
-            qname[trunc_pos] = '\0';
-            // Fill padding with NULs
-            for (int i = trunc_pos + 1; i < new_l_qname; i++)
-                qname[i] = '\0';
+        // Fill the new padding with NULs up to new_l_qname
+        for (int i = new_l_extqname; i < new_l_qname; i++)
+            qname[i] = '\0';
 
-            // Shift the rest of the data (cigar, seq, qual, aux) left by delta
+        if (pad_delta > 0) {
+            // Shift the rest of the data (cigar, seq, qual, aux) left by pad_delta
             uint8_t *data_start = (uint8_t *)qname + old_l_qname;
-            int data_len = b->l_data - ((data_start) - b->data);
+            int data_len = b->l_data - ((data_start)-b->data);
             memmove((uint8_t *)qname + new_l_qname, data_start, data_len);
 
             b->core.l_qname = new_l_qname;
             b->core.l_extranul = new_l_qname - new_l_extqname;
-            b->l_data -= delta;
+            b->l_data -= pad_delta;
+        } else {
+            b->core.l_extranul += delta;
         }
     }
 
@@ -2394,6 +2403,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  --barcode-name     Use the UMI/barcode in the read name (eigth colon delimited part).\n");
     fprintf(stderr, "  --barcode-rgx STR  Regex for barcode in the readname (alternative to --barcode-name).\n");
     fprintf(stderr, "  --move-umi-to-tag  Move UMI from read name to RX tag (use with --barcode-name/--barcode-rgx).\n");
+    fprintf(stderr, "  --umi-separator CHAR   Separator for UMI (default ':').\n");
     fprintf(stderr, "  --use-read-groups  Use the read group tags in duplicate matching.\n");
     fprintf(stderr, "  -t                 Mark primary duplicates with the name of the original in a \'do\' tag."
                                         " Mainly for information and debugging.\n");
@@ -2419,7 +2429,7 @@ int bam_markdup(int argc, char **argv) {
     char *regex = NULL, *bc_regex = NULL;
     char *regex_order = "txy";
     md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL, 0, 0, 0, 0};
+                        1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL, 0, 0, 0, 0, ':'};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -2436,6 +2446,7 @@ int bam_markdup(int argc, char **argv) {
         {"json", no_argument, NULL, 1010},
         {"duplicate-count", no_argument, NULL, 1011},
         {"move-umi-to-tag", no_argument, NULL, 1012},
+        {"umi-separator", required_argument, NULL, 1013},
         {NULL, 0, NULL, 0}
     };
 
@@ -2474,6 +2485,7 @@ int bam_markdup(int argc, char **argv) {
             case 1010: param.json = 1; param.do_stats = 1; break;
             case 1011: param.dc = 1; break;
             case 1012: param.move_umi = 1; break;
+            case 1013: param.umi_sep = optarg[0]; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
