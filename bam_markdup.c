@@ -235,6 +235,14 @@ KLIST_INIT(read_queue, read_queue_t, __free_queue_element) // the reads buffer
 KHASH_MAP_INIT_STR(duplicates, dup_map_t) // map of duplicates for supplementary dup id
 KHASH_MAP_INIT_STR(read_groups, int) // read group lookup
 
+typedef struct {
+    size_t *idx;
+    size_t count;
+    size_t cap;
+} grid_cell_t;
+
+KHASH_MAP_INIT_INT64(grid, grid_cell_t) // spatial grid for optical dup detection
+
 /* The Bob Jenkins one_at_a_time hash to reduce the key to a 32 bit value. */
 
 static khint32_t do_hash(unsigned char *key, khint32_t len) {
@@ -1191,18 +1199,80 @@ static int chain_sort(const void *a, const void *b) {
 }
 
 
-/* Check all the duplicates against each other to see if they are optical duplicates. */
+/* Floor division: always rounds toward negative infinity. */
+static inline long grid_coord(long v, long d) {
+    return v >= 0 ? v / d : (v - d + 1) / d;
+}
+
+/* Pack two grid cell coordinates into a single 64-bit hash key. */
+static inline khint64_t grid_key(long gx, long gy) {
+    return ((khint64_t)(uint32_t)gx << 32) | (uint32_t)gy;
+}
+
+/* Free all cell index arrays in the grid hash and clear it for reuse. */
+static void grid_free_cells(khash_t(grid) *gh) {
+    khint_t k;
+    for (k = kh_begin(gh); k != kh_end(gh); k++) {
+        if (kh_exist(gh, k))
+            free(kh_val(gh, k).idx);
+    }
+    kh_clear(grid, gh);
+}
+
+/* Insert a point index into the grid cell for the given key. */
+static int grid_insert(khash_t(grid) *gh, khint64_t key, size_t index) {
+    int absent;
+    grid_cell_t *cell;
+    khint_t k = kh_put(grid, gh, key, &absent);
+
+    if (absent < 0)
+        return -1;
+
+    cell = &kh_val(gh, k);
+
+    if (absent) {
+        cell->idx = NULL;
+        cell->count = 0;
+        cell->cap = 0;
+    }
+
+    if (cell->count >= cell->cap) {
+        size_t new_cap = cell->cap ? cell->cap * 2 : 4;
+        size_t *tmp = realloc(cell->idx, new_cap * sizeof(size_t));
+
+        if (!tmp)
+            return -1;
+
+        cell->idx = tmp;
+        cell->cap = new_cap;
+    }
+
+    cell->idx[cell->count++] = index;
+    return 0;
+}
+
+
+/* Check all the duplicates against each other to see if they are optical
+   duplicates.  Uses a grid-based spatial index so that each point only
+   checks its 9 neighbouring cells, replacing the previous O(n^2) pairwise
+   scan with expected O(n) for typical coordinate distributions. */
 static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_hash, check_list_t *list,
              long *warn, stats_block_t *stats) {
     int ret = 0;
     size_t curr = 0;
+    long opt_dist = param->opt_dist;
+    khash_t(grid) *gh = kh_init(grid);
+
+    if (!gh)
+        return -1;
 
     qsort(list->c, list->length, sizeof(list->c[0]), chain_sort);
 
     while (curr < list->length - 1) {
         check_t *base = &list->c[curr];
         char *base_name = bam_get_qname(base->b);
-        int end_name_match = curr;
+        size_t end_name_match = curr;
+        size_t i;
 
         // find the end of the matching name parts
         while (++end_name_match < list->length) {
@@ -1212,101 +1282,140 @@ static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_has
                 break;
         }
 
-        while (curr < end_name_match) {
-            size_t count = curr;
-            check_t *current = &list->c[curr];
+        // Build spatial grid for this name group
+        grid_free_cells(gh);
+
+        for (i = curr; i < end_name_match; i++) {
+            check_t *p = &list->c[i];
+            long gx = grid_coord(p->x, opt_dist);
+            long gy = grid_coord(p->y, opt_dist);
+
+            if (grid_insert(gh, grid_key(gx, gy), i) < 0) {
+                print_error("markdup", "error, unable to build spatial grid for optical duplicates.\n");
+                ret = -1;
+                goto fail;
+            }
+        }
+
+        // For each point, check the 9 neighbouring grid cells
+        for (i = curr; i < end_name_match; i++) {
+            check_t *current = &list->c[i];
             int current_paired = has_mate(current->b);
+            long gx = grid_coord(current->x, opt_dist);
+            long gy = grid_coord(current->y, opt_dist);
+            int dx, dy;
 
-            while (++count < end_name_match && (list->c[count].x - current->x <= param->opt_dist)) {
-                // while close enough along the x coordinate
-                check_t *chk = &list->c[count];
+            for (dx = -1; dx <= 1; dx++) {
+                for (dy = -1; dy <= 1; dy++) {
+                    grid_cell_t *cell;
+                    size_t ci;
+                    khint_t k = kh_get(grid, gh, grid_key(gx + dx, gy + dy));
 
-                if (current->opt && chk->opt)
-                    continue;
+                    if (k == kh_end(gh))
+                        continue;
 
-                long ydiff;
+                    cell = &kh_val(gh, k);
 
-                if (current->y > chk->y) {
-                    ydiff = current->y - chk->y;
-                } else {
-                    ydiff = chk->y - current->y;
-                }
+                    for (ci = 0; ci < cell->count; ci++) {
+                        size_t j = cell->idx[ci];
+                        check_t *chk;
+                        long xdiff, ydiff;
+                        int chk_dup = 0;
+                        int chk_paired;
 
-                if (ydiff > param->opt_dist)
-                    continue;
+                        if (j <= i) // each pair checked once
+                            continue;
 
-                // optical duplicates
-                int chk_dup = 0;
-                int chk_paired = has_mate(chk->b);
+                        chk = &list->c[j];
 
-                if (current_paired != chk_paired) {
-                    if (!chk_paired) {
-                        // chk is single vs pair, this is a dup.
-                        chk_dup = 1;
-                    }
-                } else {
-                    // do it by scores
-                    int64_t cur_score, chk_score;
+                        if (current->opt && chk->opt)
+                            continue;
 
-                    if ((current->b->core.flag & BAM_FQCFAIL) != (chk->b->core.flag & BAM_FQCFAIL)) {
-                        if (current->b->core.flag & BAM_FQCFAIL) {
-                            cur_score = 0;
-                            chk_score = 1;
+                        xdiff = current->x > chk->x ? current->x - chk->x : chk->x - current->x;
+
+                        if (xdiff > opt_dist)
+                            continue;
+
+                        ydiff = current->y > chk->y ? current->y - chk->y : chk->y - current->y;
+
+                        if (ydiff > opt_dist)
+                            continue;
+
+                        // optical duplicates
+                        chk_paired = has_mate(chk->b);
+
+                        if (current_paired != chk_paired) {
+                            if (!chk_paired) {
+                                // chk is single vs pair, this is a dup.
+                                chk_dup = 1;
+                            }
                         } else {
-                            cur_score = 1;
-                            chk_score = 0;
-                        }
-                    } else {
-                        cur_score = current->score;
-                        chk_score = chk->score;
+                            // do it by scores
+                            int64_t cur_score, chk_score;
 
-                        if (current_paired) {
-                            // they are pairs so add mate scores.
-                            chk_score += chk->mate_score;
-                            cur_score += current->mate_score;
-                        }
-                    }
+                            if ((current->b->core.flag & BAM_FQCFAIL) != (chk->b->core.flag & BAM_FQCFAIL)) {
+                                if (current->b->core.flag & BAM_FQCFAIL) {
+                                    cur_score = 0;
+                                    chk_score = 1;
+                                } else {
+                                    cur_score = 1;
+                                    chk_score = 0;
+                                }
+                            } else {
+                                cur_score = current->score;
+                                chk_score = chk->score;
 
-                    if (cur_score == chk_score) {
-                        if (strcmp(bam_get_qname(chk->b), bam_get_qname(current->b)) < 0) {
-                            chk_score++;
+                                if (current_paired) {
+                                    // they are pairs so add mate scores.
+                                    chk_score += chk->mate_score;
+                                    cur_score += current->mate_score;
+                                }
+                            }
+
+                            if (cur_score == chk_score) {
+                                if (strcmp(bam_get_qname(chk->b), bam_get_qname(current->b)) < 0) {
+                                    chk_score++;
+                                } else {
+                                    chk_score--;
+                                }
+                            }
+
+                            if (cur_score > chk_score) {
+                                chk_dup = 1;
+                            }
+                        }
+
+                        if (chk_dup) {
+                            // the duplicate is the optical duplicate
+                            if (!chk->opt) { // only change if not already an optical duplicate
+                                if (optical_retag(param, dup_hash, chk->b, chk_paired, stats)) {
+                                    ret = -1;
+                                    goto fail;
+                                }
+
+                                chk->opt = 1;
+                            }
                         } else {
-                            chk_score--;
+                            if (!current->opt) {
+                                if (optical_retag(param, dup_hash, current->b, current_paired, stats)) {
+                                    ret = -1;
+                                    goto fail;
+                                }
+
+                                current->opt = 1;
+                            }
                         }
-                    }
-
-                    if (cur_score > chk_score) {
-                        chk_dup = 1;
-                    }
-                }
-
-                if (chk_dup) {
-                    // the duplicate is the optical duplicate
-                    if (!chk->opt) { // only change if not already an optical duplicate
-                        if (optical_retag(param, dup_hash, chk->b, chk_paired, stats)) {
-                            ret = -1;
-                            goto fail;
-                        }
-
-                        chk->opt = 1;
-                    }
-                } else {
-                    if (!current->opt) {
-                        if (optical_retag(param, dup_hash, current->b, current_paired, stats)) {
-                            ret = -1;
-                            goto fail;
-                        }
-
-                        current->opt = 1;
                     }
                 }
             }
-
-            curr++;
         }
+
+        curr = end_name_match;
     }
 
  fail:
+    grid_free_cells(gh);
+    kh_destroy(grid, gh);
     return ret;
 }
 
