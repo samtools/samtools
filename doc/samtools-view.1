@@ -470,10 +470,14 @@ Subsampling seed used to influence
 subset of reads is kept.
 .\" Reads are retained based on a score computed by hashing their QNAME
 .\" field and the seed value.
-When subsampling data that has previously been subsampled, be sure to use
-a different seed value from those used previously; otherwise more reads
-will be retained than expected.
-[0]
+By default, the seed is derived from a hash of the input file's header text.
+Since each subsampling run adds a @PG header line, re-subsampling a file will
+automatically produce a different seed value, ensuring the expected fraction
+of reads is retained at each step.
+When subsampling data that has previously been subsampled using an explicit
+seed, be sure to use a different seed value from those used previously;
+otherwise more reads will be retained than expected.
+[hash of header text]
 .TP
 .BI "-s " FLOAT
 Subsampling shorthand option:
