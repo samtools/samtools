@@ -68,6 +68,7 @@ typedef struct samview_settings {
     int min_qlen;
     int remove_B;
     uint32_t subsam_seed;
+    int subsam_seed_set;
     double subsam_frac;
     char* library;
     void* bed;
@@ -980,6 +981,7 @@ int main_samview(int argc, char *argv[])
                 print_error("view", "Incorrect sampling argument \"%s\"", optarg);
                 goto view_end;
             }
+            settings.subsam_seed_set = 1;
             settings.count_rf |= SAM_QNAME;
             break;
         case LONGOPT('s'):
@@ -996,6 +998,7 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
             settings.subsam_seed = temp_value;
+            settings.subsam_seed_set = 1;
             break;
         case 'm':
             if (!parse_int_value(optarg, &settings.min_qlen)) {
@@ -1317,13 +1320,6 @@ int main_samview(int argc, char *argv[])
         goto view_end;
     }
 
-    if (settings.subsam_seed != 0) {
-        // Convert likely user input 1,2,... to pseudo-random
-        // values with more entropy and more bits set
-        srand(settings.subsam_seed);
-        settings.subsam_seed = rand();
-    }
-
     settings.fn_in = (optind < argc)? argv[optind] : "-";
     if ((settings.in = sam_open_format(settings.fn_in, "r", &ga.in)) == 0) {
         print_error_errno("view", "failed to open \"%s\" for reading", settings.fn_in);
@@ -1346,6 +1342,24 @@ int main_samview(int argc, char *argv[])
     if (settings.rghash) {
         sam_hdr_remove_lines(settings.header, "RG", "ID", settings.rghash);
     }
+
+    // Compute the subsampling seed.  If the user did not set a seed
+    // explicitly, derive one from the input header text.  This means
+    // identical inputs always produce the same subsample, but
+    // re-subsampling a file gets a different seed because the prior
+    // run's @PG line changed the header.
+    if (settings.subsam_frac > 0. && !settings.subsam_seed_set) {
+        const char *header_text = sam_hdr_str(settings.header);
+        if (header_text)
+            settings.subsam_seed = __ac_X31_hash_string(header_text);
+    }
+    if (settings.subsam_seed != 0) {
+        // Convert likely small user input (1, 2, ...) or header hash
+        // to pseudo-random values with more entropy and more bits set
+        srand(settings.subsam_seed);
+        settings.subsam_seed = rand();
+    }
+
     if (!settings.is_count) {
         if ((settings.out = sam_open_format(settings.fn_out? settings.fn_out : "-", out_mode, &ga.out)) == 0) {
             print_error_errno("view", "failed to open \"%s\" for writing", settings.fn_out? settings.fn_out : "standard output");
@@ -1639,7 +1653,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "                             ...have some of the FLAGs present\n"
 "  -G FLAG                    EXCLUDE reads with all of the FLAGs present\n"  // !(F&x == x)  TODO long option
 "      --subsample FLOAT      Keep only FLOAT fraction of templates/read pairs\n"
-"      --subsample-seed INT   Influence WHICH reads are kept in subsampling [0]\n"
+"      --subsample-seed INT   Influence WHICH reads are kept in subsampling [hash of header]\n"
 "  -s INT.FRAC                Same as --subsample 0.FRAC --subsample-seed INT\n"
 "\n"
 "Processing options:\n"

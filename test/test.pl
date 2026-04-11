@@ -2616,6 +2616,56 @@ sub test_view
         }
     }
 
+    # Repeated subsampling without an explicit seed.  The default seed is
+    # derived from the header, which changes each round (new @PG line), so
+    # each round should further reduce the read count.
+    {
+        printf "\t%s ", "$test: Repeated subsampling reduces reads";
+
+        my $input = $big_bam;
+        my $frac  = 0.5;
+        my $prev_count = $big_sam_count;
+        my $res = 0;
+
+        for my $round (1 .. 3) {
+            my $output = sprintf("%s.test%03d.round%d.bam", $out, $test, $round);
+            my @cmd = ("$$opts{bin}/samtools", "view", "-b",
+                       "--subsample", $frac, $input,
+                       "-o", $output);
+            system(@cmd) == 0 || die "Error running @cmd\n";
+
+            # Count reads in the output
+            my $count = 0;
+            open(my $fh, '-|', "$$opts{bin}/samtools", "view", "-c", $output)
+                || die "Couldn't count reads in $output: $!\n";
+            $count = <$fh>;
+            chomp $count;
+            close($fh);
+
+            my $expected = $prev_count * $frac;
+            my $min = $expected * 0.7;
+            my $max = $expected * 1.3;
+
+            if ($count < $min || $count > $max) {
+                printf("\n\tRound %d: expected ~%.0f reads (%.0f..%.0f), got %d\n",
+                       $round, $expected, $min, $max, $count);
+                $res = 1;
+                last;
+            }
+
+            print ".";
+            $prev_count = $count;
+            $input = $output;
+        }
+
+        if (!$res) {
+            passed($opts, msg => "$test: Repeated subsampling reduces reads");
+        } else {
+            failed($opts, msg => "$test: Repeated subsampling reduces reads");
+        }
+        $test++;
+    }
+
     my $b_pg_sam      = "$$opts{path}/dat/view.001.sam";
     my $b_pg_expected = "$$opts{path}/dat/view.004.expected.sam";
     run_view_test($opts,
