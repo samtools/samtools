@@ -677,7 +677,7 @@ static int move_umi_to_tag(md_param_t *param, bam1_t *b) {
     // Truncate the QNAME: remove the UMI and one adjacent separator (if present).
     // Re-fetch qname as bam_aux_update_str may have reallocated.
     qname = bam_get_qname(b);
-    
+
     int r_start = bc_start;
     int r_end = bc_end;
 
@@ -691,7 +691,7 @@ static int move_umi_to_tag(md_param_t *param, bam1_t *b) {
     if (delta > 0) {
         int old_l_qname = b->core.l_qname;  // includes NUL + padding
         int old_l_extqname = b->core.l_qname - b->core.l_extranul;
-        
+
         // Shift the characters in qname
         memmove(qname + r_start, qname + r_end, old_l_extqname - r_end);
 
