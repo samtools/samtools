@@ -68,7 +68,7 @@ typedef struct samview_settings {
     int min_qlen;
     int remove_B;
     uint32_t subsam_seed;
-    int subsam_seed_set;
+    int subsam_seed_auto;  // 1 if seed should be derived from input header
     double subsam_frac;
     char* library;
     void* bed;
@@ -884,6 +884,7 @@ int main_samview(int argc, char *argv[])
 
     memset(&settings,0,sizeof(settings));
     settings.subsam_frac = -1.0;
+    settings.subsam_seed_auto = 1;  // default: derive seed from input header
     settings.count_rf = SAM_FLAG; // don't want 0, and this is quick
 
     static const struct option lopts[] = {
@@ -969,19 +970,27 @@ int main_samview(int argc, char *argv[])
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
-            settings.subsam_seed = strtol(optarg, &tmp, 10);
-            if (tmp && *tmp == '.') {
-                settings.subsam_frac = strtod(tmp, &tmp);
+            if (strncasecmp(optarg, "auto", 4) == 0 && optarg[4] == '.') {
+                // "auto.FRAC" -- derive the seed from the input header
+                settings.subsam_seed = 0;
+                settings.subsam_seed_auto = 1;
+                settings.subsam_frac = strtod(optarg + 4, &tmp);
                 if (*tmp) ret = 1;
             } else {
-                ret = 1;
+                settings.subsam_seed = strtol(optarg, &tmp, 10);
+                if (tmp && *tmp == '.') {
+                    settings.subsam_frac = strtod(tmp, &tmp);
+                    if (*tmp) ret = 1;
+                } else {
+                    ret = 1;
+                }
+                if (!ret) settings.subsam_seed_auto = 0;
             }
 
             if (ret == 1) {
                 print_error("view", "Incorrect sampling argument \"%s\"", optarg);
                 goto view_end;
             }
-            settings.subsam_seed_set = 1;
             settings.count_rf |= SAM_QNAME;
             break;
         case LONGOPT('s'):
@@ -993,12 +1002,17 @@ int main_samview(int argc, char *argv[])
             settings.count_rf |= SAM_QNAME;
             break;
         case LONGOPT('S'):
-            if (!parse_long_value(optarg, &temp_value, 0)) {
-                print_error("view", "Incorrect seed argument \"%s\"", optarg);
-                goto view_end;
+            if (strcasecmp(optarg, "auto") == 0) {
+                settings.subsam_seed = 0;
+                settings.subsam_seed_auto = 1;
+            } else {
+                if (!parse_long_value(optarg, &temp_value, 0)) {
+                    print_error("view", "Incorrect seed argument \"%s\"", optarg);
+                    goto view_end;
+                }
+                settings.subsam_seed = temp_value;
+                settings.subsam_seed_auto = 0;
             }
-            settings.subsam_seed = temp_value;
-            settings.subsam_seed_set = 1;
             break;
         case 'm':
             if (!parse_int_value(optarg, &settings.min_qlen)) {
@@ -1343,19 +1357,33 @@ int main_samview(int argc, char *argv[])
         sam_hdr_remove_lines(settings.header, "RG", "ID", settings.rghash);
     }
 
-    // Compute the subsampling seed.  If the user did not set a seed
-    // explicitly, derive one from the input header text.  This means
-    // identical inputs always produce the same subsample, but
-    // re-subsampling a file gets a different seed because the prior
-    // run's @PG line changed the header.
-    if (settings.subsam_frac > 0. && !settings.subsam_seed_set) {
-        const char *header_text = sam_hdr_str(settings.header);
-        if (header_text)
-            settings.subsam_seed = __ac_X31_hash_string(header_text);
+    // Compute the subsampling seed and record the parameters in a @CO
+    // header line.  In "auto" mode (the default), the seed is derived
+    // from a hash of the input header so identical inputs produce the
+    // same subsample, but serial re-subsampling of a file uses a
+    // different seed at each step because the added @CO line (and
+    // @PG line, if not suppressed) changes the header.
+    if (settings.subsam_frac > 0.) {
+        if (settings.subsam_seed_auto) {
+            const char *header_text = sam_hdr_str(settings.header);
+            if (header_text)
+                settings.subsam_seed = __ac_FNV1a_hash_string(header_text);
+        }
+
+        kstring_t co = KS_INITIALIZE;
+        if (ksprintf(&co, "Sub-sampled fraction=%g seed=%" PRIu32,
+                     settings.subsam_frac, settings.subsam_seed) < 0
+            || sam_hdr_add_line(settings.header, "CO", co.s, NULL) < 0) {
+            print_error("view", "failed to add subsample @CO header line");
+            ks_free(&co);
+            ret = 1;
+            goto view_end;
+        }
+        ks_free(&co);
     }
     if (settings.subsam_seed != 0) {
-        // Convert likely small user input (1, 2, ...) or header hash
-        // to pseudo-random values with more entropy and more bits set
+        // Scramble likely small user input (1, 2, ...) to a pseudo-random
+        // value with more entropy and more bits set.
         srand(settings.subsam_seed);
         settings.subsam_seed = rand();
     }
@@ -1653,8 +1681,12 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "                             ...have some of the FLAGs present\n"
 "  -G FLAG                    EXCLUDE reads with all of the FLAGs present\n"  // !(F&x == x)  TODO long option
 "      --subsample FLOAT      Keep only FLOAT fraction of templates/read pairs\n"
-"      --subsample-seed INT   Influence WHICH reads are kept in subsampling [hash of header]\n"
+"      --subsample-seed INT|auto\n"
+"                             Seed used to influence WHICH reads are kept in\n"
+"                             subsampling.  \"auto\" derives the seed from a\n"
+"                             hash of the input header [auto]\n"
 "  -s INT.FRAC                Same as --subsample 0.FRAC --subsample-seed INT\n"
+"                             (INT may be \"auto\")\n"
 "\n"
 "Processing options:\n"
 "      --add-flags FLAG       Add FLAGs to reads\n"

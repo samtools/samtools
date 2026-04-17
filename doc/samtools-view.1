@@ -464,20 +464,28 @@ Output only a proportion of the input alignments, as specified by 0.0 \(<=
 This subsampling acts in the same way on all of the alignment records in
 the same template or read pair, so it never keeps a read but not its mate.
 .TP
-.BI "--subsample-seed " INT
+.BI "--subsample-seed " INT | auto
 Subsampling seed used to influence
 .I which
 subset of reads is kept.
 .\" Reads are retained based on a score computed by hashing their QNAME
 .\" field and the seed value.
-By default, the seed is derived from a hash of the input file's header text.
-Since each subsampling run adds a @PG header line, re-subsampling a file will
-automatically produce a different seed value, ensuring the expected fraction
-of reads is retained at each step.
+If the value is the literal string
+.BR auto ,
+the seed is derived from a hash of the input file's header text.  Because
+each subsampling run appends an
+.B @CO
+header line recording the fraction and seed used (and, unless
+.B --no-PG
+is given, a
+.B @PG
+line as well), re-subsampling a file in \fBauto\fR mode will automatically
+produce a different seed at each step, ensuring the expected fraction of
+reads is retained.
 When subsampling data that has previously been subsampled using an explicit
 seed, be sure to use a different seed value from those used previously;
 otherwise more reads will be retained than expected.
-[hash of header text]
+[auto]
 .TP
 .BI "-s " FLOAT
 Subsampling shorthand option:
@@ -485,6 +493,9 @@ Subsampling shorthand option:
 is equivalent to
 .BI "--subsample-seed " INT " --subsample"
 .RI 0. FRAC .
+.I INT
+may also be the literal string
+.BR auto .
 .TP
 .BI "-@ " INT ", --threads " INT
 Number of BAM compression threads to use in addition to main thread [0].
