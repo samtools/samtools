@@ -2616,11 +2616,18 @@ sub test_view
         }
     }
 
-    # Repeated subsampling without an explicit seed.  The default seed is
-    # derived from the header, which changes each round (new @PG line), so
-    # each round should further reduce the read count.
-    {
-        printf "\t%s ", "$test: Repeated subsampling reduces reads";
+    # Repeated subsampling in "auto" seed mode.  The seed is derived from a
+    # hash of the input header, which changes each round (new @CO line
+    # recording the seed, plus the @PG line), so each round should further
+    # reduce the read count.  Exercise the default, the explicit
+    # "--subsample-seed auto" form, and the "-s auto.FRAC" shorthand.
+    for my $variant (
+        { name => 'default seed',           args => sub { ('--subsample', $_[0]) } },
+        { name => '--subsample-seed auto',  args => sub { ('--subsample', $_[0], '--subsample-seed', 'auto') } },
+        { name => '-s auto.FRAC',           args => sub { ('-s', 'auto.' . (int($_[0] * 10))) } },
+    ) {
+        my $label = "Repeated subsampling reduces reads ($variant->{name})";
+        printf "\t%s ", "$test: $label";
 
         my $input = $big_bam;
         my $frac  = 0.5;
@@ -2630,11 +2637,10 @@ sub test_view
         for my $round (1 .. 3) {
             my $output = sprintf("%s.test%03d.round%d.bam", $out, $test, $round);
             my @cmd = ("$$opts{bin}/samtools", "view", "-b",
-                       "--subsample", $frac, $input,
+                       $variant->{args}->($frac), $input,
                        "-o", $output);
             system(@cmd) == 0 || die "Error running @cmd\n";
 
-            # Count reads in the output
             my $count = 0;
             open(my $fh, '-|', "$$opts{bin}/samtools", "view", "-c", $output)
                 || die "Couldn't count reads in $output: $!\n";
@@ -2659,9 +2665,36 @@ sub test_view
         }
 
         if (!$res) {
-            passed($opts, msg => "$test: Repeated subsampling reduces reads");
+            passed($opts, msg => "$test: $label");
         } else {
-            failed($opts, msg => "$test: Repeated subsampling reduces reads");
+            failed($opts, msg => "$test: $label");
+        }
+        $test++;
+    }
+
+    # Verify that the @CO line recording the subsample fraction and seed is
+    # present in the output header.
+    {
+        my $label = "Subsample adds \@CO line with fraction and seed";
+        printf "\t%s ", "$test: $label";
+
+        my $output = sprintf("%s.test%03d.subsample_co.bam", $out, $test);
+        my @cmd = ("$$opts{bin}/samtools", "view", "-b",
+                   "--subsample", "0.5", "--subsample-seed", "42",
+                   $big_bam, "-o", $output);
+        system(@cmd) == 0 || die "Error running @cmd\n";
+
+        my $header = '';
+        open(my $fh, '-|', "$$opts{bin}/samtools", "view", "-H", $output)
+            || die "Couldn't read header from $output: $!\n";
+        { local $/; $header = <$fh>; }
+        close($fh);
+
+        if ($header =~ /^\@CO\tSub-sampled fraction=0\.5 seed=42$/m) {
+            passed($opts, msg => "$test: $label");
+        } else {
+            printf("\n\tHeader did not contain expected \@CO line:\n%s\n", $header);
+            failed($opts, msg => "$test: $label");
         }
         $test++;
     }
