@@ -1613,7 +1613,8 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
 
     int ibase,iqual;
     if ( stats->max_len<stats->nbases ) stats->max_len++;
-    if ( stats->max_qual+1<stats->nquals ) stats->max_qual++;
+    if ( stats->max_qual+1<stats->nquals && stats->max_qual<255 )
+        stats->max_qual++;
     fprintf(to, "# First Fragment Qualities. Use `grep ^FFQ | cut -f 2-` to extract this part.\n");
     fprintf(to, "# Columns correspond to qualities and rows to cycles. First column is the cycle number.\n");
     for (ibase=0; ibase<stats->max_len_1st; ibase++)
@@ -2318,7 +2319,7 @@ stats_t* stats_init(void)
         return NULL;
 
     stats->ngc    = 200;
-    stats->nquals = 256;
+    stats->nquals = 257; // NB: 95 is better, but need to handle qual "*"
     stats->nbases = 300;
     stats->rseq_pos     = -1;
     stats->tid = -1;
