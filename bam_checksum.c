@@ -731,7 +731,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
             u32_to_le(b->core.mtid,  mate);
             u64_to_le(b->core.mpos,  mate+4);
             u64_to_le(b->core.isize, mate+12);
-            c.mate = hts_crc32(c.seq, mate, 12);
+            c.mate = hts_crc32(c.seq, mate, 20);
         }
 
         // flag + seq + mapq + cigar
@@ -824,7 +824,6 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         }
         kh_destroy(chk, h);
     }
-
     return ret;
 }
 
@@ -837,7 +836,9 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 // Process an individual file, aggregating to s, noRG and h
 static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
                       khash_t(chk) *h) {
-    int ret = -1;
+    int ret = -1, minfields = 8;    //samtools style chksum
+    typedef enum hdrtype {HDR_NF, HDR_SAMCHKSUM, HDR_BAMBAMCHKSUM} hdrtype;
+    hdrtype hdr = HDR_NF;
     FILE *fp;
     if ((fp = fopen(fn, "r")) == NULL) {
         perror(fn);
@@ -869,6 +870,11 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
             int n, i = 0, idx;
             char *ptr = line.s+2;
             char token[20];
+            if (hdr != HDR_NF) {
+                fprintf(stderr, "Invalid header, repeat of header line\n");
+                goto err;
+            }
+            hdr = HDR_SAMCHKSUM;    //sam style
             while ((n = sscanf(ptr, "%19s%n", token, &idx)) == 1) {
                 if (strcmp(token, "Group") == 0)
                     header[i] = H_GROUP;
@@ -892,7 +898,7 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
                     header[i] = H_MATE, o->check_mate = 1;
                 else if (strcmp(token, "combined") == 0)
                     header[i] = H_COMBINED;
-                else  {
+                else {
                     fprintf(stderr, "Unrecognised header token '%s'\n", token);
                     goto err;
                 }
@@ -908,10 +914,16 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
         if (strncmp(line.s, "# Aux", 5) == 0) {
             int idx;
             char c;
-            if (sscanf(line.s, "# Aux tags: %c%n", &c, &idx) == 1)
-                if (!o->tag_str)
+            if (sscanf(line.s, "# Aux tags: %c%n", &c, &idx) == 1) {
+                if (!o->tag_str) {
                     o->tag_free = o->tag_str = strdup(line.s + idx-1);
-
+                } else {  //check for matching tags
+                    if (strcmp(o->tag_str, line.s + idx - 1)) {
+                        fprintf(stderr, "Aux tag mismatch, %s - %s\n", o->tag_str, line.s + idx - 1);
+                        goto err;
+                    }
+                }
+            }
             continue;
         }
 
@@ -920,6 +932,65 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
             char c;
             if (sscanf(line.s, "# BAM flags: %c%n", &c, &idx) == 1)
                 o->flag_mask = bam_str2flag(line.s + idx-1);
+
+            continue;
+        }
+
+        if (strncmp(line.s, "###\t", 4) == 0) { //bambam style checksum
+            int n, i = 0, idx;
+            char *ptr = line.s;
+            char token[50];
+            if (hdr != HDR_NF) {
+                fprintf(stderr, "Invalid header, repeat of header line\n");
+                goto err;
+            }
+            hdr = HDR_BAMBAMCHKSUM;    //biobambam style
+            minfields = 7;
+            while ((n = sscanf(ptr, "%49s%n", token, &idx)) == 1) {
+                if (strcmp(token, "###") == 0)
+                    header[i] = H_GROUP;
+                else if (strcmp(token, "set") == 0)
+                    header[i] = H_QC;
+                else if (strcmp(token, "count") == 0)
+                    header[i] = H_COUNT;
+                else if (strcmp(token, "b_seq") == 0)
+                    header[i] = H_SEQ;
+                else if (strcmp(token, "name_b_seq") == 0)
+                    header[i] = H_NAME;
+                else if (strcmp(token, "b_seq_qual") == 0)
+                    header[i] = H_QUAL;
+                else if (strncmp(token, "b_seq_tags(", 11) == 0) {
+                    char *tag = NULL;
+                    header[i] = H_AUX;
+                    if (!o->tag_str) {
+                        tag = strdup(token+11);
+                        if (tag) {
+                            size_t ln = strlen(tag);
+                            if (ln) {
+                                tag[ln-1] = '\0';   //remove ')'
+                            }
+                            o->tag_free = o->tag_str = tag;
+                        }
+                    } else {    //check for matching tags
+                        tag = token + 11;
+                        size_t ln = strlen(tag);
+                        if (ln) {
+                            tag[ln-1] = '\0';   //remove ')'
+                        }
+                        if (strcmp(o->tag_str, tag)) {
+                            fprintf(stderr, "Aux tag mismatch, %s - %s\n", o->tag_str, tag);
+                            goto err;
+                        }
+                    }
+                } else  {
+                    fprintf(stderr, "Unrecognised header token '%s'\n", token);
+                    goto err;
+                }
+
+                i++;
+                ptr += idx;
+            }
+            nheader = i;
 
             continue;
         }
@@ -937,6 +1008,10 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
         int nf;
         for (nf = 0; nf < 11; nf++) {
             int idx;
+            if (!nf && hdr == HDR_BAMBAMCHKSUM && *ptr == '\t') {   //bambam noRG case
+                col[0][0] = '\0';
+                continue;   //'\t' ll be discarded in next read!
+            }
             int n = sscanf(ptr, "%127s%n", col[nf], &idx);
             if (n <= 0)
                 break;
@@ -948,7 +1023,7 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
         }
 
         // Sanity check that header and rows match
-        if (nf < 8 || nf != nheader) {
+        if (nf < minfields || nf != nheader) {
             fprintf(stderr, "Incorrect number of columns in line: %s\n",
                     line.s);
             goto err;
@@ -1010,7 +1085,7 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
         }
 
         // Add group entry
-        if (strcmp(col[0], "-") == 0) {
+        if (strcmp(col[0], "-") == 0 || col[0][0] == '\0') {    //no RG in sam/bambam o/p
             sums_update_row(qc, noRG, &crcs, 0, count);
         } else {
             int kret;
