@@ -1,0 +1,112 @@
+name: Mac OS CI
+on: [push, pull_request]
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Fully declare each matrix entry here, as otherwise it's possible
+        # to get unexpected results due to the way the entries get expanded
+        # (See https://magmanu.github.io/blog/tech/matrices-github-actions/)
+        include:
+          # configure
+          - use-configure: use-configure
+            htssrc: hidden-htslib
+            sanitize: no-sanitize
+
+          # make only
+          - use-configure: no-configure
+            htssrc: htslib
+            sanitize: no-sanitize
+
+          # configure, sanitize
+          - use-configure: use-configure
+            htssrc: hidden-htslib
+            sanitize: sanitize
+
+    defaults:
+      run:
+        working-directory: ./samtools
+
+    steps:
+    - name: Checkout
+      # This is actions/checkout@v6.0.2
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        persist-credentials: false
+        path: samtools
+
+    - name: Install autotools
+      working-directory: .
+      run: |
+        brew install autoconf automake libtool
+
+    - name: Clone htslib
+      working-directory: .
+      run: |
+        mkdir -p ${{ matrix.htssrc }}
+        htslib_pr=`git log -2 --format='%s' | sed -n 's/.*htslib#\([0-9]*\).*/\1/p'`
+        ./samtools/.ci_helpers/clone ${GITHUB_REPOSITORY_OWNER} htslib ${{ matrix.htssrc }} ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME} $htslib_pr
+
+    - name: Set build options
+      run: |
+        cc='clang'
+        configure_opts='--enable-werror'
+        cflags='-g -O3 -arch arm64 -arch x86_64'
+        ldflags='-arch arm64 -arch x86_64'
+
+        if [ '${{ matrix.sanitize }}' = 'sanitize' ] ; then
+          cflags="-g -Og -fsanitize=address,undefined -Wno-format-truncation -Wno-format-overflow -arch arm64 -arch x86_64 -DHTS_ALLOW_UNALIGNED=0"
+          ldflags='-fsanitize=address,undefined -arch arm64 -arch x86_64'
+        fi
+
+        echo "cc=${cc}" >> "$GITHUB_ENV"
+        echo "configure_opts=${configure_opts}" >> "$GITHUB_ENV"
+        echo "cflags=${cflags}" >> "$GITHUB_ENV"
+        echo "ldflags=${ldflags}" >> "$GITHUB_ENV"
+
+    - name: Build htslib
+      working-directory: ${{ matrix.htssrc }}
+      run: |
+        htsdir="`realpath ..`/installed-htslib"
+        echo "htsdir=${htsdir}" >> "$GITHUB_ENV"
+
+        autoreconf -i
+        { ./configure --prefix="$htsdir" ${configure_opts} ${cc:+CC="$cc"} ${cflags:+CFLAGS="$cflags"} ${ldflags:+LDFLAGS="$ldflags"} ||
+          { cat config.log ; false ; } ; } &&
+        make -j 5 &&
+        make install
+
+    - name: Configure samtools
+      if: ${{ matrix.use-configure == 'use-configure' }}
+      run: |
+        autoreconf -i
+
+        with_htslib="--with-htslib=$htsdir"
+        ldflags="${ldflags:+$ldflags }-Wl,-rpath,${htsdir}/lib"
+
+        printf "\nRunning ./configure ${with_htslib} ${configure_opts}${cc:+ CC='$cc'}${cflags:+ CFLAGS='$cflags'}${ldflags:+ LDFLAGS='$ldflags'} ...\n\n"
+
+        { ./configure $with_htslib ${configure_opts} ${cc:+CC="$cc"} ${cflags:+CFLAGS="$cflags"} ${ldflags:+LDFLAGS="$ldflags"} &&
+          { grep -qE 'CFLAGS *=.*-Werror' config.mk ||
+            { printf "\nStopping as -Werror was not set.\n" 1>&2 ; false ; } ;
+          } ;
+        } || { printf "\n### config.log content follows...\n\n" 1>&2 ; cat config.log ; false ; }
+
+    - name: Compile samtools
+      run: |
+        if [ '${{ matrix.use-configure }}' = 'use-configure' ] ; then
+          make -j5
+        else
+          make -j5 ${cc:+CC="$cc"} ${cflags:+CFLAGS="$cflags -Werror"}
+        fi
+
+    - name: Check
+      run: |
+        if [ '${{ matrix.use-configure }}' = 'use-configure' ] ; then
+          make check BGZIP=$htsdir/bin/bgzip
+        else
+          make check ${cc:+CC="$cc"} ${cflags:+CFLAGS="$cflags -Werror"}
+        fi

@@ -1,0 +1,139 @@
+name: Linux CI
+on: [push, pull_request]
+
+jobs:
+  build-linux:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Fully declare each matrix entry here, as otherwise it's possible
+        # to get unexpected results due to the way the entries get expanded
+        # (See https://magmanu.github.io/blog/tech/matrices-github-actions/)
+        include:
+          # x86-64, clang, configure
+          - os: ubuntu-latest
+            use-configure: use-configure
+            htssrc: hidden-htslib
+            compiler: clang
+            sanitize: no-sanitize
+            run-extra-checks: no-extra-checks
+
+          # x86-64, gcc, configure, sanitize
+          - os: ubuntu-latest
+            use-configure: use-configure
+            htssrc: hidden-htslib
+            compiler: gcc
+            sanitize: sanitize
+            run-extra-checks: no-extra-checks
+
+          # x86-64, gcc, no configure, run extra checks
+          - os: ubuntu-latest
+            use-configure: no-configure
+            htssrc: htslib
+            compiler: gcc
+            sanitize: no-sanitize
+            run-extra-checks: run-extra-checks
+
+          # arm, gcc, configure
+          - os: ubuntu-24.04-arm
+            use-configure: use-configure
+            htssrc: hidden-htslib
+            compiler: gcc
+            sanitize: no-sanitize
+            run-extra-checks: no-extra-checks
+
+    defaults:
+      run:
+        working-directory: ./samtools
+
+    steps:
+    - name: Checkout
+      # This is actions/checkout@v6.0.2
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        persist-credentials: false
+        path: samtools
+
+    - name: Run apt
+      working-directory: .
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-suggests --no-install-recommends autoconf automake make ${{ matrix.compiler }} perl zlib1g-dev libbz2-dev liblzma-dev libcurl4-gnutls-dev libssl-dev libncurses5-dev libdeflate-dev
+
+    - name: Clone htslib
+      working-directory: .
+      run: |
+        mkdir -p ${{ matrix.htssrc }}
+        htslib_pr=`git log -2 --format='%s' | sed -n 's/.*htslib#\([0-9]*\).*/\1/p'`
+        ./samtools/.ci_helpers/clone ${GITHUB_REPOSITORY_OWNER} htslib ${{ matrix.htssrc }} ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME} $htslib_pr
+
+    - name: Set build options
+      run: |
+        cc='clang'
+        configure_opts='--enable-werror'
+        cflags='-g -O3'
+        ldflags=''
+
+        if [ '${{ matrix.sanitize }}' = 'sanitize' ] ; then
+          cflags="-g -Og -fsanitize=address,undefined -Wno-format-truncation -Wno-format-overflow -DHTS_ALLOW_UNALIGNED=0"
+          ldflags='-fsanitize=address,undefined'
+        else
+          if [ '${{ matrix.use-configure}}' = 'use-configure' ] ; then
+            cflags="$cflags -std=c99 -pedantic"
+          fi
+        fi
+
+        echo "cc=${cc}" >> "$GITHUB_ENV"
+        echo "configure_opts=${configure_opts}" >> "$GITHUB_ENV"
+        echo "cflags=${cflags}" >> "$GITHUB_ENV"
+        echo "ldflags=${ldflags}" >> "$GITHUB_ENV"
+
+    - name: Build htslib
+      working-directory: ${{ matrix.htssrc }}
+      run: |
+        htsdir="`realpath ..`/installed-htslib"
+        echo "htsdir=${htsdir}" >> "$GITHUB_ENV"
+
+        autoreconf -i
+        { ./configure --prefix="$htsdir" ${configure_opts} ${cc:+CC="$cc"} ${cflags:+CFLAGS="$cflags"} ${ldflags:+LDFLAGS="$ldflags"} ||
+          { cat config.log ; false ; } ; } &&
+        make -j 5 &&
+        make install
+
+    - name: Configure samtools
+      if: ${{ matrix.use-configure == 'use-configure' }}
+      run: |
+        autoreconf -i
+
+        with_htslib="--with-htslib=$htsdir"
+        ldflags="${ldflags:+$ldflags }-Wl,-rpath=${htsdir}/lib"
+
+        printf "\nRunning ./configure ${with_htslib} ${configure_opts}${cc:+ CC='$cc'}${cflags:+ CFLAGS='$cflags'}${ldflags:+ LDFLAGS='$ldflags'} ...\n\n"
+
+        { ./configure $with_htslib ${configure_opts} ${cc:+CC="$cc"} ${cflags:+CFLAGS="$cflags"} ${ldflags:+LDFLAGS="$ldflags"} &&
+          { grep -qE 'CFLAGS *=.*-Werror' config.mk ||
+            { printf "\nStopping as -Werror was not set.\n" 1>&2 ; false ; } ;
+          } ;
+        } || { printf "\n### config.log content follows...\n\n" 1>&2 ; cat config.log ; false ; }
+
+    - name: Compile samtools
+      run: |
+        if [ '${{ matrix.use-configure }}' = 'use-configure' ] ; then
+          make -j5
+        else
+          make -j5 ${cc:+CC="$cc"} ${cflags:+CFLAGS="$cflags -Werror"}
+        fi
+
+    - name: Check
+      run: |
+        if [ '${{ matrix.use-configure }}' = 'use-configure' ] ; then
+          make check BGZIP=$htsdir/bin/bgzip
+        else
+          make check ${cc:+CC="$cc"} ${cflags:+CFLAGS="$cflags -Werror"}
+        fi
+
+    - name: Extra checks
+      if: ${{ matrix.run-extra-checks == 'run-extra-checks' }}
+      run: |
+        make maintainer-check
