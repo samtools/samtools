@@ -1,0 +1,9 @@
+# Checksum 1.0 for file: merge
+# Aux tags:          BC,FI,QT,RT,TC
+# BAM flags:         PAIRED,READ1,READ2
+
+# Group    QC          count  flag+seq  +name     +qual     +aux      combined
+all        all           288  7ec98147  2bf6a3c2  18989a96  7ec98147  25718149
+ERR013140  all           142  3c3d7e84  53854e47  2f2f5259  3c3d7e84  2a5461f7
+ERR016352  all            26  05c857f8  68817922  770fe101  05c857f8  42a251b8
+ERR156632  all           120  70b96700  4285dfa1  5207ab35  70b96700  3e9f31bc

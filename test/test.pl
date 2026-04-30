@@ -4118,6 +4118,25 @@ sub test_checksum
         cmd("$$opts{bin}/samtools checksum -a $$opts{path}/checksum/chk2-$rg.tmp -o $$opts{path}/checksum/chk2-$rg.tmp.chk");
     }
     test_cmd($opts, out=>"checksum/chk2.2.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk2-*.tmp.chk | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+
+    # biobambam2 compatible output
+    test_cmd($opts, out=>"checksum/chk1.4.expected", cmd=>"$$opts{bin}/samtools $chk -B $$opts{path}/checksum/chk1.bam");
+    # similar but w/o RG hdr and w/o RG data
+    test_cmd($opts, out=>"checksum/chk1.5.expected", cmd=>"$$opts{bin}/samtools view test/checksum/chk1.bam -h | sed '/\@RG/d;s/\tRG\:Z\:[0-9a-zA-Z]*//g' | $$opts{bin}/samtools $chk -B -");
+    # merge biobambam2 compatible output
+    test_cmd($opts, out=>"checksum/chk1.4.expected", cmd=>"$$opts{bin}/samtools $chk -B -m $$opts{path}/checksum/chk1.4.expected");
+    test_cmd($opts, out=>"checksum/chk1.6.expected", cmd=>"$$opts{bin}/samtools $chk -B -m $$opts{path}/checksum/chk1.4.expected $$opts{path}/checksum/chk1.5.expected");
+
+    # checksum with different aux tag than default
+    cmd("$$opts{bin}/samtools $chk -t AM $$opts{path}/checksum/chk1.bam -o $$opts{path}/checksum/chk1.tmp.chk");
+    # merge with different tags, expected to fail
+    test_cmd($opts, want_fail=>1, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk1.1.expected $$opts{path}/checksum/chk1.tmp.chk");
+    # merge b/w different type, works fine
+    test_cmd($opts, out=>"checksum/chk1.7.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk1.1.expected $$opts{path}/checksum/chk1.4.expected");
+    # merge b/w different type, with -B, works fine
+    test_cmd($opts, out=>"checksum/chk1.8.expected", cmd=>"$$opts{bin}/samtools $chk -B -m $$opts{path}/checksum/chk1.1.expected $$opts{path}/checksum/chk1.4.expected");
+
+
 }
 
 
