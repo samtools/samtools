@@ -1345,12 +1345,14 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
         {
             int cig  = bam_cigar_op(bam_get_cigar(bam_line)[i]);
             int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
+            int ncig_init = ncig;
+
             if ( !ncig ) continue;  // curiously, this can happen: 0D
             if ( cig==BAM_CDEL ) readlen += ncig;
             else if ( cig==BAM_CMATCH || cig==BAM_CEQUAL || cig==BAM_CDIFF )
             {
                 if ( iref < stats->reg_from ) ncig -= stats->reg_from-iref;
-                else if ( iref+ncig-1 > stats->reg_to ) ncig -= iref+ncig-1 - stats->reg_to;
+                if ( iref+ncig_init-1 > stats->reg_to ) ncig -= iref+ncig_init-1 - stats->reg_to;
                 if ( ncig<0 ) ncig = 0;
                 stats->nbases_mapped_cigar += ncig;
                 iref += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
