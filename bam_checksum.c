@@ -917,6 +917,10 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
             if (sscanf(line.s, "# Aux tags: %c%n", &c, &idx) == 1) {
                 if (!o->tag_str) {
                     o->tag_free = o->tag_str = strdup(line.s + idx-1);
+                    if (!o->tag_str) {
+                        fprintf(stderr, "Out of memory\n");
+                        goto err;
+                    }
                 } else {  //check for matching tags
                     if (strcmp(o->tag_str, line.s + idx - 1)) {
                         fprintf(stderr, "Aux tag mismatch, %s - %s\n", o->tag_str, line.s + idx - 1);
@@ -970,6 +974,9 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
                                 tag[ln-1] = '\0';   //remove ')'
                             }
                             o->tag_free = o->tag_str = tag;
+                        } else {
+                            fprintf(stderr, "Out of memory\n");
+                            goto err;
                         }
                     } else {    //check for matching tags
                         tag = token + 11;
