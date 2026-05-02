@@ -364,7 +364,10 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
 
             switch(ids[i]) {
             case FQ_R0:
-                // unpaired; no flags to declare
+                // unpaired; clear any paired flags that may have been
+                // set by /1 /2 suffix or CASAVA tag parsing in htslib
+                b->core.flag &= ~(BAM_FPAIRED | BAM_FREAD1 | BAM_FREAD2
+                                   | BAM_FMUNMAP);
                 break;
             case FQ_SINGLE:
                 // paired (but don't know if R1 or R2) or unpaired.
