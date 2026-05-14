@@ -2188,7 +2188,7 @@ error(const char *format, ...)
         printf("Options:\n");
         printf("    -c, --coverage <int>,<int>,<int>    Coverage distribution min,max,step [1,1000,1]\n");
         printf("    -d, --remove-dups                   Exclude from statistics reads marked as duplicates\n");
-        printf("    -X, --customized-index         Use a customized index file\n");
+        printf("    -X, --customized-index              Use a customized index file\n");
         printf("    -f, --required-flag  <str|int>      Required flag, 0 for unset. See also `samtools flags` [0]\n");
         printf("    -F, --filtering-flag <str|int>      Filtering flag, 0 for unset. See also `samtools flags` [0]\n");
         printf("        --GC-depth <float>              the size of GC-depth bins (decreasing bin size increases memory requirement) [2e4]\n");
