@@ -46,8 +46,8 @@ static int usage(FILE *fp, int exit_status) {
     fprintf(fp, "Options:\n");
     fprintf(fp, "  -s FILE      Read paired-ended data from single FILE\n");
     fprintf(fp, "  -0 FILE      Read single-ended data from FILE\n");
-    fprintf(fp, "  -1 FILE      Read-1 from FILE\n");
-    fprintf(fp, "  -2 FILE      Read-2 from FILE\n");
+    fprintf(fp, "  -1 FILE      Read-1 from FILE (overrides CASAVA and /1 /2 suffixes)\n");
+    fprintf(fp, "  -2 FILE      Read-2 from FILE (overrides CASAVA and /1 /2 suffixes)\n");
     fprintf(fp, "  --i1 FILE    Index-1 from FILE\n");
     fprintf(fp, "  --i2 FILE    Index-2 from FILE\n");
     fprintf(fp, "  -i           Parse CASAVA identifier\n");
@@ -364,7 +364,10 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
 
             switch(ids[i]) {
             case FQ_R0:
-                // unpaired; no flags to declare
+                // unpaired; clear any paired flags that may have been
+                // set by /1 /2 suffix or CASAVA tag parsing in htslib
+                b->core.flag &= ~(BAM_FPAIRED | BAM_FREAD1 | BAM_FREAD2
+                                   | BAM_FMUNMAP);
                 break;
             case FQ_SINGLE:
                 // paired (but don't know if R1 or R2) or unpaired.
@@ -373,14 +376,18 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
                 // explicitly enabled.
                 break;
             case FQ_R1:
-                if ((b->core.flag & (BAM_FREAD1 | BAM_FREAD2)) == 0)
-                    b->core.flag |= BAM_FREAD1;
-                b->core.flag |= BAM_FPAIRED;
+                // -1 overrides any FREAD1/FREAD2 set by /1 /2 suffix
+                // or CASAVA tag parsing in htslib.
+                b->core.flag = (b->core.flag & ~BAM_FREAD2)
+                             | BAM_FREAD1 | BAM_FPAIRED;
                 if (i+1 < n && ids[i+1] == FQ_R2)
                     b->core.flag |= BAM_FMUNMAP;
                 break;
             case FQ_R2:
-                b->core.flag |= BAM_FPAIRED | BAM_FREAD2;
+                // -2 overrides any FREAD1/FREAD2 set by /1 /2 suffix
+                // or CASAVA tag parsing in htslib.
+                b->core.flag = (b->core.flag & ~BAM_FREAD1)
+                             | BAM_FREAD2 | BAM_FPAIRED;
                 if (i > 0 && ids[i-1] == FQ_R1)
                     b->core.flag |= BAM_FMUNMAP;
                 break;
