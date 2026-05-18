@@ -73,6 +73,14 @@ These correspond to typical output produced by Illumina bcl2fastq and
 match the output from \fBsamtools fastq\fR.  The index files will set
 both the \fBBC\fR barcode code and it's associated \fBQT\fR quality tag.
 
+By default the read names are checked for consistency between
+corresponding records in different input files and between mates in
+interleaved input.
+A mismatch indicates that the input files may be out of sync, which
+would result in incorrect read pairing or barcode assignment.
+This check can be disabled with \fB--no-name-check\fR; see the
+description of that option for implications.
+
 The Illumina CASAVA identifiers may also be processed when the \fB-i\fR
 option is given.  This tag will be processed for READ1 / READ2,
 whether or not the read failed processing (QCFAIL flag), and the
@@ -185,6 +193,30 @@ pattern as specified in the SAM specification.  \fITAGLIST\fR can be blank
 or \fB*\fR to indicate all tags should be copied to the output,
 otherwise it is a comma-separated list of tag types to include with
 all others being discarded.
+
+.TP 8
+.B --no-name-check
+Disable the read name consistency check.  By default, when importing
+paired data from two files (\fB-1\fR and \fB-2\fR), an interleaved file
+(\fB-s\fR), or with index files (\fB--i1\fR, \fB--i2\fR), the read
+names are checked to ensure they match between mates.  A mismatch
+causes the import to abort with an error.
+.sp
+For paired data (\fB-1\fR/\fB-2\fR), it may be legitimate to have files
+in different sort orders.  In this case, disabling the check and
+subsequently using \fBsamtools sort -n\fR or \fBsamtools collate\fR can
+produce a valid result.  Note however that the READ1 and READ2 flags
+are assigned based on which file the read came from, so these flags
+will be correct only if the read truly belongs to that file.
+.sp
+For interleaved data (\fB-s\fR), READ1 and READ2 flags are inferred
+from \fB/1\fR and \fB/2\fR read name suffixes, or from Illumina CASAVA
+identifiers when \fB-i\fR is used.  They are not inferred from the
+ordering of records within the file.
+.sp
+For index files (\fB--i1\fR, \fB--i2\fR), disabling the name check is
+almost always incorrect, as it would cause barcode sequences (BC tag) to
+be attached to unrelated reads.
 
 
 .SH EXAMPLES

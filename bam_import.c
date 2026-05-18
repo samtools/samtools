@@ -67,6 +67,9 @@ static int usage(FILE *fp, int exit_status) {
     fprintf(fp, "  --order TAG  Store Nth record count in TAG\n");
     fprintf(fp, "\n");
     fprintf(fp, "      --no-PG  Do not add a PG line\n");
+    fprintf(fp, "      --no-name-check\n");
+    fprintf(fp, "               Disable read name consistency checking for\n");
+    fprintf(fp, "               paired and index file inputs\n");
     sam_global_opt_help(fp, "-.O.-@--");
 
     fprintf(fp, "\nA single fastq file will be interpreted as -s, -0 or -1 depending on\n");
@@ -103,6 +106,7 @@ typedef struct {
     int compress_level;
     htsThreadPool p;
     int name2;
+    int name_check;     // check read name consistency (default 1)
 } opts_t;
 
 // Append a sequence and quality string from a BAM record to a BC:Z and
@@ -153,6 +157,10 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
     uint64_t read_num = 0;
     kstring_t idx_seq  = {0};
     kstring_t idx_qual = {0};
+    kstring_t check_name = {0, 0, NULL};
+    int check_name_set = 0;
+    int check_name_flag = 0; // BAM_FREAD1 or BAM_FREAD2
+    uint64_t iter_count = 0;
 
     // Any additional arguments are assumed to be r1 r2, as a
     // short cut. We support reading index tags out of those too (eg
@@ -330,6 +338,8 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
     int eof = 0;
     do {
         idx_seq.l = idx_qual.l = 0;
+        check_name_set = 0;
+        iter_count++;
         for (i = 0; i < n; i++) {
             if ((res = sam_read1(fp_in[ids[i]], NULL, b)) < 0) {
                 if (res == -1) {
@@ -337,6 +347,77 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
                     continue;
                 } else
                     break;
+            }
+
+            // Read name consistency check
+            if (opts->name_check && ids[i] != FQ_R0) {
+                const char *qname = bam_get_qname(b);
+
+                if (ids[i] == FQ_SINGLE) {
+                    // Interleaved: check mate grouping
+                    int is_r1 = b->core.flag & BAM_FREAD1;
+                    int is_r2 = b->core.flag & BAM_FREAD2;
+                    if ((is_r1 || is_r2) && check_name.l > 0) {
+                        int mate_flag = is_r1 ? BAM_FREAD2
+                                              : BAM_FREAD1;
+                        if (check_name_flag & mate_flag) {
+                            // Expected mate direction: names
+                            // must match
+                            if (strcmp(qname, check_name.s) != 0) {
+                                print_error("import",
+                                    "read name mismatch in "
+                                    "interleaved input at record "
+                                    "%"PRIu64": \"%s\" vs \"%s\"",
+                                    iter_count, check_name.s,
+                                    qname);
+                                ret = -1;
+                                goto err;
+                            }
+                            check_name.l = 0;
+                            check_name_flag = 0;
+                        } else {
+                            // Same direction: not properly
+                            // interleaved
+                            print_error("import",
+                                "adjacent read%d records in "
+                                "interleaved input at record "
+                                "%"PRIu64": \"%s\" followed "
+                                "by \"%s\"",
+                                is_r1 ? 1 : 2,
+                                iter_count, check_name.s, qname);
+                            ret = -1;
+                            goto err;
+                        }
+                    } else if (is_r1 || is_r2) {
+                        check_name.l = 0;
+                        kputs(qname, &check_name);
+                        check_name_flag = is_r1 | is_r2;
+                    }
+                } else {
+                    // Multi-file mode: all reads in one iteration
+                    // must have the same name
+                    if (!check_name_set) {
+                        check_name.l = 0;
+                        kputs(qname, &check_name);
+                        check_name_set = 1;
+                    } else if (strcmp(qname, check_name.s) != 0) {
+                        const char *file_desc;
+                        switch (ids[i]) {
+                        case FQ_I1: file_desc = "index1"; break;
+                        case FQ_I2: file_desc = "index2"; break;
+                        case FQ_R1: file_desc = "read1"; break;
+                        case FQ_R2: file_desc = "read2"; break;
+                        default:    file_desc = "input"; break;
+                        }
+                        print_error("import",
+                            "read name mismatch at record %"PRIu64
+                            ": \"%s\" vs \"%s\" (in %s file)",
+                            iter_count, check_name.s, qname,
+                            file_desc);
+                        ret = -1;
+                        goto err;
+                    }
+                }
             }
 
             // index
@@ -364,7 +445,10 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
 
             switch(ids[i]) {
             case FQ_R0:
-                // unpaired; no flags to declare
+                // unpaired; clear any paired flags that may have been
+                // set by /1 /2 suffix or CASAVA tag parsing in htslib
+                b->core.flag &= ~(BAM_FPAIRED | BAM_FREAD1 | BAM_FREAD2
+                                   | BAM_FMUNMAP);
                 break;
             case FQ_SINGLE:
                 // paired (but don't know if R1 or R2) or unpaired.
@@ -454,6 +538,7 @@ err:
     }
     ks_free(&idx_seq);
     ks_free(&idx_qual);
+    ks_free(&check_name);
 
     return ret;
 }
@@ -477,12 +562,14 @@ int main_import(int argc, char *argv[]) {
         .order_str = 0,
         .compress_level = -1,
         .name2 = 0,
+        .name_check = 1,
     };
     kstring_t rg = {0};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, '-', '@'),
         {"no-PG", no_argument, NULL, 9},
+        {"no-name-check", no_argument, NULL, 10},
         {"i1", required_argument, NULL, 1},
         {"i2", required_argument, NULL, 2},
         {"r1", required_argument, NULL, '1'},
@@ -528,6 +615,7 @@ int main_import(int argc, char *argv[]) {
         case 'N': opts.name2 = 1; break;
 
         case 9: opts.no_pg = 1; break;
+        case 10: opts.name_check = 0; break;
         case 3:
             opts.order = optarg;
             if (strlen(optarg) > 3 && optarg[2] == ':')
