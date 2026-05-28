@@ -1561,6 +1561,318 @@ static void write_json_stats(FILE *fp, const char *offset, const char *group_nam
 }
 
 
+
+
+static int test_for_duplication(md_param_t *param, read_queue_t *in_read, 
+            khash_t(reads) *single_hash, khash_t(reads) *pair_hash, khash_t(duplicates) *dup_hash,
+            stats_block_t *stats, long *bc_warnings, long *opt_warnings) {
+    khiter_t k;
+       
+        
+    // look at the pairs first
+    if (has_mate(in_read->b)) {
+        int ret, mate_tmp;
+        key_data_t pair_key;
+        key_data_t single_key;
+        in_hash_t *bp;
+
+        if (make_pair_key(param, &pair_key, in_read->b, in_read->read_group, bc_warnings)) {
+            print_error("markdup", "error, unable to assign pair hash key.\n");
+            return 1;
+        }
+
+        make_single_key(param, &single_key, in_read->b, in_read->read_group, bc_warnings);
+
+        stats->pair++;
+        in_read->pos = single_key.this_coord; // cigar/orientation modified pos
+
+        // put in singles hash for checking against non paired reads
+        k = kh_put(reads, single_hash, single_key, &ret);
+
+        if (ret > 0) { // new
+            // add to single duplicate hash
+            bp = &kh_val(single_hash, k);
+            bp->p = in_read;
+            in_read->single_key = single_key;
+        } else if (ret == 0) { // exists
+            // look at singles only for duplication marking
+            bp = &kh_val(single_hash, k);
+
+            if (!has_mate(bp->p->b)) {
+               // singleton will always be marked duplicate even if
+               // scores more than one read of the pair
+                bam1_t *dup = bp->p->b;
+
+                if (param->check_chain) {
+                    in_read->duplicate = bp->p;
+                    bp->p->original = in_read;
+                }
+
+                bp->p = in_read;
+                bp->p->dc += 1;
+
+                if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->single_optical, opt_warnings))
+                    return 1;
+
+                stats->single_dup++;
+            }
+        } else {
+            print_error("markdup", "error, single hashing failure for paired read.\n");
+            return 1;
+        }
+
+        // now do the pair
+        k = kh_put(reads, pair_hash, pair_key, &ret);
+
+        if (ret > 0) { // new
+            // add to the pair hash
+            bp = &kh_val(pair_hash, k);
+            bp->p = in_read;
+            in_read->pair_key = pair_key;
+        } else if (ret == 0) {
+            int64_t old_score, new_score, tie_add = 0;
+            bam1_t *dup = NULL;
+
+            bp = &kh_val(pair_hash, k);
+
+            if ((bp->p->b->core.flag & BAM_FQCFAIL) != (in_read->b->core.flag & BAM_FQCFAIL)) {
+                if (bp->p->b->core.flag & BAM_FQCFAIL) {
+                    old_score = 0;
+                    new_score = 1;
+                } else {
+                    old_score = 1;
+                    new_score = 0;
+                }
+            } else {
+                if ((mate_tmp = get_mate_score(bp->p->b)) == -1) {
+                    print_error("markdup", "error, no ms score tag. Please run samtools fixmate on file first.\n");
+                    return 1;
+                } else {
+                    old_score = calc_score(bp->p->b) + mate_tmp;
+                }
+
+                if ((mate_tmp = get_mate_score(in_read->b)) == -1) {
+                    print_error("markdup", "error, no ms score tag. Please run samtools fixmate on file first.\n");
+                    return 1;
+                } else {
+                    new_score = calc_score(in_read->b) + mate_tmp;
+                }
+            }
+
+            // choose the highest score as the original
+            // and add it to the pair hash, mark the other as duplicate
+
+            if (new_score == old_score) {
+                if (strcmp(bam_get_qname(in_read->b), bam_get_qname(bp->p->b)) < 0) {
+                    tie_add = 1;
+                } else {
+                    tie_add = -1;
+                }
+            }
+
+            if (new_score + tie_add > old_score) { // swap reads
+                dup = bp->p->b;
+                in_read->dc += bp->p->dc;
+
+                if (param->check_chain) {
+
+                    if (in_read->duplicate) {
+                        read_queue_t *current = in_read->duplicate;
+
+                        while (current->duplicate) {
+                            current = current->duplicate;
+                        }
+
+                        current->duplicate = bp->p;
+                    } else {
+                        in_read->duplicate = bp->p;
+                    }
+
+                    bp->p->original = in_read;
+                }
+
+                bp->p = in_read;
+            } else {
+                if (param->check_chain) {
+                    if (bp->p->duplicate) {
+                        if (in_read->duplicate) {
+                            read_queue_t *current = bp->p->duplicate;
+
+                            while (current->duplicate) {
+                                current = current->duplicate;
+                            }
+
+                            current->duplicate = in_read->duplicate;
+                        }
+
+                        in_read->duplicate = bp->p->duplicate;
+                    }
+
+                    bp->p->duplicate = in_read;
+                    in_read->original = bp->p;
+                }
+
+                dup = in_read->b;
+                bp->p->dc += 1;
+            }
+
+            if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->optical, opt_warnings))
+                return 1;
+
+            stats->duplicate++;
+        } else {
+            print_error("markdup", "error, pair hashing failure.\n");
+            return 1;
+        }
+    } else { // do the single (or effectively single) reads
+        int ret;
+        key_data_t single_key;
+        in_hash_t *bp;
+
+        make_single_key(param, &single_key, in_read->b, in_read->read_group, bc_warnings);
+
+        stats->single++;
+        in_read->pos = single_key.this_coord; // cigar/orientation modified pos
+
+        k = kh_put(reads, single_hash, single_key, &ret);
+
+        if (ret > 0) { // new
+            bp = &kh_val(single_hash, k);
+            bp->p = in_read;
+            in_read->single_key = single_key;
+        } else if (ret == 0) { // exists
+            bp = &kh_val(single_hash, k);
+
+            if (has_mate(bp->p->b)) {
+                // if matched against one of a pair just mark as duplicate
+
+                if (param->check_chain) {
+                    if (bp->p->duplicate) {
+                        in_read->duplicate = bp->p->duplicate;
+                    }
+
+                    bp->p->duplicate = in_read;
+                    in_read->original = bp->p;
+                }
+
+                bp->p->dc += 1;
+
+                if (mark_duplicates(param, dup_hash, bp->p->b, in_read->b, in_read->read_group, &stats->single_optical, opt_warnings))
+                    return 1;
+
+            } else {
+                int64_t old_score, new_score;
+                bam1_t *dup = NULL;
+
+                old_score = calc_score(bp->p->b);
+                new_score = calc_score(in_read->b);
+
+                // choose the highest score as the original, add it
+                // to the single hash and mark the other as duplicate
+                if (new_score > old_score) { // swap reads
+                    dup = bp->p->b;
+                    in_read->dc += bp->p->dc;
+
+                    if (param->check_chain) {
+                        in_read->duplicate = bp->p;
+                        bp->p->original = in_read;
+                    }
+
+                    bp->p = in_read;
+                } else {
+                    if (param->check_chain) {
+                        if (bp->p->duplicate) {
+                            in_read->duplicate = bp->p->duplicate;
+                        }
+
+                        bp->p->duplicate = in_read;
+                        in_read->original = bp->p;
+                    }
+
+                    bp->p->dc += 1;
+                    dup = in_read->b;
+                }
+
+                if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->single_optical, opt_warnings))
+                    return 1;
+            }
+
+            stats->single_dup++;
+        } else {
+            print_error("markdup", "error, single hashing failure for single read.\n");
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+
+static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_file_t *temp,
+        int32_t prev_tid, hts_pos_t prev_coord, klist_t(read_queue) *read_buffer,
+        khash_t(reads) *single_hash, khash_t(reads) *pair_hash, check_list_t *dup_list,
+        khash_t(duplicates) *dup_hash, stats_block_t *stat_array, long *bc_warnings,
+        long *opt_warnings) {
+    khiter_t k;
+    kliter_t(read_queue) *rq;
+    read_queue_t *in_read;
+    
+    rq = kl_begin(read_buffer);
+    while (rq != kl_end(read_buffer)) {
+        in_read = &kl_val(rq);
+
+        /* keep a moving window of reads based on coordinates and max read length.  Any unaligned reads
+           should just be written as they cannot be matched as duplicates. */
+        if (in_read->pos + param->max_length > prev_coord && in_read->b->core.tid == prev_tid && (prev_tid != -1 || prev_coord != -1)) {
+            break;
+        }
+
+        if (param->check_chain && !in_read->dup_checked && (in_read->original || in_read->duplicate)) {
+            if (find_duplicate_chains(param, in_read, dup_hash, dup_list, opt_warnings, stat_array)) {
+                print_error("markdup", "error, duplicate checking failed.\n");
+                return 1;
+            }
+        }
+
+        if (!param->remove_dups || !(in_read->b->core.flag & BAM_FDUP)) {
+            if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
+                bam_aux_update_int(in_read->b, "dc", in_read->dc);
+            }
+            if (param->supp) {
+                if (tmp_file_write(temp, in_read->b)) {
+                    print_error("markdup", "error, writing temp output failed.\n");
+                    return 1;
+                }
+            } else {
+                if (sam_write1(param->out, header, in_read->b) < 0) {
+                    print_error("markdup", "error, writing output failed.\n");
+                    return 1;
+                }
+            }
+
+            stat_array[in_read->read_group].writing++;
+        }
+
+        // remove from hash
+        if (in_read->pair_key.single == 0) {
+            k = kh_get(reads, pair_hash, in_read->pair_key);
+            kh_del(reads, pair_hash, k);
+        }
+
+        if (in_read->single_key.single == 1) {
+            k = kh_get(reads, single_hash, in_read->single_key);
+            kh_del(reads, single_hash, k);
+        }
+
+        kl_shift(read_queue, read_buffer, NULL);
+        bam_destroy1(in_read->b);
+        rq = kl_begin(read_buffer);
+    }
+    
+    return 0;
+}
+    
+
 /* Compare the reads near each other (coordinate sorted) and try to spot the duplicates.
    Generally the highest quality scoring is chosen as the original and all others the duplicates.
    The score is based on the sum of the quality values (<= 15) of the read and its mate (if any).
@@ -1785,299 +2097,18 @@ static int bam_mark_duplicates(md_param_t *param) {
         // read must not be secondary, supplementary, unmapped or (possibly) failed QC
         if (!(in_read->b->core.flag & exclude)) {
             stats->examined++;
+            if (test_for_duplication(param, in_read, single_hash, pair_hash, dup_hash, stats, &bc_warnings, &opt_warnings))
+                goto fail;
 
-
-            // look at the pairs first
-            if (has_mate(in_read->b)) {
-                int ret, mate_tmp;
-                key_data_t pair_key;
-                key_data_t single_key;
-                in_hash_t *bp;
-
-                if (make_pair_key(param, &pair_key, in_read->b, in_read->read_group, &bc_warnings)) {
-                    print_error("markdup", "error, unable to assign pair hash key.\n");
-                    goto fail;
-                }
-
-                make_single_key(param, &single_key, in_read->b, in_read->read_group, &bc_warnings);
-
-                stats->pair++;
-                in_read->pos = single_key.this_coord; // cigar/orientation modified pos
-
-                // put in singles hash for checking against non paired reads
-                k = kh_put(reads, single_hash, single_key, &ret);
-
-                if (ret > 0) { // new
-                    // add to single duplicate hash
-                    bp = &kh_val(single_hash, k);
-                    bp->p = in_read;
-                    in_read->single_key = single_key;
-                } else if (ret == 0) { // exists
-                    // look at singles only for duplication marking
-                    bp = &kh_val(single_hash, k);
-
-                    if (!has_mate(bp->p->b)) {
-                       // singleton will always be marked duplicate even if
-                       // scores more than one read of the pair
-                        bam1_t *dup = bp->p->b;
-
-                        if (param->check_chain) {
-                            in_read->duplicate = bp->p;
-                            bp->p->original = in_read;
-                        }
-
-                        bp->p = in_read;
-                        bp->p->dc += 1;
-
-                        if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->single_optical, &opt_warnings))
-                            goto fail;
-
-                        stats->single_dup++;
-                    }
-                } else {
-                    print_error("markdup", "error, single hashing failure for paired read.\n");
-                    goto fail;
-                }
-
-                // now do the pair
-                k = kh_put(reads, pair_hash, pair_key, &ret);
-
-                if (ret > 0) { // new
-                    // add to the pair hash
-                    bp = &kh_val(pair_hash, k);
-                    bp->p = in_read;
-                    in_read->pair_key = pair_key;
-                } else if (ret == 0) {
-                    int64_t old_score, new_score, tie_add = 0;
-                    bam1_t *dup = NULL;
-
-                    bp = &kh_val(pair_hash, k);
-
-                    if ((bp->p->b->core.flag & BAM_FQCFAIL) != (in_read->b->core.flag & BAM_FQCFAIL)) {
-                        if (bp->p->b->core.flag & BAM_FQCFAIL) {
-                            old_score = 0;
-                            new_score = 1;
-                        } else {
-                            old_score = 1;
-                            new_score = 0;
-                        }
-                    } else {
-                        if ((mate_tmp = get_mate_score(bp->p->b)) == -1) {
-                            print_error("markdup", "error, no ms score tag. Please run samtools fixmate on file first.\n");
-                            goto fail;
-                        } else {
-                            old_score = calc_score(bp->p->b) + mate_tmp;
-                        }
-
-                        if ((mate_tmp = get_mate_score(in_read->b)) == -1) {
-                            print_error("markdup", "error, no ms score tag. Please run samtools fixmate on file first.\n");
-                            goto fail;
-                        } else {
-                            new_score = calc_score(in_read->b) + mate_tmp;
-                        }
-                    }
-
-                    // choose the highest score as the original
-                    // and add it to the pair hash, mark the other as duplicate
-
-                    if (new_score == old_score) {
-                        if (strcmp(bam_get_qname(in_read->b), bam_get_qname(bp->p->b)) < 0) {
-                            tie_add = 1;
-                        } else {
-                            tie_add = -1;
-                        }
-                    }
-
-                    if (new_score + tie_add > old_score) { // swap reads
-                        dup = bp->p->b;
-                        in_read->dc += bp->p->dc;
-
-                        if (param->check_chain) {
-
-                            if (in_read->duplicate) {
-                                read_queue_t *current = in_read->duplicate;
-
-                                while (current->duplicate) {
-                                    current = current->duplicate;
-                                }
-
-                                current->duplicate = bp->p;
-                            } else {
-                                in_read->duplicate = bp->p;
-                            }
-
-                            bp->p->original = in_read;
-                        }
-
-                        bp->p = in_read;
-                    } else {
-                        if (param->check_chain) {
-                            if (bp->p->duplicate) {
-                                if (in_read->duplicate) {
-                                    read_queue_t *current = bp->p->duplicate;
-
-                                    while (current->duplicate) {
-                                        current = current->duplicate;
-                                    }
-
-                                    current->duplicate = in_read->duplicate;
-                                }
-
-                                in_read->duplicate = bp->p->duplicate;
-                            }
-
-                            bp->p->duplicate = in_read;
-                            in_read->original = bp->p;
-                        }
-
-                        dup = in_read->b;
-                        bp->p->dc += 1;
-                    }
-
-                    if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->optical, &opt_warnings))
-                        goto fail;
-
-                    stats->duplicate++;
-                } else {
-                    print_error("markdup", "error, pair hashing failure.\n");
-                    goto fail;
-                }
-            } else { // do the single (or effectively single) reads
-                int ret;
-                key_data_t single_key;
-                in_hash_t *bp;
-
-                make_single_key(param, &single_key, in_read->b, in_read->read_group, &bc_warnings);
-
-                stats->single++;
-                in_read->pos = single_key.this_coord; // cigar/orientation modified pos
-
-                k = kh_put(reads, single_hash, single_key, &ret);
-
-                if (ret > 0) { // new
-                    bp = &kh_val(single_hash, k);
-                    bp->p = in_read;
-                    in_read->single_key = single_key;
-                } else if (ret == 0) { // exists
-                    bp = &kh_val(single_hash, k);
-
-                    if (has_mate(bp->p->b)) {
-                        // if matched against one of a pair just mark as duplicate
-
-                        if (param->check_chain) {
-                            if (bp->p->duplicate) {
-                                in_read->duplicate = bp->p->duplicate;
-                            }
-
-                            bp->p->duplicate = in_read;
-                            in_read->original = bp->p;
-                        }
-
-                        bp->p->dc += 1;
-
-                        if (mark_duplicates(param, dup_hash, bp->p->b, in_read->b, in_read->read_group, &stats->single_optical, &opt_warnings))
-                            goto fail;
-
-                    } else {
-                        int64_t old_score, new_score;
-                        bam1_t *dup = NULL;
-
-                        old_score = calc_score(bp->p->b);
-                        new_score = calc_score(in_read->b);
-
-                        // choose the highest score as the original, add it
-                        // to the single hash and mark the other as duplicate
-                        if (new_score > old_score) { // swap reads
-                            dup = bp->p->b;
-                            in_read->dc += bp->p->dc;
-
-                            if (param->check_chain) {
-                                in_read->duplicate = bp->p;
-                                bp->p->original = in_read;
-                            }
-
-                            bp->p = in_read;
-                        } else {
-                            if (param->check_chain) {
-                                if (bp->p->duplicate) {
-                                    in_read->duplicate = bp->p->duplicate;
-                                }
-
-                                bp->p->duplicate = in_read;
-                                in_read->original = bp->p;
-                            }
-
-                            bp->p->dc += 1;
-                            dup = in_read->b;
-                        }
-
-                        if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->single_optical, &opt_warnings))
-                            goto fail;
-                    }
-
-                    stats->single_dup++;
-                } else {
-                    print_error("markdup", "error, single hashing failure for single read.\n");
-                    goto fail;
-                }
-            }
         } else {
             stats->excluded++;
         }
 
         // loop through the stored reads and write out those we
         // no longer need
-        rq = kl_begin(read_buffer);
-        while (rq != kl_end(read_buffer)) {
-            in_read = &kl_val(rq);
-
-            /* keep a moving window of reads based on coordinates and max read length.  Any unaligned reads
-               should just be written as they cannot be matched as duplicates. */
-            if (in_read->pos + param->max_length > prev_coord && in_read->b->core.tid == prev_tid && (prev_tid != -1 || prev_coord != -1)) {
-                break;
-            }
-
-            if (param->check_chain && !in_read->dup_checked && (in_read->original || in_read->duplicate)) {
-                if (find_duplicate_chains(param, in_read, dup_hash, &dup_list, &opt_warnings, stat_array)) {
-                    print_error("markdup", "error, duplicate checking failed.\n");
-                    goto fail;
-                }
-            }
-
-            if (!param->remove_dups || !(in_read->b->core.flag & BAM_FDUP)) {
-                if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
-                    bam_aux_update_int(in_read->b, "dc", in_read->dc);
-                }
-                if (param->supp) {
-                    if (tmp_file_write(&temp, in_read->b)) {
-                        print_error("markdup", "error, writing temp output failed.\n");
-                        goto fail;
-                    }
-                } else {
-                    if (sam_write1(param->out, header, in_read->b) < 0) {
-                        print_error("markdup", "error, writing output failed.\n");
-                        goto fail;
-                    }
-                }
-
-                stat_array[in_read->read_group].writing++;
-            }
-
-            // remove from hash
-            if (in_read->pair_key.single == 0) {
-                k = kh_get(reads, pair_hash, in_read->pair_key);
-                kh_del(reads, pair_hash, k);
-            }
-
-            if (in_read->single_key.single == 1) {
-                k = kh_get(reads, single_hash, in_read->single_key);
-                kh_del(reads, single_hash, k);
-            }
-
-            kl_shift(read_queue, read_buffer, NULL);
-            bam_destroy1(in_read->b);
-            rq = kl_begin(read_buffer);
-        }
+        if (write_out_of_scope_reads(param, header, &temp, prev_tid, prev_coord, read_buffer,
+                single_hash, pair_hash, &dup_list, dup_hash, stat_array, &bc_warnings, &opt_warnings))
+            goto fail;
 
         // set the next one up for reading
         in_read = kl_pushp(read_queue, read_buffer);
