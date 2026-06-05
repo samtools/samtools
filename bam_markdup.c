@@ -1561,13 +1561,82 @@ static void write_json_stats(FILE *fp, const char *offset, const char *group_nam
 }
 
 
+typedef struct {
+    khash_t(reads) *pair_hash;
+    khash_t(reads) *single_hash;
+    khash_t(duplicates) *dup_hash;
+    khash_t(read_groups) *rg_hash;
+} hash_collection;
 
+typedef struct {
+    long bc;
+    long opt;
+} warning_t;
+
+typedef struct {
+    int32_t prev_tid;
+    hts_pos_t prev_coord;
+} position_t;
+
+
+static int populate_read_groups_hash(md_param_t *param, bam_hdr_t *header, hash_collection *hashes) {
+    int num_groups = sam_hdr_count_lines(header, "RG");
+    int g_ret = 0;
+
+    if (num_groups > 0) {
+        int i;
+
+        for (i = 0; i < num_groups; i++) {
+            const char *rg_key;
+            khiter_t rg;
+
+            rg_key = sam_hdr_line_name(header, "RG", i);
+
+            if (rg_key) {
+                rg = kh_get(read_groups, hashes->rg_hash, rg_key);
+
+                if (rg == kh_end(hashes->rg_hash)) { // new entry
+                    rg = kh_put(read_groups, hashes->rg_hash, rg_key, &g_ret);
+
+                    if (g_ret > 0) {
+                        kh_value(hashes->rg_hash, rg) = i + 1;
+                    } else {
+                        print_error("markdup", "error, unable to populate read group ids.  "
+                                 "Read groups will not be used\n");
+                        g_ret = -1;
+                        break;
+                    }
+                } else {
+                    print_error("markdup", "error, duplicate read group ids %s."
+                              "Read groups will not be used\n", rg_key);
+                    g_ret = -1;
+                    break;
+                }
+            } else {
+                print_error("markdup", "error, Unable to retrieve read group at position %d."
+                          "Read groups will not be used\n", i);
+                g_ret = -1;
+                break;
+            }
+        }
+    } else {
+        print_error("markdup", "error, no read groups found.\n");
+        g_ret = -1;
+    }
+
+    if (g_ret < 0) {
+        print_error("markdup", "error, read groups will not be used.\n");
+        param->read_groups = 0;
+        num_groups = 0;
+    }
+    
+    return num_groups;
+}
+   
 
 static int test_for_duplication(md_param_t *param, read_queue_t *in_read, 
-            khash_t(reads) *single_hash, khash_t(reads) *pair_hash, khash_t(duplicates) *dup_hash,
-            stats_block_t *stats, long *bc_warnings, long *opt_warnings) {
+            hash_collection *hashes, stats_block_t *stats, warning_t *warnings) {
     khiter_t k;
-       
         
     // look at the pairs first
     if (has_mate(in_read->b)) {
@@ -1576,27 +1645,27 @@ static int test_for_duplication(md_param_t *param, read_queue_t *in_read,
         key_data_t single_key;
         in_hash_t *bp;
 
-        if (make_pair_key(param, &pair_key, in_read->b, in_read->read_group, bc_warnings)) {
+        if (make_pair_key(param, &pair_key, in_read->b, in_read->read_group, &warnings->bc)) {
             print_error("markdup", "error, unable to assign pair hash key.\n");
             return 1;
         }
 
-        make_single_key(param, &single_key, in_read->b, in_read->read_group, bc_warnings);
+        make_single_key(param, &single_key, in_read->b, in_read->read_group, &warnings->bc);
 
         stats->pair++;
         in_read->pos = single_key.this_coord; // cigar/orientation modified pos
 
         // put in singles hash for checking against non paired reads
-        k = kh_put(reads, single_hash, single_key, &ret);
+        k = kh_put(reads, hashes->single_hash, single_key, &ret);
 
         if (ret > 0) { // new
             // add to single duplicate hash
-            bp = &kh_val(single_hash, k);
+            bp = &kh_val(hashes->single_hash, k);
             bp->p = in_read;
             in_read->single_key = single_key;
         } else if (ret == 0) { // exists
             // look at singles only for duplication marking
-            bp = &kh_val(single_hash, k);
+            bp = &kh_val(hashes->single_hash, k);
 
             if (!has_mate(bp->p->b)) {
                // singleton will always be marked duplicate even if
@@ -1611,7 +1680,7 @@ static int test_for_duplication(md_param_t *param, read_queue_t *in_read,
                 bp->p = in_read;
                 bp->p->dc += 1;
 
-                if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->single_optical, opt_warnings))
+                if (mark_duplicates(param, hashes->dup_hash, bp->p->b, dup, in_read->read_group, &stats->single_optical, &warnings->opt))
                     return 1;
 
                 stats->single_dup++;
@@ -1622,18 +1691,18 @@ static int test_for_duplication(md_param_t *param, read_queue_t *in_read,
         }
 
         // now do the pair
-        k = kh_put(reads, pair_hash, pair_key, &ret);
+        k = kh_put(reads, hashes->pair_hash, pair_key, &ret);
 
         if (ret > 0) { // new
             // add to the pair hash
-            bp = &kh_val(pair_hash, k);
+            bp = &kh_val(hashes->pair_hash, k);
             bp->p = in_read;
             in_read->pair_key = pair_key;
         } else if (ret == 0) {
             int64_t old_score, new_score, tie_add = 0;
             bam1_t *dup = NULL;
 
-            bp = &kh_val(pair_hash, k);
+            bp = &kh_val(hashes->pair_hash, k);
 
             if ((bp->p->b->core.flag & BAM_FQCFAIL) != (in_read->b->core.flag & BAM_FQCFAIL)) {
                 if (bp->p->b->core.flag & BAM_FQCFAIL) {
@@ -1716,7 +1785,7 @@ static int test_for_duplication(md_param_t *param, read_queue_t *in_read,
                 bp->p->dc += 1;
             }
 
-            if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->optical, opt_warnings))
+            if (mark_duplicates(param, hashes->dup_hash, bp->p->b, dup, in_read->read_group, &stats->optical, &warnings->opt))
                 return 1;
 
             stats->duplicate++;
@@ -1729,19 +1798,19 @@ static int test_for_duplication(md_param_t *param, read_queue_t *in_read,
         key_data_t single_key;
         in_hash_t *bp;
 
-        make_single_key(param, &single_key, in_read->b, in_read->read_group, bc_warnings);
+        make_single_key(param, &single_key, in_read->b, in_read->read_group, &warnings->bc);
 
         stats->single++;
         in_read->pos = single_key.this_coord; // cigar/orientation modified pos
 
-        k = kh_put(reads, single_hash, single_key, &ret);
+        k = kh_put(reads, hashes->single_hash, single_key, &ret);
 
         if (ret > 0) { // new
-            bp = &kh_val(single_hash, k);
+            bp = &kh_val(hashes->single_hash, k);
             bp->p = in_read;
             in_read->single_key = single_key;
         } else if (ret == 0) { // exists
-            bp = &kh_val(single_hash, k);
+            bp = &kh_val(hashes->single_hash, k);
 
             if (has_mate(bp->p->b)) {
                 // if matched against one of a pair just mark as duplicate
@@ -1757,7 +1826,7 @@ static int test_for_duplication(md_param_t *param, read_queue_t *in_read,
 
                 bp->p->dc += 1;
 
-                if (mark_duplicates(param, dup_hash, bp->p->b, in_read->b, in_read->read_group, &stats->single_optical, opt_warnings))
+                if (mark_duplicates(param, hashes->dup_hash, bp->p->b, in_read->b, in_read->read_group, &stats->single_optical, &warnings->opt))
                     return 1;
 
             } else {
@@ -1793,7 +1862,7 @@ static int test_for_duplication(md_param_t *param, read_queue_t *in_read,
                     dup = in_read->b;
                 }
 
-                if (mark_duplicates(param, dup_hash, bp->p->b, dup, in_read->read_group, &stats->single_optical, opt_warnings))
+                if (mark_duplicates(param, hashes->dup_hash, bp->p->b, dup, in_read->read_group, &stats->single_optical, &warnings->opt))
                     return 1;
             }
 
@@ -1809,10 +1878,9 @@ static int test_for_duplication(md_param_t *param, read_queue_t *in_read,
 
 
 static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_file_t *temp,
-        int32_t prev_tid, hts_pos_t prev_coord, klist_t(read_queue) *read_buffer,
-        khash_t(reads) *single_hash, khash_t(reads) *pair_hash, check_list_t *dup_list,
-        khash_t(duplicates) *dup_hash, stats_block_t *stat_array, long *bc_warnings,
-        long *opt_warnings) {
+        position_t *positions, klist_t(read_queue) *read_buffer,
+        hash_collection *hashes, check_list_t *dup_list,
+        stats_block_t *stat_array, warning_t *warnings) {
     khiter_t k;
     kliter_t(read_queue) *rq;
     read_queue_t *in_read;
@@ -1823,12 +1891,13 @@ static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_fi
 
         /* keep a moving window of reads based on coordinates and max read length.  Any unaligned reads
            should just be written as they cannot be matched as duplicates. */
-        if (in_read->pos + param->max_length > prev_coord && in_read->b->core.tid == prev_tid && (prev_tid != -1 || prev_coord != -1)) {
+        if (in_read->pos + param->max_length > positions->prev_coord &&
+            in_read->b->core.tid == positions->prev_tid && (positions->prev_tid != -1 || positions->prev_coord != -1)) {
             break;
         }
 
         if (param->check_chain && !in_read->dup_checked && (in_read->original || in_read->duplicate)) {
-            if (find_duplicate_chains(param, in_read, dup_hash, dup_list, opt_warnings, stat_array)) {
+            if (find_duplicate_chains(param, in_read, hashes->dup_hash, dup_list, &warnings->opt, stat_array)) {
                 print_error("markdup", "error, duplicate checking failed.\n");
                 return 1;
             }
@@ -1855,13 +1924,13 @@ static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_fi
 
         // remove from hash
         if (in_read->pair_key.single == 0) {
-            k = kh_get(reads, pair_hash, in_read->pair_key);
-            kh_del(reads, pair_hash, k);
+            k = kh_get(reads, hashes->pair_hash, in_read->pair_key);
+            kh_del(reads, hashes->pair_hash, k);
         }
 
         if (in_read->single_key.single == 1) {
-            k = kh_get(reads, single_hash, in_read->single_key);
-            kh_del(reads, single_hash, k);
+            k = kh_get(reads, hashes->single_hash, in_read->single_key);
+            kh_del(reads, hashes->single_hash, k);
         }
 
         kl_shift(read_queue, read_buffer, NULL);
@@ -1871,7 +1940,234 @@ static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_fi
     
     return 0;
 }
+
+
+static int write_out_end_of_list(md_param_t *param, bam_hdr_t *header, tmp_file_t *temp,
+        klist_t(read_queue) *read_buffer, hash_collection *hashes, check_list_t *dup_list,
+        stats_block_t *stat_array, warning_t *warnings) {
+        
+    kliter_t(read_queue) *rq;
+    read_queue_t *in_read;
+        
+     // write out the end of the list
+    rq = kl_begin(read_buffer);
+    while (rq != kl_end(read_buffer)) {
+        in_read = &kl_val(rq);
+
+        if (bam_get_qname(in_read->b)) { // last entry will be blank
+            if (param->check_chain && !in_read->dup_checked && (in_read->original || in_read->duplicate)) {
+                if (find_duplicate_chains(param, in_read, hashes->dup_hash, dup_list, &warnings->opt, stat_array)) {
+                    print_error("markdup", "error, duplicate checking failed.\n");
+                    return 1;
+                }
+            }
+
+            if (!param->remove_dups || !(in_read->b->core.flag & BAM_FDUP)) {
+                if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
+                    bam_aux_update_int(in_read->b, "dc",  in_read->dc);
+                }
+                if (param->move_umi) {
+                    if (move_umi_to_tag(param, in_read->b) < 0)
+                        return 1;
+                }
+
+                if (param->supp) {
+                    if (tmp_file_write(temp, in_read->b)) {
+                        print_error("markdup", "error, writing temp output failed on final write.\n");
+                        return 1;
+                    }
+                } else {
+                    if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
+                        bam_aux_update_int(in_read->b, "dc", in_read->dc);
+                    }
+
+                    if (sam_write1(param->out, header, in_read->b) < 0) {
+                        print_error("markdup", "error, writing output failed on final write.\n");
+                        return 1;
+                    }
+                }
+
+                stat_array[in_read->read_group].writing++;
+            }
+        }
+
+        kl_shift(read_queue, read_buffer, NULL);
+        bam_destroy1(in_read->b);
+        rq = kl_begin(read_buffer);
+    }
     
+    return 0;
+}
+
+
+static int write_everything_with_supplementary_reads(md_param_t *param, bam_hdr_t *header, tmp_file_t *temp,
+        hash_collection *hashes, stats_block_t *stat_array) {
+        
+    bam1_t *b;
+    int ret;
+    khiter_t k;
+
+    if (tmp_file_end_write(temp)) {
+        print_error("markdup", "error, unable to end tmp writing.\n");
+        return 1;
+    }
+
+    // read data from temp file and mark duplicate supplementary alignments
+
+    if (tmp_file_begin_read(temp)) {
+        return 1;
+    }
+
+    b = bam_init1();
+
+    while ((ret = tmp_file_read(temp, b)) > 0) {
+
+        if ((b->core.flag & BAM_FSUPPLEMENTARY) || (b->core.flag & BAM_FUNMAP) || (b->core.flag & BAM_FSECONDARY)) {
+
+            k = kh_get(duplicates, hashes->dup_hash, bam_get_qname(b));
+
+            if (k != kh_end(hashes->dup_hash)) {
+
+                b->core.flag  |= BAM_FDUP;
+                stat_array[kh_val(hashes->dup_hash, k).read_group].np_duplicate++;
+
+                if (param->tag && kh_val(hashes->dup_hash, k).name) {
+                    if (bam_aux_update_str(b, "do", strlen(kh_val(hashes->dup_hash, k).name) + 1, (char*)kh_val(hashes->dup_hash, k).name)) {
+                        print_error("markdup", "error, unable to append supplementary 'do' tag.\n");
+                        return 1;
+                    }
+                }
+
+                if (param->opt_dist) {
+                    if (kh_val(hashes->dup_hash, k).type) {
+                        bam_aux_update_str(b, "dt", 3, "SQ");
+                        stat_array[kh_val(hashes->dup_hash, k).read_group].np_opt_duplicate++;
+                    } else {
+                        bam_aux_update_str(b, "dt", 3, "LB");
+                    }
+                }
+            }
+        }
+
+        if (!param->remove_dups || !(b->core.flag & BAM_FDUP)) {
+            if (param->dc && (b->core.flag & BAM_FDUP)) {
+                uint8_t* data = bam_aux_get(b, "dc");
+                if(data) bam_aux_del(b, data);
+            }
+            
+            if (param->move_umi) {
+                if (move_umi_to_tag(param, b) < 0)
+                    return 1;
+            }
+            
+            if (sam_write1(param->out, header, b) < 0) {
+                print_error("markdup", "error, writing final output failed.\n");
+                return 1;
+            }
+        }
+    }
+
+    if (ret == -1) {
+        print_error("markdup", "error, failed to read tmp file.\n");
+        return 1;
+    }
+    
+    return 0;
+}
+
+
+static void do_stats(md_param_t *param, bam_hdr_t *header, stats_block_t *stat_array, int num_groups) {
+    FILE *fp;
+    int file_open = 0;
+    stats_block_t total;
+    int i;
+
+    if (param->stats_file) {
+        if (NULL == (fp = fopen(param->stats_file, "w"))) {
+            print_error("markdup", "warning, cannot write stats to %s.\n", param->stats_file);
+            fp = stderr;
+        } else {
+            file_open = 1;
+        }
+    } else {
+        fp = stderr;
+    }
+
+    total = stat_array[0];
+
+    if (param->read_groups) {
+        for (i = 1; i <= num_groups; i++) {
+            total.reading += stat_array[i].reading;
+            total.writing += stat_array[i].writing;
+            total.excluded += stat_array[i].excluded;
+            total.duplicate += stat_array[i].duplicate;
+            total.single += stat_array[i].single;
+            total.pair += stat_array[i].pair;
+            total.single_dup += stat_array[i].single_dup;
+            total.examined += stat_array[i].examined;
+            total.optical += stat_array[i].optical;
+            total.single_optical += stat_array[i].single_optical;
+            total.np_duplicate += stat_array[i].np_duplicate;
+            total.np_opt_duplicate += stat_array[i].np_opt_duplicate;
+        }
+    }
+
+    if (!param->json) {
+        write_stats(fp, "COMMAND: ", param->arg_list, &total);
+        fprintf(fp, "\n");
+
+        if (param->read_groups) {
+            if (stat_array[0].reading) {
+                write_stats(fp, "READ GROUP: ", "ungrouped", stat_array);
+                fprintf(fp, "\n");
+            }
+
+            for (i = 0; i < num_groups; i++) {
+                write_stats(fp, "READ GROUP: ", sam_hdr_line_name(header, "RG", i), stat_array + i + 1);
+                fprintf(fp, "\n");
+            }
+        }
+    } else {
+        char space4[]  = "    ";
+        char space8[]  = "        ";
+        char space12[] = "            ";
+
+        fprintf(fp, "{\n");
+        fprintf(fp, "%s\"COMMAND\": \"%s\",\n", space4, param->arg_list);
+        write_json_stats(fp, space4, NULL, &total, param->read_groups ? ",\n" : "\n");
+
+        if (param->read_groups) {
+            fprintf(fp, "%s\"READ GROUPS\": [\n", space4);
+
+            if (stat_array[0].reading) {
+                fprintf(fp, "%s{\n", space8);
+                write_json_stats(fp, space12, "ungrouped", stat_array, "\n");
+                fprintf(fp, "%s},\n", space8);
+            }
+
+            for (i = 0; i < num_groups; i++) {
+                fprintf(fp, "%s{\n", space8);
+
+                write_json_stats(fp, space12,  sam_hdr_line_name(header, "RG", i), stat_array + i + 1, "\n");
+
+                if (i < num_groups -1 ) {
+                    fprintf(fp, "%s},\n", space8);
+                } else {
+                    fprintf(fp, "%s}\n", space8);
+                }
+            }
+
+            fprintf(fp, "%s]\n", space4);
+        }
+
+        fprintf(fp, "}\n");
+    }
+
+    if (file_open) {
+        fclose(fp);
+    }
+}
+
 
 /* Compare the reads near each other (coordinate sorted) and try to spot the duplicates.
    Generally the highest quality scoring is chosen as the original and all others the duplicates.
@@ -1885,25 +2181,27 @@ static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_fi
 static int bam_mark_duplicates(md_param_t *param) {
     bam_hdr_t *header = NULL;
     khiter_t k;
-    khash_t(reads) *pair_hash        = kh_init(reads);
-    khash_t(reads) *single_hash      = kh_init(reads);
     klist_t(read_queue) *read_buffer = kl_init(read_queue);
     kliter_t(read_queue) *rq;
-    khash_t(duplicates) *dup_hash    = kh_init(duplicates);
-    khash_t(read_groups) *rg_hash    = kh_init(read_groups);
-    int32_t prev_tid;
-    hts_pos_t prev_coord;
+    position_t positions = {0, 0};
     read_queue_t *in_read;
     int ret;
     stats_block_t *stats, *stat_array = NULL;
     int num_groups = 0;
-    long opt_warnings = 0, bc_warnings = 0;
+    warning_t warnings = {0, 0};
     tmp_file_t temp;
     char *idx_fn = NULL;
     int exclude = 0;
     check_list_t dup_list = {NULL, 0, 0};
+    hash_collection hashes;
+    
+    hashes.pair_hash    = kh_init(reads);
+    hashes.single_hash  = kh_init(reads);
+    hashes.dup_hash     = kh_init(duplicates);
+    hashes.rg_hash      = kh_init(read_groups);
 
-    if (!pair_hash || !single_hash || !read_buffer || !dup_hash || !rg_hash) {
+    
+    if (!hashes.pair_hash || !hashes.single_hash || !read_buffer || !hashes.dup_hash || !hashes.rg_hash) {
         print_error("markdup", "error, unable to allocate memory to initialise structures.\n");
         goto fail;
     }
@@ -1931,61 +2229,14 @@ static int bam_mark_duplicates(md_param_t *param) {
         print_error("markdup", "error writing header.\n");
         goto fail;
     }
+    
     if (param->write_index) {
         if (!(idx_fn = auto_index(param->out, param->out_fn, header)))
             goto fail;
     }
 
     if (param->read_groups) {
-        num_groups = sam_hdr_count_lines(header, "RG");
-        int g_ret = 0;
-
-        if (num_groups > 0) {
-            int i;
-
-            for (i = 0; i < num_groups; i++) {
-                const char *rg_key;
-                khiter_t rg;
-
-                rg_key = sam_hdr_line_name(header, "RG", i);
-
-                if (rg_key) {
-                    rg = kh_get(read_groups, rg_hash, rg_key);
-
-                    if (rg == kh_end(rg_hash)) { // new entry
-                        rg = kh_put(read_groups, rg_hash, rg_key, &g_ret);
-
-                        if (g_ret > 0) {
-                            kh_value(rg_hash, rg) = i + 1;
-                        } else {
-                            print_error("markdup", "error, unable to populate read group ids.  "
-                                     "Read groups will not be used\n");
-                            g_ret = -1;
-                            break;
-                        }
-                    } else {
-                        print_error("markdup", "error, duplicate read group ids %s."
-                                  "Read groups will not be used\n", rg_key);
-                        g_ret = -1;
-                        break;
-                    }
-                } else {
-                    print_error("markdup", "error, Unable to retrieve read group at position %d."
-                              "Read groups will not be used\n", i);
-                    g_ret = -1;
-                    break;
-                }
-            }
-        } else {
-            print_error("markdup", "error, no read groups found.\n");
-            g_ret = -1;
-        }
-
-        if (g_ret < 0) {
-            print_error("markdup", "error, read groups will not be used.\n");
-            param->read_groups = 0;
-            num_groups = 0;
-        }
+        num_groups = populate_read_groups_hash(param, header, &hashes);
     }
 
     // stat_array[0] will be for ungrouped reads
@@ -1995,9 +2246,6 @@ static int bam_mark_duplicates(md_param_t *param) {
         print_error("markdup", "error, unable to allocate memory for stats.\n");
         goto fail;
     }
-
-    // used for coordinate order checks
-    prev_tid = prev_coord = 0;
 
     // get the buffer going
     in_read = kl_pushp(read_queue, read_buffer);
@@ -2036,15 +2284,15 @@ static int bam_mark_duplicates(md_param_t *param) {
 
         // do some basic coordinate order checks
         if (in_read->b->core.tid >= 0) { // -1 for unmapped reads
-            if (in_read->b->core.tid < prev_tid ||
-               ((in_read->b->core.tid == prev_tid) && (in_read->b->core.pos < prev_coord))) {
+            if (in_read->b->core.tid < positions.prev_tid ||
+               ((in_read->b->core.tid == positions.prev_tid) && (in_read->b->core.pos < positions.prev_coord))) {
                 print_error("markdup", "error, not in coordinate sorted order.\n");
                 goto fail;
             }
         }
 
-        prev_coord = in_read->pos = in_read->b->core.pos;
-        prev_tid   =  in_read->b->core.tid;
+        positions.prev_coord = in_read->pos = in_read->b->core.pos;
+        positions.prev_tid   =  in_read->b->core.tid;
         in_read->pair_key.single   = 1;
         in_read->single_key.single = 0;
         in_read->duplicate = NULL;
@@ -2061,17 +2309,16 @@ static int bam_mark_duplicates(md_param_t *param) {
                 if ((rg = bam_aux2Z(data))) {
                     khiter_t r;
 
-                    r = kh_get(read_groups, rg_hash, rg);
+                    r = kh_get(read_groups, hashes.rg_hash, rg);
 
-                    if (r != kh_end(rg_hash)) {
-                        in_read->read_group = kh_value(rg_hash, r);
+                    if (r != kh_end(hashes.rg_hash)) {
+                        in_read->read_group = kh_value(hashes.rg_hash, r);
                     }
                 }
             }
         }
 
         stats = stat_array + in_read->read_group;
-
         stats->reading++;
 
         if (param->clear && (in_read->b->core.flag & BAM_FDUP)) {
@@ -2097,7 +2344,7 @@ static int bam_mark_duplicates(md_param_t *param) {
         // read must not be secondary, supplementary, unmapped or (possibly) failed QC
         if (!(in_read->b->core.flag & exclude)) {
             stats->examined++;
-            if (test_for_duplication(param, in_read, single_hash, pair_hash, dup_hash, stats, &bc_warnings, &opt_warnings))
+            if (test_for_duplication(param, in_read, &hashes, stats, &warnings))
                 goto fail;
 
         } else {
@@ -2106,8 +2353,8 @@ static int bam_mark_duplicates(md_param_t *param) {
 
         // loop through the stored reads and write out those we
         // no longer need
-        if (write_out_of_scope_reads(param, header, &temp, prev_tid, prev_coord, read_buffer,
-                single_hash, pair_hash, &dup_list, dup_hash, stat_array, &bc_warnings, &opt_warnings))
+        if (write_out_of_scope_reads(param, header, &temp, &positions, read_buffer,
+                &hashes, &dup_list, stat_array, &warnings))
             goto fail;
 
         // set the next one up for reading
@@ -2129,229 +2376,36 @@ static int bam_mark_duplicates(md_param_t *param) {
     }
 
     // write out the end of the list
-    rq = kl_begin(read_buffer);
-    while (rq != kl_end(read_buffer)) {
-        in_read = &kl_val(rq);
-
-        if (bam_get_qname(in_read->b)) { // last entry will be blank
-            if (param->check_chain && !in_read->dup_checked && (in_read->original || in_read->duplicate)) {
-                if (find_duplicate_chains(param, in_read, dup_hash, &dup_list, &opt_warnings, stat_array)) {
-                    print_error("markdup", "error, duplicate checking failed.\n");
-                    goto fail;
-                }
-            }
-
-            if (!param->remove_dups || !(in_read->b->core.flag & BAM_FDUP)) {
-                if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
-                    bam_aux_update_int(in_read->b, "dc",  in_read->dc);
-                }
-                if (param->move_umi) {
-                    if (move_umi_to_tag(param, in_read->b) < 0)
-                        goto fail;
-                }
-
-                if (param->supp) {
-                    if (tmp_file_write(&temp, in_read->b)) {
-                        print_error("markdup", "error, writing temp output failed on final write.\n");
-                        goto fail;
-                    }
-                } else {
-                    if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
-                        bam_aux_update_int(in_read->b, "dc", in_read->dc);
-                    }
-
-                    if (sam_write1(param->out, header, in_read->b) < 0) {
-                        print_error("markdup", "error, writing output failed on final write.\n");
-                        goto fail;
-                    }
-                }
-
-                stat_array[in_read->read_group].writing++;
-            }
-        }
-
-        kl_shift(read_queue, read_buffer, NULL);
-        bam_destroy1(in_read->b);
-        rq = kl_begin(read_buffer);
-    }
+    if (write_out_end_of_list(param, header, &temp, read_buffer, &hashes, &dup_list, stat_array, &warnings))
+        goto fail;
 
     if (param->supp) {
-        bam1_t *b;
-
-        if (tmp_file_end_write(&temp)) {
-            print_error("markdup", "error, unable to end tmp writing.\n");
+        if (write_everything_with_supplementary_reads(param, header, &temp, &hashes, stat_array))
             goto fail;
-        }
 
-        // read data from temp file and mark duplicate supplementary alignments
-
-        if (tmp_file_begin_read(&temp)) {
-            goto fail;
-        }
-
-        b = bam_init1();
-
-        while ((ret = tmp_file_read(&temp, b)) > 0) {
-
-            if ((b->core.flag & BAM_FSUPPLEMENTARY) || (b->core.flag & BAM_FUNMAP) || (b->core.flag & BAM_FSECONDARY)) {
-
-                k = kh_get(duplicates, dup_hash, bam_get_qname(b));
-
-                if (k != kh_end(dup_hash)) {
-
-                    b->core.flag  |= BAM_FDUP;
-                    stat_array[kh_val(dup_hash, k).read_group].np_duplicate++;
-
-                    if (param->tag && kh_val(dup_hash, k).name) {
-                        if (bam_aux_update_str(b, "do", strlen(kh_val(dup_hash, k).name) + 1, (char*)kh_val(dup_hash, k).name)) {
-                            print_error("markdup", "error, unable to append supplementary 'do' tag.\n");
-                            goto fail;
-                        }
-                    }
-
-                    if (param->opt_dist) {
-                        if (kh_val(dup_hash, k).type) {
-                            bam_aux_update_str(b, "dt", 3, "SQ");
-                            stat_array[kh_val(dup_hash, k).read_group].np_opt_duplicate++;
-                        } else {
-                            bam_aux_update_str(b, "dt", 3, "LB");
-                        }
-                    }
-                }
-            }
-
-            if (!param->remove_dups || !(b->core.flag & BAM_FDUP)) {
-                if (param->dc && (b->core.flag & BAM_FDUP)) {
-                    uint8_t* data = bam_aux_get(b, "dc");
-                    if(data) bam_aux_del(b, data);
-                }
-                if (param->move_umi) {
-                    if (move_umi_to_tag(param, b) < 0)
-                        goto fail;
-                }
-                if (sam_write1(param->out, header, b) < 0) {
-                    print_error("markdup", "error, writing final output failed.\n");
-                    goto fail;
-                }
-            }
-        }
-
-        if (ret == -1) {
-            print_error("markdup", "error, failed to read tmp file.\n");
-            goto fail;
-        }
-
-        for (k = kh_begin(dup_hash); k != kh_end(dup_hash); ++k) {
-            if (kh_exist(dup_hash, k)) {
-                free(kh_val(dup_hash, k).name);
-                free((char *)kh_key(dup_hash, k));
-                kh_key(dup_hash, k) = NULL;
+        // clean up
+        for (k = kh_begin(hashes.dup_hash); k != kh_end(hashes.dup_hash); ++k) {
+            if (kh_exist(hashes.dup_hash, k)) {
+                free(kh_val(hashes.dup_hash, k).name);
+                free((char *)kh_key(hashes.dup_hash, k));
+                kh_key(hashes.dup_hash, k) = NULL;
             }
         }
 
         tmp_file_destroy(&temp);
-        bam_destroy1(b);
     }
 
-    if (opt_warnings) {
+    if (warnings.opt) {
         print_error("markdup", "warning, number of failed attempts to get coordinates from read names = %ld\n",
-                        opt_warnings);
+                        warnings.opt);
     }
 
-    if (bc_warnings) {
-        print_error("markdup", "warning, number of failed attempts to get barcodes = %ld\n", bc_warnings);
+    if (warnings.bc) {
+        print_error("markdup", "warning, number of failed attempts to get barcodes = %ld\n", warnings.bc);
     }
 
     if (param->do_stats) {
-        FILE *fp;
-        int file_open = 0;
-        stats_block_t total;
-        int i;
-
-        if (param->stats_file) {
-            if (NULL == (fp = fopen(param->stats_file, "w"))) {
-                print_error("markdup", "warning, cannot write stats to %s.\n", param->stats_file);
-                fp = stderr;
-            } else {
-                file_open = 1;
-            }
-        } else {
-            fp = stderr;
-        }
-
-        total = stat_array[0];
-
-        if (param->read_groups) {
-            for (i = 1; i <= num_groups; i++) {
-                total.reading += stat_array[i].reading;
-                total.writing += stat_array[i].writing;
-                total.excluded += stat_array[i].excluded;
-                total.duplicate += stat_array[i].duplicate;
-                total.single += stat_array[i].single;
-                total.pair += stat_array[i].pair;
-                total.single_dup += stat_array[i].single_dup;
-                total.examined += stat_array[i].examined;
-                total.optical += stat_array[i].optical;
-                total.single_optical += stat_array[i].single_optical;
-                total.np_duplicate += stat_array[i].np_duplicate;
-                total.np_opt_duplicate += stat_array[i].np_opt_duplicate;
-            }
-        }
-
-        if (!param->json) {
-            write_stats(fp, "COMMAND: ", param->arg_list, &total);
-            fprintf(fp, "\n");
-
-            if (param->read_groups) {
-                if (stat_array[0].reading) {
-                    write_stats(fp, "READ GROUP: ", "ungrouped", stat_array);
-                    fprintf(fp, "\n");
-                }
-
-                for (i = 0; i < num_groups; i++) {
-                    write_stats(fp, "READ GROUP: ", sam_hdr_line_name(header, "RG", i), stat_array + i + 1);
-                    fprintf(fp, "\n");
-                }
-            }
-        } else {
-            char space4[]  = "    ";
-            char space8[]  = "        ";
-            char space12[] = "            ";
-
-            fprintf(fp, "{\n");
-            fprintf(fp, "%s\"COMMAND\": \"%s\",\n", space4, param->arg_list);
-            write_json_stats(fp, space4, NULL, &total, param->read_groups ? ",\n" : "\n");
-
-            if (param->read_groups) {
-                fprintf(fp, "%s\"READ GROUPS\": [\n", space4);
-
-                if (stat_array[0].reading) {
-                    fprintf(fp, "%s{\n", space8);
-                    write_json_stats(fp, space12, "ungrouped", stat_array, "\n");
-                    fprintf(fp, "%s},\n", space8);
-                }
-
-                for (i = 0; i < num_groups; i++) {
-                    fprintf(fp, "%s{\n", space8);
-
-                    write_json_stats(fp, space12,  sam_hdr_line_name(header, "RG", i), stat_array + i + 1, "\n");
-
-                    if (i < num_groups -1 ) {
-                        fprintf(fp, "%s},\n", space8);
-                    } else {
-                        fprintf(fp, "%s}\n", space8);
-                    }
-                }
-
-                fprintf(fp, "%s]\n", space4);
-            }
-
-            fprintf(fp, "}\n");
-        }
-
-        if (file_open) {
-            fclose(fp);
-        }
+        do_stats(param, header, stat_array, num_groups);
     }
 
     if (param->write_index) {
@@ -2366,11 +2420,11 @@ static int bam_mark_duplicates(md_param_t *param) {
 
     free(idx_fn);
     free(stat_array);
-    kh_destroy(reads, pair_hash);
-    kh_destroy(reads, single_hash);
+    kh_destroy(reads, hashes.pair_hash);
+    kh_destroy(reads, hashes.single_hash);
     kl_destroy(read_queue, read_buffer);
-    kh_destroy(duplicates, dup_hash);
-    kh_destroy(read_groups, rg_hash);
+    kh_destroy(duplicates, hashes.dup_hash);
+    kh_destroy(read_groups, hashes.rg_hash);
     sam_hdr_destroy(header);
 
     return 0;
@@ -2380,21 +2434,21 @@ static int bam_mark_duplicates(md_param_t *param) {
         bam_destroy1(kl_val(rq).b);
     kl_destroy(read_queue, read_buffer);
 
-    for (k = kh_begin(dup_hash); k != kh_end(dup_hash); ++k) {
-        if (kh_exist(dup_hash, k)) {
-            free((char *)kh_key(dup_hash, k));
+    for (k = kh_begin(hashes.dup_hash); k != kh_end(hashes.dup_hash); ++k) {
+        if (kh_exist(hashes.dup_hash, k)) {
+            free((char *)kh_key(hashes.dup_hash, k));
         }
     }
-    kh_destroy(duplicates, dup_hash);
-    kh_destroy(read_groups, rg_hash);
+    kh_destroy(duplicates, hashes.dup_hash);
+    kh_destroy(read_groups, hashes.rg_hash);
 
     if (param->check_chain && (param->tag || param->opt_dist))
         free(dup_list.c);
 
     free(idx_fn);
     free(stat_array);
-    kh_destroy(reads, pair_hash);
-    kh_destroy(reads, single_hash);
+    kh_destroy(reads, hashes.pair_hash);
+    kh_destroy(reads, hashes.single_hash);
     sam_hdr_destroy(header);
     return 1;
 }
