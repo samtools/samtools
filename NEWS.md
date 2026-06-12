@@ -1,6 +1,57 @@
 Release a.b
 -----------
 
+New work and changes:
+
+* NEW.  Contribution guidelines, Including sections on complexity, completeness,
+  signing and our AI policy.
+  (PR #2335)
+
+* CHANGE.  The default seed for `samtools view --subsample` is now based on the
+  input file header and not zero.  This means that repeated subsampling of the
+  same file will work as expected.  The previous behaviour can be replicated by
+  setting the seed to zero.
+  (PR #2320, fixes #1201.  Thanks to Tim Fennell. Reported by Stathis)
+
+* Add --move-umi-to-tag option to `samtools markdup` to extract UMI from QNAME
+  and add to RX tag.
+  (PR #2316, fixes #2181.  Thanks to Matthias De Smet)
+
+* Ensure indirect function calls have the correct type.  This uses the new
+  HTSlib interface introduced in samtools/htslib#1994.
+  (PR #2322)
+
+* Changes to make `checksum` merging compatible with biobambam2 checksums.
+  (PR #2329, fixes #2323.  Reported by Keith James)
+
+* Speed improvement for `samtools stats`.
+  (PR#2326)
+
+* Changed --customized-index-file to --customized-index in `samtools stats` to
+  match other subcommands.  As this option had never worked (see #2315) this
+  should not cause any compatibility problems.
+  (PR #2334, fixes #2333.  Thanks to Alexis Lucattini)
+
+
+Bug fixes:
+
+* Various option fixes.  Removed the mistaken required argument from
+  --customized-index-file in `stats`.  Also removed some unused and undocumented
+  options from bam_plcmd.c.
+  (PR #2317, fixes #2315.  Reported by Alexis Lucattini)
+
+* For `samtools stats` check before and after region with -target-regions.
+  Previously doing only one or the other.
+  (PR #2328, fixes #2303.  Reported by Yuan Tian)
+
+
+Non user-visible changes and build improvements:
+
+* Add Github actions builds for Linux and Mac OS.  This replaces the Cirrus CI
+  tests that were discontinued.
+  (PR #2330)
+
+
 Release 1.23.1 (18th March 2026)
 --------------------------------
 
