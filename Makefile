@@ -112,7 +112,7 @@ include config.mk
 
 # If not using GNU make, you need to copy the version number from version.sh
 # into here.
-PACKAGE_VERSION = $(shell ./version.sh)
+PACKAGE_VERSION := $(shell ./version.sh)
 
 # Force version.h to be remade if $(PACKAGE_VERSION) has changed.
 version.h: $(if $(wildcard version.h),$(if $(findstring "$(PACKAGE_VERSION)",$(shell cat version.h)),,force))
@@ -122,7 +122,13 @@ version.h: $(if $(wildcard version.h),$(if $(findstring "$(PACKAGE_VERSION)",$(s
 # version.h: force
 #	echo '#define SAMTOOLS_VERSION "`git describe --always --dirty`"' > $@
 version.h:
-	echo '#define SAMTOOLS_VERSION "$(PACKAGE_VERSION)"' > $@
+	@if test 'x$(PACKAGE_VERSION)' != x ; then \
+		echo "echo '#define SAMTOOLS_VERSION "'"$(PACKAGE_VERSION)"'"' > $@" ; \
+		echo '#define SAMTOOLS_VERSION "$(PACKAGE_VERSION)"' > $@ ; \
+	else \
+		echo "Error: PACKAGE_VERSION is not defined.  Check version.sh works." 1>&2 ; \
+		false ; \
+	fi
 	echo '#define SAMTOOLS_CC "$(CC)"' >> $@
 	echo '#define SAMTOOLS_CPPFLAGS "$(CPPFLAGS)"' >> $@
 	echo '#define SAMTOOLS_CFLAGS "$(CFLAGS)"' >> $@
