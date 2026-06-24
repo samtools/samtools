@@ -51,6 +51,9 @@ Non user-visible changes and build improvements:
   tests that were discontinued.
   (PR #2330)
 
+* Ensure PACKAGE_VERSION is set in the Makefile.
+  (PR #2342, fixes #2337.  Reported by James Ferguson)
+
 
 Release 1.23.1 (18th March 2026)
 --------------------------------
