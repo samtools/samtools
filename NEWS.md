@@ -1,3 +1,10 @@
+Release a.b
+-----------
+
+This release bundles HTSlib 1.22.3, which includes many important
+bug fixes.  There are no changes to SAMtools.  Please see htslib/NEWS
+for details.
+
 Release 1.22.2 (18th March 2026)
 --------------------------------
 
