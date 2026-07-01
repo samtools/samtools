@@ -1139,6 +1139,19 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads,
             // Secondary or supplementary
             int is_r2 = (bs.b[n].core.flag & BAM_FREAD2) != 0;
             bam1_t *primary = rnum[is_r2];
+
+            // Also give supplementary alignments the mate information
+            // (coordinates, orientation, MC and MQ) held by their mate's
+            // primary, so "samtools sort --template-coordinate" can key them.
+            bam1_t *mate_primary;
+            if ((bs.b[n].core.flag & BAM_FSUPPLEMENTARY)
+                && (bs.b[n].core.flag & BAM_FPAIRED)
+                && (mate_primary = rnum[!is_r2]) != NULL) {
+                sync_mate_inner(mate_primary, &bs.b[n]);
+                if (sync_mq_mc(mate_primary, &bs.b[n]) < 0)
+                    goto fail;
+            }
+
             if (primary) {
                 if (base_mods)
                     fix_MM(primary, &bs.b[n], &state[is_r2]);

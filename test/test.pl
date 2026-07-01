@@ -3548,6 +3548,10 @@ sub test_sort
     # TemplateCoordinate sort - verify hard clips are ignored (only soft clips affect sort position)
     test_cmd($opts, out=>"sort/template-coordinate-hardclip.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} --template-coordinate -m 10M $$opts{path}/sort/template-coordinate-hardclip.sort.sam -O SAM -o -");
 
+    # TemplateCoordinate sort of aligner output with a supplementary alignment:
+    # fixmate must add MC to the supplementary or the sort aborts (no MC tag).
+    test_cmd($opts, out=>"sort/template-coordinate-supplementary.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate -O bam $$opts{path}/sort/template-coordinate-supplementary.sam - | $$opts{bin}/samtools sort${threads} --template-coordinate -m 10M -O SAM -o -");
+
     # Minimiser sort, basic
     test_cmd($opts, out=>"sort/minimiser-basic.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{path}/dat/auto_indexed.tmp.bam | $$opts{bin}/samtools sort${threads} -m 10M -M -K10 -O SAM -o -");
 
@@ -3611,6 +3615,7 @@ sub test_fixmate
     test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
     test_cmd($opts,out=>'fixmate/8_isize_overflow_64bit.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/8_isize_overflow_64bit.sam -");
     test_cmd($opts,out=>'fixmate/sanitize.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/sanitize.sam -");
+    test_cmd($opts,out=>'fixmate/9_supplementary_mc.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/9_supplementary_mc.sam -");
 
     # fixmate -M base-modification tests
     foreach (qw/ok+ ok- draft not_updated not_updated_noML not_updated_noMN

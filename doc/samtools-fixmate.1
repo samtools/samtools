@@ -51,8 +51,10 @@ samtools fixmate
 
 .SH DESCRIPTION
 .PP
-Fill in mate coordinates, ISIZE and mate related flags from a
-name-sorted or name-collated alignment.
+Fill in mate coordinates, ISIZE and mate related flags and tags from a
+name-sorted or name-collated alignment.  This includes the mate CIGAR (MC)
+and mate mapping quality (MQ) tags, on both primary and supplementary
+alignments.
 
 .SH OPTIONS
 .TP 11
