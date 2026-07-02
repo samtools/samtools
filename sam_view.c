@@ -96,6 +96,7 @@ typedef struct samview_settings {
     int sanitize;
     int count_rf; // CRAM_OPT_REQUIRED_FIELDS for view -c
     int exclude_no_rg;
+    int remove_ur;
 } samview_settings_t;
 
 // Copied from htslib/sam.c.
@@ -946,6 +947,7 @@ int main_samview(int argc, char *argv[])
         {"use-index", no_argument, NULL, 'M'},
         {"with-header", no_argument, NULL, 'h'},
         {"sanitize", required_argument, NULL, 'z'},
+        {"remove-ur", no_argument, NULL, LONGOPT('U')},
         {NULL, 0, NULL, 0}
     };
 
@@ -1281,6 +1283,9 @@ int main_samview(int argc, char *argv[])
             }
             break;
 
+        case LONGOPT('U'):
+            settings.remove_ur = 1; break;
+
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
                 return usage(stderr, EXIT_FAILURE, 0);
@@ -1355,6 +1360,14 @@ int main_samview(int argc, char *argv[])
     }
     if (settings.rghash) {
         sam_hdr_remove_lines(settings.header, "RG", "ID", settings.rghash);
+    }
+
+    if (settings.remove_ur) {
+        if (sam_hdr_remove_tag_all(settings.header, "SQ", "UR") < 0) {
+            fprintf(stderr, "[main_samview] unable to remove UR tags.\n");
+            ret = 1;
+            goto view_end;
+        }
     }
 
     // Compute the subsampling seed and record the parameters in a @CO
@@ -1650,6 +1663,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -p, --unmap                Set flag to UNMAP on reads not selected\n"
 "                             then write to output file.\n"
 "  -P, --fetch-pairs          Retrieve complete pairs even when outside of region\n"
+"      --remove-ur            Remove the UR tags from SQ header lines.\n"
 "\n"
 "Input options:\n"
 "  -t, --fai-reference FILE   FILE listing reference names and lengths\n"

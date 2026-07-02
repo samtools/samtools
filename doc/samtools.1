@@ -491,7 +491,7 @@ samtools consensus
 .I in.bam
 
 Generate consensus from a SAM, BAM or CRAM file based on the contents
-of the alignment records.  The consensus is written either as FASTA, 
+of the alignment records.  The consensus is written either as FASTA,
 FASTQ, or a pileup oriented format.
 
 The default output for FASTA and FASTQ formats include one base per
@@ -1058,6 +1058,11 @@ The \fBlevel\fR listed is only the default value, and will not be set
 if it has been explicitly changed already.  Additionally
 \fBbases_per_slice\fR is set to \fB500*seqs_per_slice\fR unless previously
 explicitly set.
+
+.TP
+.BI remove_ur= 0|1
+CRAM output only; defaults to 0.  Remove all the UR tags from SQ lines in the
+header.
 
 .TP
 .B fastq_name2
