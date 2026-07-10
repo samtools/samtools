@@ -6,6 +6,9 @@ Release a.b
   merging many compressed files did not scale beyond about two CPUs regardless
   of the `-@` value.
 
+* `samtools view -U` now also uses the thread pool for the unaccounted-reads
+  output file, so that stream is no longer compressed single-threaded.
+
 Release 1.24 (9th July 2026)
 ----------------------------
 
