@@ -1,6 +1,11 @@
 Release a.b
 -----------
 
+* `samtools merge` now decompresses its input files using the thread pool as
+  well as compressing the output.  Previously only the output was threaded, so
+  merging many compressed files did not scale beyond about two CPUs regardless
+  of the `-@` value.
+
 Release 1.24 (9th July 2026)
 ----------------------------
 
