@@ -43,6 +43,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/klist.h>
 #include <htslib/khash_str2int.h>
 #include <htslib/cram.h>
+#include <htslib/thread_pool.h>
 #include "samtools.h"
 #include "bedidx.h"
 #include "sam_opts.h"
@@ -482,6 +483,7 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
     bam_sample_t *sm = NULL;
     kstring_t buf;
     mplp_pileup_t gplp;
+    htsThreadPool p = {NULL, 0};
 
     memset(&gplp, 0, sizeof(mplp_pileup_t));
     memset(&buf, 0, sizeof(kstring_t));
@@ -495,6 +497,15 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
         exit(EXIT_FAILURE);
     }
 
+    // A shared thread pool attached to every input file lets mpileup use
+    // multiple threads for decompressing its (potentially many) inputs.
+    if (conf->ga.nthreads > 0) {
+        if (!(p.pool = hts_tpool_init(conf->ga.nthreads))) {
+            fprintf(stderr, "[%s] failed to set up thread pool\n", __func__);
+            exit(EXIT_FAILURE);
+        }
+    }
+
     // read the header of each file in the list and initialize data
     refs_t *refs = NULL;
     for (i = 0; i < nfn; ++i) {
@@ -506,6 +517,8 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
             fprintf(stderr, "[%s] failed to open %s: %s\n", __func__, fn[i], strerror(errno));
             exit(EXIT_FAILURE);
         }
+        if (p.pool)
+            hts_set_opt(data[i]->fp, HTS_OPT_THREAD_POOL, &p);
         if (hts_set_opt(data[i]->fp, CRAM_OPT_DECODE_MD, 0)) {
             fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
             exit(EXIT_FAILURE);
@@ -926,6 +939,7 @@ fail:
         if (data[i]->iter) hts_itr_destroy(data[i]->iter);
         free(data[i]);
     }
+    if (p.pool) hts_tpool_destroy(p.pool);
     free(data); free(plp); free(n_plp);
     free(mp_ref.ref[0]);
     free(mp_ref.ref[1]);
@@ -1062,7 +1076,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -a -a (or -aa)           output absolutely all positions, including unused ref. sequences\n"
 "\n"
 "Generic options:\n");
-    sam_global_opt_help(fp, "-.--.--.");
+    sam_global_opt_help(fp, "-.--.@-.");
 
     fprintf(fp, "\n"
 "Note that using \"samtools mpileup\" to generate BCF or VCF files has been\n"
@@ -1095,7 +1109,7 @@ int bam_mpileup(int argc, char *argv[])
 
     static const struct option lopts[] =
     {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '@'),
         {"rf", required_argument, NULL, 1},   // require flag
         {"ff", required_argument, NULL, 2},   // filter flag
         {"incl-flags", required_argument, NULL, 1},
@@ -1146,7 +1160,7 @@ int bam_mpileup(int argc, char *argv[])
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "Af:r:l:q:Q:RC:Bd:b:o:EG:6OsxXaM",lopts,NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Af:r:l:q:Q:RC:Bd:b:o:EG:6OsxXaM@:",lopts,NULL)) >= 0) {
         switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
         case  1 :

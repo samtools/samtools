@@ -957,6 +957,8 @@ sub test_mpileup
 
     # print "$$opts{bin}samtools mpileup -gb $$opts{tmp}/mpileup.list -f $$opts{tmp}/$args{ref}.gz > $$opts{tmp}/mpileup.bcf\n";
     test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.bam.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
+    # Threaded input decoding must give identical output to the single-threaded run.
+    test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -\@2 -b $$opts{tmp}/mpileup.bam.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
     test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
     test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.bam.urllist -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
     test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.cram.urllist -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
@@ -3826,6 +3828,8 @@ sub test_bedcov
 
     test_cmd($opts,out=>'bedcov/bedcov.expected',cmd=>"$$opts{bin}/samtools bedcov $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_j.expected',cmd=>"$$opts{bin}/samtools bedcov -j $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
+    # Threaded input decoding must give identical output to the single-threaded run.
+    test_cmd($opts,out=>'bedcov/bedcov.expected',cmd=>"$$opts{bin}/samtools bedcov -\@2 $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_gG.expected',cmd=>"$$opts{bin}/samtools bedcov -g512 -G2048 $$opts{path}/bedcov/bedcov_gG.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_c.expected',cmd=>"$$opts{bin}/samtools bedcov -c $$opts{path}/bedcov/bedcov_gG.bed $$opts{path}/bedcov/bedcov.bam");
     #with header
@@ -4151,6 +4155,8 @@ sub test_coverage
 
     #basic / existing
     test_cmd($opts, out=>"coverage/1.expected", cmd=>"$$opts{bin}/samtools coverage $$opts{path}/dat/sample.sam");
+    #threaded input decoding must give identical output to the single-threaded run
+    test_cmd($opts, out=>"coverage/1.expected", cmd=>"$$opts{bin}/samtools coverage -\@2 $$opts{path}/dat/sample.sam");
     #coverage --min-depth 1
     test_cmd($opts, out=>"coverage/1.expected", cmd=>"$$opts{bin}/samtools coverage --min-depth 1 $$opts{path}/dat/sample.sam");
     #coverage --min-depth 2

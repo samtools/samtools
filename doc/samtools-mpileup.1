@@ -522,6 +522,9 @@ Output absolutely all positions, including unused reference sequences.
 Note that when used in conjunction with a BED file the -a option may
 sometimes operate as if -aa was specified if the reference sequence
 has coverage outside of the region specified in the BED file.
+.TP
+.BI "-@ " INT ", --threads " INT
+Number of input decompression threads to use in addition to the main thread [0].
 .PP
 .B BAQ (Base Alignment Quality)
 .PP

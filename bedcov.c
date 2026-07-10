@@ -136,15 +136,16 @@ int main_bedcov(int argc, char *argv[])
         hdr = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    htsThreadPool p = {NULL, 0};
     static const struct option lopts[] = {
         {"min-MQ", required_argument, NULL, 'Q'},
         {"min-mq", required_argument, NULL, 'Q'},
         {"max-depth", required_argument, NULL, 'd'+1000},
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '@'),
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "Q:Xg:G:jd:Hc", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Q:Xg:G:jd:Hc@:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'Q': min_mapQ = atoi(optarg); break;
         case 'X': has_index_file = 1; break;
@@ -189,7 +190,7 @@ int main_bedcov(int argc, char *argv[])
                         "                          including this value will be displayed in a separate column\n");
         fprintf(stderr, "      -c                  add an additional column showing read count\n");
         fprintf(stderr, "      -H                  print a comment/header line with column information.\n");
-        sam_global_opt_help(stderr, "-.--.--.");
+        sam_global_opt_help(stderr, "-.--.@-.");
         return 1;
     }
     if (has_index_file) {
@@ -208,10 +209,18 @@ int main_bedcov(int argc, char *argv[])
     memset(&str, 0, sizeof(kstring_t));
     aux = calloc(n, sizeof(aux_t*));
     idx = calloc(n, sizeof(hts_idx_t*));
+    if (ga.nthreads > 0) {
+        if (!(p.pool = hts_tpool_init(ga.nthreads))) {
+            print_error("bedcov", "failed to set up thread pool");
+            return 2;
+        }
+    }
     for (i = 0; i < n; ++i) {
         aux[i] = calloc(1, sizeof(aux_t));
         aux[i]->min_mapQ = min_mapQ;
         aux[i]->fp = sam_open_format(argv[i+optind+1], "r", &ga.in);
+        if (aux[i]->fp && p.pool)
+            hts_set_opt(aux[i]->fp, HTS_OPT_THREAD_POOL, &p);
         if (aux[i]->fp) {
             // If index filename has not been specfied, look in BAM folder
             if (has_index_file) {
@@ -375,6 +384,7 @@ bed_error:
     }
     free(aux); free(idx);
     free(str.s);
+    if (p.pool) hts_tpool_destroy(p.pool);
     sam_global_args_free(&ga);
     return status;
 }
