@@ -52,6 +52,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "htslib/sam.h"
 #include "htslib/hts.h"
+#include "htslib/thread_pool.h"
 #include "samtools.h"
 #include "sam_opts.h"
 
@@ -132,7 +133,7 @@ static int usage(void) {
             "  -h, --help              help (this page)\n");
 
     fprintf(stdout, "\nGeneric options:\n");
-    sam_global_opt_help(stdout, "-.--.--.");
+    sam_global_opt_help(stdout, "-.--.@-.");
 
     fprintf(stdout,
             "\nSee manpage for additional details.\n"
@@ -340,8 +341,9 @@ int main_coverage(int argc, char *argv[]) {
     FILE *file_out = stdout;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    htsThreadPool p = {NULL, 0};
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '@'),
         {"rf", required_argument, NULL, 1}, // require flag
         {"ff", required_argument, NULL, 2}, // filter flag
         {"incl-flags", required_argument, NULL, 1}, // require flag
@@ -368,7 +370,7 @@ int main_coverage(int argc, char *argv[]) {
     // parse the command line
     int c;
     opterr = 0;
-    while ((c = getopt_long(argc, argv, "Ao:l:q:Q:hHw:r:b:md:D", lopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "Ao:l:q:Q:hHw:r:b:md:D@:", lopts, NULL)) != -1) {
         switch (c) {
             case 1:
                 if ((required_flags = bam_str2flag(optarg)) < 0) {
@@ -482,6 +484,14 @@ int main_coverage(int argc, char *argv[]) {
         goto coverage_end;
     }
 
+    if (ga.nthreads > 0) {
+        if (!(p.pool = hts_tpool_init(ga.nthreads))) {
+            print_error("coverage", "Failed to set up thread pool");
+            status = EXIT_FAILURE;
+            goto coverage_end;
+        }
+    }
+
     for (i = 0; i < n_bam_files; ++i) {
         int rf;
         data[i] = (bam_aux_t *) calloc(1, sizeof(bam_aux_t));
@@ -497,6 +507,8 @@ int main_coverage(int argc, char *argv[]) {
             status = EXIT_FAILURE;
             goto coverage_end;
         }
+        if (p.pool)
+            hts_set_opt(data[i]->fp, HTS_OPT_THREAD_POOL, &p);
         rf = SAM_FLAG | SAM_RNAME | SAM_POS | SAM_MAPQ | SAM_CIGAR | SAM_SEQ;
         if (opt_min_baseQ) rf |= SAM_QUAL;
 
@@ -725,6 +737,7 @@ coverage_end:
             free(fn[i]);
         free(fn);
     }
+    if (p.pool) hts_tpool_destroy(p.pool);
     sam_global_args_free(&ga);
 
     return status;
