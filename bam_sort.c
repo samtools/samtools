@@ -1138,6 +1138,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     template_coordinate_keys_t *keys = NULL;
     khash_t(const_c2c) *lib_lookup = NULL;
     int refs_out_shared = 1;
+    htsThreadPool p = {NULL, 0};
 
     // Is there a specified pre-prepared header to use for output?
     if (headers) {
@@ -1201,6 +1202,17 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         if (res) return -1; // FIXME: memory leak
     }
 
+    // Create a shared thread pool for input decompression and output
+    // compression.  Attaching it to every input file (below) as well as the
+    // output is what allows merge to scale beyond ~2 CPUs; previously only the
+    // output was threaded, leaving all input decompression single-threaded.
+    if (n_threads > 1) {
+        if (!(p.pool = hts_tpool_init(n_threads))) {
+            print_error(cmd, "failed to set up thread pool");
+            goto fail;
+        }
+    }
+
     // open and read the header from each file
     for (i = 0; i < n; ++i) {
         sam_hdr_t *hin;
@@ -1210,6 +1222,8 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             goto fail;
         }
         hts_set_opt(fp[i], HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
+        if (p.pool)
+            hts_set_opt(fp[i], HTS_OPT_THREAD_POOL, &p);
         hin = sam_hdr_read(fp[i]);
         if (hin == NULL) {
             print_error(cmd, "failed to read header from \"%s\"", fn[i]);
@@ -1450,7 +1464,8 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             return -1;
         }
     }
-    if (!(flag & MERGE_UNCOMP)) hts_set_threads(fpout, n_threads);
+    if (p.pool)
+        hts_set_opt(fpout, HTS_OPT_THREAD_POOL, &p);
 
     if (refs_out && hts_set_opt(fpout, CRAM_OPT_SHARED_REF, refs_out))
         goto fail;
@@ -1524,8 +1539,10 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     free(RG); free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
     if (sam_close(fpout) < 0) {
         print_error_errno(cmd, "error closing output file \"%s\"", out);
+        if (p.pool) hts_tpool_destroy(p.pool);
         return -1;
     }
+    if (p.pool) hts_tpool_destroy(p.pool);
     if (keys != NULL) {
         for (i = 0; i < keys->m; ++i) {
             free(keys->buffers[i]);
@@ -1553,6 +1570,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         if (fp && fp[i]) sam_close(fp[i]);
         if (heap && heap[i].entry.bam_record) bam_destroy1(heap[i].entry.bam_record);
     }
+    if (p.pool) hts_tpool_destroy(p.pool);
     if (hout) sam_hdr_destroy(hout);
     free(RG);
     free(translation_tbl);

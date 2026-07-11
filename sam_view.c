@@ -1487,6 +1487,7 @@ int main_samview(int argc, char *argv[])
         }
         hts_set_opt(settings.in,  HTS_OPT_THREAD_POOL, &p);
         if (settings.out) hts_set_opt(settings.out, HTS_OPT_THREAD_POOL, &p);
+        if (settings.un_out) hts_set_opt(settings.un_out, HTS_OPT_THREAD_POOL, &p);
     }
     if (is_header_only) goto view_end; // no need to print alignments
 
