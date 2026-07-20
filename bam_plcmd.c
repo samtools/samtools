@@ -51,14 +51,117 @@ DEALINGS IN THE SOFTWARE.  */
 #define dummy_free(p)
 KLIST_INIT(auxlist, char *, dummy_free)
 
+#include "sample.h"
+
+#define MPLP_NO_COMP         (1<<2)
+#define MPLP_NO_ORPHAN       (1<<3)
+#define MPLP_REALN           (1<<4)
+#define MPLP_NO_INDEL        (1<<5)
+#define MPLP_REDO_BAQ        (1<<6)
+#define MPLP_ILLUMINA13      (1<<7)
+#define MPLP_IGNORE_RG       (1<<8)
+#define MPLP_SMART_OVERLAPS  (1<<10)
+
+#define MPLP_PRINT_MAPQ_CHAR (1<<11)
+#define MPLP_PRINT_QPOS      (1<<12)
+// Start of struct active_cols elements
+#define MPLP_PRINT_QNAME     (1<<13)
+#define MPLP_PRINT_FLAG      (1<<14)
+#define MPLP_PRINT_RNAME     (1<<15)
+#define MPLP_PRINT_POS       (1<<16)
+#define MPLP_PRINT_MAPQ      (1<<17)
+#define MPLP_PRINT_CIGAR     (1<<18)
+#define MPLP_PRINT_RNEXT     (1<<19)
+#define MPLP_PRINT_PNEXT     (1<<20)
+#define MPLP_PRINT_TLEN      (1<<21)
+#define MPLP_PRINT_SEQ       (1<<22)
+#define MPLP_PRINT_QUAL      (1<<23)
+#define MPLP_PRINT_RLEN      (1<<24)
+#define MPLP_PRINT_ENDPOS    (1<<25)
+// Must occur after struct active_cols element list
+#define MPLP_PRINT_MODS      (1<<26)
+#define MPLP_PRINT_QPOS5     (1<<27)
+
+#define MPLP_PRINT_LAST      (1<<28) // terminator for loop
+
+#define MPLP_MAX_DEPTH 8000
+#define MPLP_MAX_INDEL_DEPTH 250
+
+typedef struct {
+    int min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth, all, rev_del;
+    int rflag_require, rflag_filter;
+    char *reg, *pl_list, *fai_fname, *output_fname;
+    faidx_t *fai;
+    void *bed, *rghash, *auxlist;
+    int argc;
+    char **argv;
+    char sep, empty, no_ins, no_ins_mods, no_del, no_ends;
+    sam_global_args ga;
+} mplp_conf_t;
+
+typedef struct {
+    char *ref[3];
+    int ref_id[3];
+    hts_pos_t ref_len[3];
+} mplp_ref_t;
+
+#define MPLP_REF_INIT {{NULL,NULL,NULL},{-1,-1,-1},{0,0,0}}
+
+typedef struct {
+    samFile *fp;
+    hts_itr_t *iter;
+    sam_hdr_t *h;
+    mplp_ref_t *ref;
+    const mplp_conf_t *conf;
+} mplp_aux_t;
+
+typedef struct {
+    int n;
+    int *n_plp, *m_plp;
+    bam_pileup1_t **plp;
+} mplp_pileup_t;
+
+typedef struct {
+    hts_base_mod_state *m;
+    hts_pos_t endpos;
+} pileup_cd;
+
+// Initialise and destroy the base modifier state data. This is called
+// as each new read is added or removed from the pileups.
+static
+int pileup_cd_create(void *data, const bam1_t *b, bam_pileup_cd *cd) {
+    cd->p = calloc(1, sizeof(pileup_cd));
+    return cd->p ? 0 : -1;
+}
+
+static
+int pileup_cd_destroy(void *data, const bam1_t *b, bam_pileup_cd *cd) {
+    if (((pileup_cd *)cd->p)->m)
+        hts_base_mod_state_free(((pileup_cd *)cd->p)->m);
+    free(cd->p);
+    return 0;
+}
+
 int pileup_seq(kstring_t *ks_seq, const bam_pileup1_t *p, hts_pos_t pos,
                hts_pos_t ref_len, const char *ref, kstring_t *ks_mod,
                int rev_del, int no_ins, int no_ins_mods,
-               int no_del, int no_ends)
+               int no_del, int no_ends, int flag)
 {
     no_ins_mods |= no_ins;
     int j, err = 0;
-    hts_base_mod_state *m = p->cd.p;
+    hts_base_mod_state *m = NULL;
+
+    // Cache modification data on first occurrence of this sequence
+    if (p->cd.p && (flag & MPLP_PRINT_MODS)) {
+        pileup_cd *cd = (pileup_cd *)(p->cd.p);
+        m = cd->m;
+        if (!m) {
+            m = cd->m = hts_base_mod_state_alloc();
+            if (!m || bam_parse_basemod(p->b, m) < 0)
+                return -1;
+        }
+    }
+
     if (!no_ends && p->is_head) {
         err |= kputc_('^', ks_seq) < 0;
         err |= kputc_(p->b->core.qual > 93 ? 126 : p->b->core.qual + 33,
@@ -168,75 +271,6 @@ int pileup_seq(kstring_t *ks_seq, const bam_pileup1_t *p, hts_pos_t pos,
     return -err;
 }
 
-#include "sample.h"
-
-#define MPLP_NO_COMP    (1<<2)
-#define MPLP_NO_ORPHAN  (1<<3)
-#define MPLP_REALN      (1<<4)
-#define MPLP_NO_INDEL   (1<<5)
-#define MPLP_REDO_BAQ   (1<<6)
-#define MPLP_ILLUMINA13 (1<<7)
-#define MPLP_IGNORE_RG  (1<<8)
-#define MPLP_SMART_OVERLAPS (1<<10)
-
-#define MPLP_PRINT_MAPQ_CHAR (1<<11)
-#define MPLP_PRINT_QPOS  (1<<12)
-// Start of struct active_cols elements
-#define MPLP_PRINT_QNAME (1<<13)
-#define MPLP_PRINT_FLAG  (1<<14)
-#define MPLP_PRINT_RNAME (1<<15)
-#define MPLP_PRINT_POS   (1<<16)
-#define MPLP_PRINT_MAPQ  (1<<17)
-#define MPLP_PRINT_CIGAR (1<<18)
-#define MPLP_PRINT_RNEXT (1<<19)
-#define MPLP_PRINT_PNEXT (1<<20)
-#define MPLP_PRINT_TLEN  (1<<21)
-#define MPLP_PRINT_SEQ   (1<<22)
-#define MPLP_PRINT_QUAL  (1<<23)
-#define MPLP_PRINT_RLEN  (1<<24)
-// Must occur after struct active_cols element list
-#define MPLP_PRINT_MODS  (1<<25)
-#define MPLP_PRINT_QPOS5 (1<<26)
-
-#define MPLP_PRINT_LAST  (1<<27) // terminator for loop
-
-#define MPLP_MAX_DEPTH 8000
-#define MPLP_MAX_INDEL_DEPTH 250
-
-typedef struct {
-    int min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth, all, rev_del;
-    int rflag_require, rflag_filter;
-    char *reg, *pl_list, *fai_fname, *output_fname;
-    faidx_t *fai;
-    void *bed, *rghash, *auxlist;
-    int argc;
-    char **argv;
-    char sep, empty, no_ins, no_ins_mods, no_del, no_ends;
-    sam_global_args ga;
-} mplp_conf_t;
-
-typedef struct {
-    char *ref[3];
-    int ref_id[3];
-    hts_pos_t ref_len[3];
-} mplp_ref_t;
-
-#define MPLP_REF_INIT {{NULL,NULL,NULL},{-1,-1,-1},{0,0,0}}
-
-typedef struct {
-    samFile *fp;
-    hts_itr_t *iter;
-    sam_hdr_t *h;
-    mplp_ref_t *ref;
-    const mplp_conf_t *conf;
-} mplp_aux_t;
-
-typedef struct {
-    int n;
-    int *n_plp, *m_plp;
-    bam_pileup1_t **plp;
-} mplp_pileup_t;
-
 static int build_auxlist(mplp_conf_t *conf, char *optstring) {
     if (!optstring)
         return 0;
@@ -250,10 +284,10 @@ static int build_auxlist(mplp_conf_t *conf, char *optstring) {
         int supported;
     };
 
-    const struct active_cols colnames[12] = {
+    const struct active_cols colnames[13] = {
             {"QNAME", 1}, {"FLAG", 1}, {"RNAME", 1}, {"POS", 1}, {"MAPQ", 1},
             {"CIGAR", 0}, {"RNEXT", 1}, {"PNEXT", 1}, {"TLEN", 0}, {"SEQ", 0},
-            {"QUAL", 0},  {"RLEN", 1},
+            {"QUAL", 0},  {"RLEN", 1}, {"ENDPOS", 1}
     };
 
     int i, f = MPLP_PRINT_QNAME, colno = sizeof(colnames)/sizeof(*colnames);
@@ -349,23 +383,6 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid, char **ref, hts_pos_t *ref_len)
     *ref = r->ref[0];
     *ref_len = r->ref_len[0];
     return 1;
-}
-
-// Initialise and destroy the base modifier state data. This is called
-// as each new read is added or removed from the pileups.
-static
-int pileup_cd_create(void *data, const bam1_t *b, bam_pileup_cd *cd) {
-    int ret;
-    hts_base_mod_state *m = hts_base_mod_state_alloc();
-    ret = bam_parse_basemod(b, m);
-    cd->p = m;
-    return ret;
-}
-
-static
-int pileup_cd_destroy(void *data, const bam1_t *b, bam_pileup_cd *cd) {
-    hts_base_mod_state_free(cd->p);
-    return 0;
 }
 
 //returns 0 on success and 1 on error
@@ -579,7 +596,7 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
 
     // init pileup
     iter = bam_mplp_init(nfn, mplp_func, (void**)data);
-    if (conf->flag & MPLP_PRINT_MODS) {
+    if (conf->flag & (MPLP_PRINT_MODS | MPLP_PRINT_ENDPOS)) {
         bam_mplp_constructor(iter, pileup_cd_create);
         bam_mplp_destructor(iter, pileup_cd_destroy);
     }
@@ -681,7 +698,8 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
                     err |= pileup_seq(&ks_seq, plp[i] + j, pos, ref_len,
                                       ref, &ks_mod, conf->rev_del,
                                       conf->no_ins, conf->no_ins_mods,
-                                      conf->no_del, conf->no_ends) < 0;
+                                      conf->no_del, conf->no_ends,
+                                      conf->flag) < 0;
 
                     // Build up qual
                     err |= kputc_(c+33 < 126 ? c+33 : 126, &ks_qual) < 0;
@@ -788,6 +806,17 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
                             case MPLP_PRINT_RLEN:
                                 err |= kputw(p->b->core.l_qseq, &buf) < 0;
                                 break;
+                            case MPLP_PRINT_ENDPOS: {
+                                pileup_cd *cd = (pileup_cd *)(p->cd.p);
+                                // NB: technically this is zero-based so a 1bp
+                                // read starting at POS=1 could call this
+                                // multiple times, but being 1bp long we
+                                // have no benefit to caching anyway.
+                                if (!cd->endpos)
+                                    cd->endpos = bam_endpos(p->b);
+                                err |= kputw(cd->endpos, &buf) < 0;
+                                break;
+                            }
                             }
                         }
                         if (!n) err |= kputc_('*', &buf) < 0;
