@@ -565,7 +565,7 @@ int checksum_report(char *fn, opts *o,
         return checksum_bamseqchksum(o, all, noRG, h);
 
     // headers
-    fprintf(o->fp, "# Checksum 1.0 for file:%s%s\n",
+    fprintf(o->fp, "# Checksum 2.0 for file:%s%s\n",
             o->tabs ? "\t" : " ", fn);
     fprintf(o->fp, "# Aux tags:%s%s\n",
             o->tabs ? "\t" : "          ", o->tag_str);
