@@ -857,7 +857,7 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
         if (strncmp(line.s, "# Checksum", 10) == 0) {
             int major, minor;
             if (sscanf(line.s, "# Checksum %d.%d", &major, &minor) == 2) {
-                if (major != 1 || minor != 0) {
+                if (major != 2 || minor != 0) {
                     fprintf(stderr, "Unsupported checksum output version\n");
                     goto err;
                 }
