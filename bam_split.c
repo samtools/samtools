@@ -376,7 +376,7 @@ static khiter_t prep_sam_file(parsed_opts_t *opts, state_t *state,
         print_error_errno("split", "Couldn't copy tag value");
         return kh_end(state->tag_val_hash);
     }
-    char *dirsep = strrchr(opts->merged_input_name, '/');
+    const char *dirsep = strrchr(opts->merged_input_name, '/');
     input_base_name = strdup(dirsep? dirsep+1 : opts->merged_input_name);
     if (!input_base_name) {
         print_error_errno("split", "Filename parsing failed");
@@ -638,7 +638,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
         opts->max_split = retval->output_count;
 
     // Open output files for RGs
-    char* dirsep = strrchr(opts->merged_input_name, '/');
+    const char* dirsep = strrchr(opts->merged_input_name, '/');
     char* input_base_name = strdup(dirsep? dirsep+1 : opts->merged_input_name);
     if (!input_base_name) {
         print_error_errno("split", "Filename manipulation failed");
