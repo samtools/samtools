@@ -119,7 +119,7 @@ char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header) {
     if (!fn || !*fn || strcmp(fn, "-") == 0)
         return NULL;
 
-    char *delim = strstr(fn, HTS_IDX_DELIM);
+    const char *delim = strstr(fn, HTS_IDX_DELIM);
     if (delim != NULL) {
         delim += strlen(HTS_IDX_DELIM);
 
