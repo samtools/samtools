@@ -1973,6 +1973,16 @@ sub test_view
 
     my $out = "$$opts{tmp}/view";
 
+    # test UR removal, do this first so a file with UR is created
+    # for later tests.
+    my $bam_with_ur_out = sprintf("%s.test%03d.bam", $out, $test);
+    run_view_test($opts,
+                  msg => "$test: SAM -> BAM -> SAM",
+                  args => ['-b', '--remove-ur', $sam_with_ur, '--no-PG'],
+                  out => $bam_with_ur_out,
+                  compare_sam => $sam_no_ur);
+    $test++;
+
     # SAM -> BAM -> SAM
     my $bam_with_ur_out = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
