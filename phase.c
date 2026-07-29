@@ -454,10 +454,10 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
         printf("FL\t%s\t%d\t%d\n", chr, (int)(regmask[i]>>32) + 1, (int)regmask[i] + 1);
     for (i = 0; i < vpos; ++i) {
         uint64_t x = pcnt[i];
-        int8_t c[2];
+        uint8_t c[2];
         c[0] = (cns[i]&0xffff)>>2 == 0? 4 : (cns[i]&3);
         c[1] = (cns[i]>>16&0xffff)>>2 == 0? 4 : (cns[i]>>16&3);
-        printf("M%d\t%s\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", sitemask[i]+1, chr, (int)(cns[0]>>32) + 1, (int)(cns[i]>>32) + 1, "ACGTX"[c[path[i]]], "ACGTX"[c[1-path[i]]],
+        printf("M%d\t%s\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", sitemask[i]+1, chr, (int)(cns[0]>>32) + 1, (int)(cns[i]>>32) + 1, "ACGTX"[c[(uint8_t)path[i]]], "ACGTX"[c[(uint8_t)(1-path[i])]],
             i + g->vpos_shift + 1, (int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
     }
     free(path); free(pcnt); free(regmask); free(sitemask);
