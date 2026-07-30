@@ -1364,7 +1364,7 @@ int main_samview(int argc, char *argv[])
 
     if (settings.remove_ur) {
         if (sam_hdr_remove_tag_all(settings.header, "SQ", "UR") < 0) {
-            fprintf(stderr, "[main_samview] unable to remove UR tags.\n");
+            fprintf(stderr, "[main_samview] unable to remove UR tags from input.\n");
             ret = 1;
             goto view_end;
         }
@@ -1427,6 +1427,11 @@ int main_samview(int argc, char *argv[])
                 ret = 1;
                 goto view_end;
             }
+        }
+
+        if (settings.remove_ur) {
+            // stop cram from writing out any UR tags
+            hts_set_opt(settings.out, CRAM_OPT_RM_UR, 1);
         }
 
         if (ga.write_index || is_header ||
