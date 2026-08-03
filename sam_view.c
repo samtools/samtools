@@ -755,10 +755,13 @@ static inline int process_one_record(samview_settings_t *conf, bam1_t *b,
             b->core.n_cigar = 0;
         }
 
-        if (check_sam_write1(conf->out, conf->header,
-                             b, conf->fn_out, write_error) < 0) {
+        int ret = conf->un_out
+            ? check_sam_write1(conf->un_out, conf->header,
+                               b, conf->fn_un_out, write_error)
+            : check_sam_write1(conf->out, conf->header,
+                               b, conf->fn_out, write_error);
+        if (ret < 0)
             return -1;
-        }
     } else {
         if (conf->un_out) {
             if (check_sam_write1(conf->un_out, conf->header,
@@ -1331,12 +1334,6 @@ int main_samview(int argc, char *argv[])
     if (argc == optind && isatty(STDIN_FILENO)) {
         print_error("view", "No input provided or missing option argument.");
         return usage(stderr, EXIT_FAILURE, 0); // potential memory leak...
-    }
-
-    if (settings.unmap && settings.fn_un_out) {
-        print_error("view", "Options --unoutput and --unmap are mutually exclusive.");
-        ret = 1;
-        goto view_end;
     }
 
     settings.fn_in = (optind < argc)? argv[optind] : "-";

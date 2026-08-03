@@ -236,9 +236,12 @@ specified) are written to either the output file or this file, but never both.
 .TP
 .BR -p ", " --unmap
 Set the UNMAP flag on alignments that are not selected by the filter options.
-These alignments are then written to the normal output.  This is not compatible
-with
-.BR -U .
+These alignments are then written to the normal output.  When the
+\fB--unoutput\fR option is used, the alignments modified by \fB-p\fR are
+output to the unoutput file instead.  Note this combination does not necessarily
+mean all unmapped reads are written to the unoutput file, as some
+non-filtered alignments may have already been unmapped.  To achieve
+this, filter flags must contain a filter on MAPPED.
 .TP
 .BI "-t " FILE ", --fai-reference " FILE
 A tab-delimited
