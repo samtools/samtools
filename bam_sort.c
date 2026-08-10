@@ -1636,7 +1636,7 @@ int bam_merge(int argc, char *argv[])
         case 't': sort_tag = optarg; break;
         case '1': flag |= MERGE_LEVEL1; level = 1; break;
         case 'u': flag |= MERGE_UNCOMP; level = 0; break;
-        case 'R': reg = strdup(optarg); break;
+        case 'R': reg = optarg; break;
         case 'l': level = atoi(optarg); break;
         case 'c': flag |= MERGE_COMBINE_RG; break;
         case 'p': flag |= MERGE_COMBINE_PG; break;
@@ -1753,7 +1753,6 @@ end:
     }
     free(fn);
     free(fn_idx);
-    free(reg);
     free(arg_list);
     sam_global_args_free(&ga);
     return ret;
