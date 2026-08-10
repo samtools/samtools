@@ -73,6 +73,11 @@ typedef struct {
     int compat;    // compatibility with bamseqchksum format
 } opts;
 
+typedef struct {
+    int major;
+    int minor;
+} version_number;
+
 /* ----------------------------------------------------------------------
  * Utility functions.  Possible candidates for moving to htslib?
  */
@@ -559,14 +564,14 @@ int checksum_bamseqchksum(opts *o, sums_t *all, sums_t *noRG, khash_t(chk) *h){
     return 0;
 }
 
-int checksum_report(char *fn, opts *o,
+int checksum_report(char *fn, opts *o, version_number *ver,
                     sums_t *all, sums_t *noRG, khash_t(chk) *h) {
     if (o->compat)
         return checksum_bamseqchksum(o, all, noRG, h);
 
     // headers
-    fprintf(o->fp, "# Checksum 1.0 for file:%s%s\n",
-            o->tabs ? "\t" : " ", fn);
+    fprintf(o->fp, "# Checksum %d.%d for file:%s%s\n",
+            ver->major, ver->minor, o->tabs ? "\t" : " ", fn);
     fprintf(o->fp, "# Aux tags:%s%s\n",
             o->tabs ? "\t" : "          ", o->tag_str);
     char *s=bam_flag2str(o->flag_mask);
@@ -613,7 +618,7 @@ int checksum_report(char *fn, opts *o,
     return 0;
 }
 
-int checksum(sam_global_args *ga, opts *o, char *fn) {
+int checksum(sam_global_args *ga, opts *o, version_number *ver, char *fn) {
     samFile *fp = NULL;
     sam_hdr_t *hdr = NULL;
     bam1_t *b = bam_init1();
@@ -797,7 +802,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     fp = NULL;
 
     // Report hashes
-    if (checksum_report(fn, o, &h32, &noRG, h) < 0)
+    if (checksum_report(fn, o, ver, &h32, &noRG, h) < 0)
         goto err;
 
     ret = 0;
@@ -834,7 +839,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
  */
 
 // Process an individual file, aggregating to s, noRG and h
-static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
+static int sums_parse(opts *o, version_number *ver, char *fn, sums_t *sums, sums_t *noRG,
                       khash_t(chk) *h) {
     int ret = -1, minfields = 8;    //samtools style chksum
     typedef enum hdrtype {HDR_NF, HDR_SAMCHKSUM, HDR_BAMBAMCHKSUM} hdrtype;
@@ -857,8 +862,10 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
         if (strncmp(line.s, "# Checksum", 10) == 0) {
             int major, minor;
             if (sscanf(line.s, "# Checksum %d.%d", &major, &minor) == 2) {
-                if (major != 1 || minor != 0) {
-                    fprintf(stderr, "Unsupported checksum output version\n");
+                if (major != ver->major || minor != ver->minor) {
+                    fprintf(stderr, "Not current checksum output version:"
+                     "found %d.%d, expected %d.%d\n", major, minor,
+                     ver->major, ver->minor);
                     goto err;
                 }
             }
@@ -1124,7 +1131,7 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
 }
 
 // Combine multiple checksum files together and report the merged stats
-int combine(opts *o, int argc, char **argv) {
+int combine(opts *o, version_number *ver, int argc, char **argv) {
     int ret = -1;
     sums_t s, noRG;
     sums_init(&s);
@@ -1136,12 +1143,12 @@ int combine(opts *o, int argc, char **argv) {
     if (!h)
         goto err;
     for (int i = 0; i < argc; i++) {
-        if (sums_parse(o, argv[i], &s, &noRG, h) < 0) {
+        if (sums_parse(o, ver, argv[i], &s, &noRG, h) < 0) {
             fprintf(stderr, "Failed to parse checksum file '%s'\n", argv[i]);
             goto err;
         }
     }
-    checksum_report("merge", o, &s, &noRG, h);
+    checksum_report("merge", o, ver, &s, &noRG, h);
 
     ret = 0;
  err:
@@ -1270,14 +1277,20 @@ int main_checksum(int argc, char **argv) {
         {"tabs",          no_argument,       NULL, 'T'},
         {"merge",         no_argument,       NULL, 'm'},
         {"bamseqchksum",  no_argument,       NULL, 'B'},
+        {"version-1",     no_argument,       NULL, 'V'},
         {NULL, 0, NULL, 0}
+    };
+
+    version_number version = {
+        .major = 2,
+        .minor = 0,
     };
 
     if (argc == 1 && isatty(STDIN_FILENO))
         usage_exit(stdout, EXIT_SUCCESS);
 
     int c;
-    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:aN:vqo:TmB",
+    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:aN:vqo:TmB1",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 'O':
@@ -1365,6 +1378,11 @@ int main_checksum(int argc, char **argv) {
             }
             break;
 
+        case '1':
+            version.major = 1;
+            version.minor = 0;
+            break;
+
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0)
                 break;
@@ -1381,13 +1399,13 @@ int main_checksum(int argc, char **argv) {
 
     int ret = 0;
     if (opts.merge) {
-        ret = combine(&opts, argc - optind, argv+optind);
+        ret = combine(&opts, &version, argc - optind, argv+optind);
     } else {
         if (argc-optind) {
             while (optind < argc)
-                ret |= checksum(&ga, &opts, argv[optind++]) < 0;
+                ret |= checksum(&ga, &opts, &version, argv[optind++]) < 0;
         } else {
-            ret = checksum(&ga, &opts, "-") < 0;
+            ret = checksum(&ga, &opts, &version, "-") < 0;
         }
     }
 
