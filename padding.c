@@ -465,7 +465,7 @@ int main_pad2unpad(int argc, char *argv[])
         case 'S': break;
         case 'C': hts_parse_format(&ga.out, "cram"); break;
         case 's': assert(compress_level == -1); hts_parse_format(&ga.out, "sam"); break;
-        case 'o': fn_out = strdup(optarg); break;
+        case 'o': fn_out = optarg; break;
         case 'u':
             compress_level = 0;
             if (ga.out.format == unknown_format)
@@ -583,7 +583,7 @@ depad_end:
         fprintf(stderr, "[depad] error on closing output file.\n");
         ret = 1;
     }
-    free(fn_fai); free(fn_out);
+    free(fn_fai);
     if (fn_out_idx)
         free(fn_out_idx);
     sam_global_args_free(&ga);

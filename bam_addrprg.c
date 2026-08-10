@@ -72,8 +72,6 @@ static void cleanup_opts(parsed_opts_t* opts)
 {
     if (!opts) return;
     free(opts->rg_id);
-    free(opts->output_name);
-    free(opts->input_name);
     free(opts->rg_line);
     if (opts->p.pool) hts_tpool_destroy(opts->p.pool);
     sam_global_args_free(&opts->ga);
@@ -229,6 +227,8 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
                 kputs(optarg, &rg_line);
                 break;
             case 'R':
+                // NB: Can be allocated in get_rg_id
+                free(retval->rg_id);
                 retval->rg_id = strdup(optarg);
                 break;
             case 'm': {
@@ -243,7 +243,7 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
                 break;
             }
             case 'o':
-                retval->output_name = strdup(optarg);
+                retval->output_name = optarg;
                 break;
             case 'h':
                 usage(stdout);
@@ -297,7 +297,7 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
         free(retval->rg_line);
         retval->rg_line = tmp;
     }
-    retval->input_name = strdup(argv[optind+0]);
+    retval->input_name = argv[optind+0];
 
     if (retval->ga.nthreads > 0) {
         if (!(retval->p.pool = hts_tpool_init(retval->ga.nthreads))) {
@@ -312,7 +312,6 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
 
 static void overwrite_all_func(const state_t* state, bam1_t* file_read)
 {
-    uint8_t* data = (uint8_t*)strdup(state->rg_id);
     int len = strlen(state->rg_id)+1;
     // If the old exists delete it
     uint8_t* old = bam_aux_get(file_read, "RG");
@@ -320,20 +319,17 @@ static void overwrite_all_func(const state_t* state, bam1_t* file_read)
         bam_aux_del(file_read, old);
     }
 
-    bam_aux_append(file_read, "RG", 'Z', len, data);
-    free(data);
+    bam_aux_append(file_read, "RG", 'Z', len, (const uint8_t *)state->rg_id);
 }
 
 static void orphan_only_func(const state_t* state, bam1_t* file_read)
 {
-    uint8_t* data = (uint8_t*)strdup(state->rg_id);
     int len = strlen(state->rg_id)+1;
     // If the old exists don't do anything
     uint8_t* old = bam_aux_get(file_read, "RG");
     if (old == NULL) {
-        bam_aux_append(file_read, "RG",'Z',len,data);
+        bam_aux_append(file_read, "RG",'Z',len, (const uint8_t *)state->rg_id);
     }
-    free(data);
 }
 
 static bool init(const parsed_opts_t* opts, state_t** state_out) {

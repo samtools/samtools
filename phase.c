@@ -633,8 +633,8 @@ int main_phase(int argc, char *argv[])
             case 'F': g.flag &= ~FLAG_FIX_CHIMERA; break;
             case 'e': g.flag |= FLAG_LIST_EXCL; break;
             case 'A': g.flag |= FLAG_DROP_AMBI; break;
-            case 'b': g.pre = strdup(optarg); break;
-            case 'l': fn_list = strdup(optarg); break;
+            case 'b': g.pre = optarg; break;
+            case 'l': fn_list = optarg; break;
             case 1: g.no_pg = 1; break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
@@ -680,7 +680,6 @@ int main_phase(int argc, char *argv[])
     if (fn_list) { // read the list of sites to phase
         set = loadpos(fn_list, g.fp_hdr);
         if (set == NULL) return 1;
-        free(fn_list);
     } else g.flag &= ~FLAG_LIST_EXCL;
     if (g.pre) { // open BAMs to write
         if (ga.out.format == unknown_format)
@@ -830,7 +829,7 @@ int main_phase(int argc, char *argv[])
             sam_hdr_destroy(g.out_hdr[c]);
             free(g.out_name[c]);
         }
-        free(g.pre); free(g.b);
+        free(g.b);
         if (res) return 1;
     }
     free(g.arg_list);

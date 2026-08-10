@@ -1028,12 +1028,16 @@ int main_samview(int argc, char *argv[])
         case 'S': break;
         case 'b': out_format = "b"; break;
         case 'C': out_format = "c"; break;
-        case 't': settings.fn_fai = strdup(optarg); break;
+        case 't':
+            // NB: also can come from fai_path(), which mallocs
+            free(settings.fn_fai);
+            settings.fn_fai = strdup(optarg);
+            break;
         case 'h': is_header = 1; break;
         case 'H': is_header_only = 1; break;
         case LONGOPT('H'): is_header = is_header_only = 0; break;
-        case 'o': settings.fn_out = strdup(optarg); break;
-        case 'U': settings.fn_un_out = strdup(optarg); break;
+        case 'o': settings.fn_out = optarg; break;
+        case 'U': settings.fn_un_out = optarg; break;
         case 'X': has_index_file = 1; break;
         case 'f':
             tmp_flag = bam_str2flag(optarg);
@@ -1089,7 +1093,7 @@ int main_samview(int argc, char *argv[])
         case 'u': compress_level = 0; break;
         case '1': compress_level = 1; break;
         case 'l':
-            settings.library = strdup(optarg);
+            settings.library = optarg;
             settings.count_rf |= SAM_RGAUX;
             break;
         case 'p': settings.unmap = 1; break;
@@ -1599,7 +1603,7 @@ view_end:
     if (settings.un_out) check_sam_close("view", settings.un_out, settings.fn_un_out, "file", &ret);
     if (fp_out) fclose(fp_out);
 
-    free(settings.fn_fai); free(settings.fn_out); free(settings.library);  free(settings.fn_un_out);
+    free(settings.fn_fai);
     sam_global_args_free(&ga);
     if ( settings.header ) sam_hdr_destroy(settings.header);
     if (settings.bed) bed_destroy(settings.bed);

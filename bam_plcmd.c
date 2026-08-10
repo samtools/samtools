@@ -1207,7 +1207,7 @@ int bam_mpileup(int argc, char *argv[])
             mplp.fai_fname = optarg;
             break;
         case 'd': mplp.max_depth = atoi(optarg); break;
-        case 'r': mplp.reg = strdup(optarg); break;
+        case 'r': mplp.reg = optarg; break;
         case 'l':
                   // In the original version the whole BAM was streamed which is inefficient
                   //  with few BED intervals and big BAMs. Todo: devise a heuristic to determine
@@ -1292,7 +1292,7 @@ int bam_mpileup(int argc, char *argv[])
         }
     }
     if (mplp.rghash) khash_str2int_destroy_free(mplp.rghash);
-    free(mplp.reg); free(mplp.pl_list);
+    free(mplp.pl_list);
     if (mplp.fai) fai_destroy(mplp.fai);
     if (mplp.bed) bed_destroy(mplp.bed);
     if (mplp.auxlist) kl_destroy(auxlist, (klist_t(auxlist) *)mplp.auxlist);
