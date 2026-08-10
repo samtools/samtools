@@ -862,7 +862,7 @@ int main_cat(int argc, char *argv[])
                 sam_close(fph);
                 break;
             }
-            case 'o': outfn = strdup(optarg); break;
+            case 'o': outfn = optarg; break;
             case 'b': {
                 // add file names in "optarg" to the list
                 // of files to concatenate
@@ -976,7 +976,6 @@ int main_cat(int argc, char *argv[])
             free(infns[i]);
     }
 
-    free(outfn);
     free(infns);
     free(arg_list);
     if (h)
