@@ -188,7 +188,7 @@ sub _cmd
     my $out;
     my $err;
     my ($err_fh, $err_filename) = tempfile(UNLINK => 1);
-    my $pid = open($kid_io, "-|", 'bash', '-o','pipefail','-c', "($cmd) 2> $err_filename");
+    my $pid = open($kid_io, "-|", 'bash', '--norc', '--noprofile', '-o','pipefail','-c', "($cmd) 2> $err_filename");
     if ( !defined $pid ) { error("Cannot fork: $!"); }
     if ($pid)
     {
