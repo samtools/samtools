@@ -304,8 +304,8 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, int rg
     this_ref    = bam->core.tid + 1; // avoid a 0 being put into the hash
     other_ref   = bam->core.mtid + 1;
 
-    this_coord = unclipped_start(bam, 1);
-    this_end   = unclipped_end(bam, 1);
+    this_coord = unclipped_start(bam);
+    this_end   = unclipped_end(bam);
 
     if ((data = bam_aux_get(bam, "MC"))) {
         if (!(cig = bam_aux2Z(data))) {
@@ -313,8 +313,8 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, int rg
             return 1;
         }
 
-        other_end   = unclipped_other_end(bam->core.mpos, cig, 1);
-        other_coord = unclipped_other_start(bam->core.mpos, cig, 1);
+        other_end   = unclipped_other_end(bam->core.mpos, cig);
+        other_coord = unclipped_other_start(bam->core.mpos, cig);
     } else {
         print_error("markdup", "error, no MC tag. Please run samtools fixmate on file first.\n");
         return 1;
@@ -469,15 +469,15 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, int rg
         }
 
         if (!bam_is_rev(bam)) {
-            this_coord = unclipped_start(bam, 1);
+            this_coord = unclipped_start(bam);
         } else {
-            this_coord = unclipped_end(bam, 1);
+            this_coord = unclipped_end(bam);
         }
 
         if (!bam_is_mrev(bam)) {
-            other_coord = unclipped_other_start(bam->core.mpos, cig, 1);
+            other_coord = unclipped_other_start(bam->core.mpos, cig);
         } else {
-            other_coord = unclipped_other_end(bam->core.mpos, cig, 1);
+            other_coord = unclipped_other_end(bam->core.mpos, cig);
         }
     }
 
@@ -565,10 +565,10 @@ static void make_single_key(md_param_t *param, key_data_t *key, bam1_t *bam, int
     this_ref = bam->core.tid + 1; // avoid a 0 being put into the hash
 
     if (bam_is_rev(bam)) {
-        this_coord = unclipped_end(bam, 1);
+        this_coord = unclipped_end(bam);
         orientation = O_RR;
     } else {
-        this_coord = unclipped_start(bam, 1);
+        this_coord = unclipped_start(bam);
         orientation = O_FF;
     }
 

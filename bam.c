@@ -157,10 +157,8 @@ rmB_err:
     return -1;
 }
 
-/* Calculate the current read's start based on the stored cigar string.
-   If include_hard_clips is true, both soft and hard clips are considered.
-   If false, only soft clips are considered. */
-hts_pos_t unclipped_start(bam1_t *b, int include_hard_clips) {
+/* Calculate the current read's start based on the stored cigar string. */
+hts_pos_t unclipped_start(bam1_t *b) {
     uint32_t *cigar = bam_get_cigar(b);
     int64_t clipped = 0;
     uint32_t i;
@@ -168,9 +166,9 @@ hts_pos_t unclipped_start(bam1_t *b, int include_hard_clips) {
     for (i = 0; i < b->core.n_cigar; i++) {
         char c = bam_cigar_opchr(cigar[i]);
 
-        if (c == 'S' || (include_hard_clips && c == 'H')) { // clips
+        if (c == 'S' || c == 'H') { // clips
             clipped += bam_cigar_oplen(cigar[i]);
-        } else if (c != 'H') {
+        } else {
             break;
         }
     }
@@ -178,10 +176,8 @@ hts_pos_t unclipped_start(bam1_t *b, int include_hard_clips) {
     return b->core.pos - clipped + 1;
 }
 
-/* Calculate the mate's unclipped start based on position and cigar string from MC tag.
-   If include_hard_clips is true, both soft and hard clips are considered.
-   If false, only soft clips are considered. */
-hts_pos_t unclipped_other_start(hts_pos_t op, char *cigar, int include_hard_clips) {
+/* Calculate the mate's unclipped start based on position and cigar string from MC tag. */
+hts_pos_t unclipped_other_start(hts_pos_t op, char *cigar) {
     char *c = cigar;
     int64_t clipped = 0;
 
@@ -194,9 +190,9 @@ hts_pos_t unclipped_other_start(hts_pos_t op, char *cigar, int include_hard_clip
             num = 1;
         }
 
-        if (*c == 'S' || (include_hard_clips && *c == 'H')) { // clips
+        if (*c == 'S' || *c == 'H') { // clips
             clipped += num;
-        } else if (*c != 'H') {
+        } else {
             break;
         }
 
@@ -206,10 +202,8 @@ hts_pos_t unclipped_other_start(hts_pos_t op, char *cigar, int include_hard_clip
     return op - clipped + 1;
 }
 
-/* Calculate the current read's end based on the stored cigar string.
-   If include_hard_clips is true, both soft and hard clips are considered.
-   If false, only soft clips are considered. */
-hts_pos_t unclipped_end(bam1_t *b, int include_hard_clips) {
+/* Calculate the current read's end based on the stored cigar string. */
+hts_pos_t unclipped_end(bam1_t *b) {
     uint32_t *cigar = bam_get_cigar(b);
     hts_pos_t end_pos, clipped = 0;
     int32_t i;
@@ -222,9 +216,9 @@ hts_pos_t unclipped_end(bam1_t *b, int include_hard_clips) {
     for (i = b->core.n_cigar - 1; i >= 0; i--) {
         char c = bam_cigar_opchr(cigar[i]);
 
-        if (c == 'S' || (include_hard_clips && c == 'H')) { // clips
+        if (c == 'S' || c == 'H') { // clips
             clipped += bam_cigar_oplen(cigar[i]);
-        } else if (c != 'H') {
+        } else {
             break;
         }
     }
@@ -233,10 +227,8 @@ hts_pos_t unclipped_end(bam1_t *b, int include_hard_clips) {
 }
 
 
-/* Calculate the mate's unclipped end based on start position and cigar string from MC tag.
-   If include_hard_clips is true, both soft and hard clips are considered.
-   If false, only soft clips are considered. */
-hts_pos_t unclipped_other_end(int64_t op, char *cigar, int include_hard_clips) {
+/* Calculate the mate's unclipped end based on start position and cigar string from MC tag.*/
+hts_pos_t unclipped_other_end(int64_t op, char *cigar) {
     char *c = cigar;
     int64_t refpos = 0;
     int skip = 1;
@@ -261,15 +253,10 @@ hts_pos_t unclipped_other_end(int64_t op, char *cigar, int include_hard_clips) {
             break;
 
             case 'S':
-                if (!skip) {
-                    refpos += num;
-                }
-            break;
-
             case 'H':
-                if (!skip && include_hard_clips) {
-                    refpos += num;
-                }
+                if (!skip) {
+                refpos += num;
+            }
             break;
         }
 
