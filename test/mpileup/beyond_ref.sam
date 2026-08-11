@@ -1,0 +1,11 @@
+@HD	VN:1.6	SO:coordinate
+@SQ	SN:a	LN:10
+@SQ	SN:g	LN:10
+@SQ	SN:t	LN:10
+@SQ	SN:n	LN:10
+@SQ	SN:o	LN:10
+ra	0	a	3	60	5M	*	0	0	AANAA	XXXXX
+rg	0	g	3	60	5M	*	0	0	GGNGG	XXXXX
+rt	0	t	999	60	1M	*	0	0	A	I
+rn	0	n	999	60	1M	*	0	0	A	I
+ro	0	o	1	60	1M	*	0	0	T	I
