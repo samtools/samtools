@@ -964,6 +964,19 @@ sub test_mpileup
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.bam | grep -v mpileup");
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.cram | grep -v mpileup");
     test_cmd($opts,out=>'dat/mpileup.out.5',cmd=>"$$opts{bin}/samtools mpileup $$opts{path}/mpileup/overlap.bam | grep 128814202");
+
+    # Reads beyond ref len and -a
+    test_cmd($opts, out=>'dat/mpileup.out.6a', cmd=>"$$opts{bin}/samtools "
+             . "mpileup -Ba -f $$opts{path}/mpileup/beyond_ref.fa "
+             . "$$opts{path}/mpileup/beyond_ref.sam");
+    test_cmd($opts, out=>'dat/mpileup.out.6aa', cmd=>"$$opts{bin}/samtools "
+             . "mpileup -Baa -f $$opts{path}/mpileup/beyond_ref.fa "
+             . "$$opts{path}/mpileup/beyond_ref.sam");
+
+    # Issue 2363:
+    test_cmd($opts, out=>'dat/mpileup.out.7', cmd=>"$$opts{bin}/samtools "
+             . "mpileup -B -f $$opts{path}/mpileup/Issue2363.fa "
+             . "$$opts{path}/mpileup/Issue2363.sam");
 }
 
 sub test_usage
