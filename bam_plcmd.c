@@ -113,6 +113,8 @@ typedef struct {
     sam_hdr_t *h;
     mplp_ref_t *ref;
     const mplp_conf_t *conf;
+    int curr_tid;   // current tid in pileup
+    int failed_tid; // last failed tid lookup (+1)
 } mplp_aux_t;
 
 typedef struct {
@@ -320,6 +322,28 @@ static int build_auxlist(mplp_conf_t *conf, char *optstring) {
     return 0;
 }
 
+/*
+ * Fetches and caches a reference for 'tid'.
+ *
+ * Logically speaking, we need at most 3 references in memory as we have
+ * the current one being displayed by pileup, the last one incase we wish
+ * to use the -a option and have just switched to the next reference,
+ * and the next one in the read-ahead from bam_mplp64_auto.
+ *
+ * However there are scenarios where the plp auto / next functions may skip
+ * ahead more than one reference and scenarios in dealing with multiple missing
+ * reference (-aa) that mean 3 is no longer sufficient.
+ *
+ * We can still have a fixed size cache, but we need to remove assumptions
+ * that the ref returned will always be valid and to recheck on every use.
+ * Calling this function for a tid that already exists is fine and will be
+ * efficient.
+ * We always ensure r->ref[0] is the current tid (ma->curr_tid), and
+ * ref[1] and ref[2] are other caches that can be expunged.
+ *
+ * Returns >0 on success, filling out *ref and *ref_len,
+ *          0 on failure, setting *ref to NULL.
+ */
 static int mplp_get_ref(mplp_aux_t *ma, int tid, char **ref, hts_pos_t *ref_len) {
     mplp_ref_t *r = ma->ref;
 
@@ -330,17 +354,22 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid, char **ref, hts_pos_t *ref_len)
         return 0;
     }
 
-    // Do we need to reference count this so multiple mplp_aux_t can
-    // track which references are in use?
-    // For now we just cache the last three.  This is because we need
-    // current ref and last ref (for -a opt) and mpileup itself may use
-    // current ref and potentially next ref.
+    // The fast case: asking for element 0 (typically curr_tid).
+    if (tid == r->ref_id[0]) {
+        *ref = r->ref[0];
+        *ref_len = r->ref_len[0];
+        return 1;
+    }
+
+    // Find the reference tid.  If it's curr_tid then shuffle it to element 0
     int x;
-    for (x = 0; x < 3; x++) {
+    for (x = 1; x < 3; x++) {
         if (tid != r->ref_id[x])
             continue;
 
-        if (x) {
+        if (tid == ma->curr_tid) {
+            // curr_tid has changed and isn't in slot 0 any more, but it's
+            // one that we already have cached (likely due to read-ahead).
             // Shuffle element x to element 0 and rotate others up one
             int tmp_id        = r->ref_id[x];
             hts_pos_t tmp_len = r->ref_len[x];
@@ -353,35 +382,52 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid, char **ref, hts_pos_t *ref_len)
             r->ref_id[0]  = tmp_id;
             r->ref_len[0] = tmp_len;
             r->ref[0]     = tmp_ref;
+            x = 0;
+        } else if (x == 2) {
+            // swap slots 1 and 2 needed?
         }
-        *ref = r->ref[0];
-        *ref_len = r->ref_len[0];
+        *ref = r->ref[x];
+        *ref_len = r->ref_len[x];
         return 1;
     }
 
-    // New, so fill slot zero
+    // New, so fill slot 0 if curr_tid, 1 if not
     free(r->ref[2]);
-    memmove(&r->ref_id[1],  &r->ref_id[0],  2 * sizeof(*r->ref_id));
-    memmove(&r->ref_len[1], &r->ref_len[0], 2 * sizeof(*r->ref_len));
-    memmove(&r->ref[1],     &r->ref[0],     2 * sizeof(*r->ref));
+    if (tid == ma->curr_tid) {
+        x = 0;
+        memmove(&r->ref_id[1],  &r->ref_id[0],  2 * sizeof(*r->ref_id));
+        memmove(&r->ref_len[1], &r->ref_len[0], 2 * sizeof(*r->ref_len));
+        memmove(&r->ref[1],     &r->ref[0],     2 * sizeof(*r->ref));
+    } else {
+        x = 1;
+        r->ref_id[2]  = r->ref_id[1];
+        r->ref_len[2] = r->ref_len[1];
+        r->ref[2]     = r->ref[1];
+    }
 
-    r->ref_id[0] = tid;
-    r->ref[0] = faidx_fetch_seq64(ma->conf->fai,
-                                sam_hdr_tid2name(ma->h, r->ref_id[0]),
-                                0,
-                                HTS_POS_MAX,
-                                &r->ref_len[0]);
+    r->ref_id[x] = tid;
+    if (tid + 1 == ma->failed_tid)
+        // Don't try repeatedly trying to load an absent ref
+        r->ref[x] = NULL;
+    else
+        r->ref[x] = faidx_fetch_seq64(ma->conf->fai,
+                                      sam_hdr_tid2name(ma->h, r->ref_id[x]),
+                                      0,
+                                      HTS_POS_MAX,
+                                      &r->ref_len[x]);
 
-    if (!r->ref[0]) {
-        r->ref[0] = NULL;
-        r->ref_id[0] = -1;
-        r->ref_len[0] = 0;
+    if (!r->ref[x]) {
+        // +1 so calloc initialisation is sufficient
+        ma->failed_tid = tid + 1;
+        r->ref[x] = NULL;
+        r->ref_id[x] = -1;
+        r->ref_len[x] = 0;
         *ref = NULL;
         return 0;
     }
 
-    *ref = r->ref[0];
-    *ref_len = r->ref_len[0];
+    *ref = r->ref[x];
+    *ref_len = r->ref_len[x];
     return 1;
 }
 
@@ -613,7 +659,7 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
 
     bam_mplp_set_maxcnt(iter, max_depth);
     int ret, err = 0;
-    int last_tid = -1, got_ref = 0;
+    int last_tid = -1;
     hts_pos_t last_pos = -1;
     int one_seq = 0;
 
@@ -622,6 +668,7 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
     kstring_t ks_mod = KS_INITIALIZE;
     kstring_t ks_qual = KS_INITIALIZE;
     while ( (ret=bam_mplp64_auto(iter, &tid, &pos, n_plp, plp)) > 0) {
+        data[0]->curr_tid = tid;
         one_seq = 1; // at least 1 output
         if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
         if (conf->all) {
@@ -631,6 +678,10 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
                     while (++last_pos < sam_hdr_tid2len(h, last_tid)) {
                         if (conf->bed && bed_overlap(conf->bed, sam_hdr_tid2name(h, last_tid), last_pos, last_pos + 1) == 0)
                             continue;
+                        // Do not assume last_tid is still cached, as we
+                        // could have skipped ahead by more than the cache
+                        // size.
+                        mplp_get_ref(data[0], last_tid, &ref, &ref_len);
                         if (print_empty_pileup(&buf, conf, sam_hdr_tid2name(h, last_tid), last_pos, nfn, ref, ref_len)) {
                             fprintf(stderr, "Failed to make empty pileup, tid %d, pos %"PRIhts_pos".\n", last_tid, last_pos);
                             goto fail;
@@ -643,27 +694,26 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
                     }
                 }
                 last_tid++;
-                got_ref = 0;
                 last_pos = -1;
                 if (conf->all < 2)
                     break;
-                if (tid > last_tid)
-                    // multiple missing references and -aa used
-                    got_ref = mplp_get_ref(data[0], last_tid, &ref, &ref_len);
             }
         }
-        if (!got_ref || last_tid != tid) {
-            got_ref = mplp_get_ref(data[0], tid, &ref, &ref_len);
+        if (last_tid != tid) {
+            mplp_get_ref(data[0], tid, &ref, &ref_len);
             last_tid = tid;
         }
 
         if (conf->all) {
             // Deal with missing portion of current tid
+            mplp_get_ref(data[0], tid, &ref, &ref_len);
+            const char *rname = sam_hdr_tid2name(h, tid);
             while (++last_pos < pos) {
-                if (conf->reg && last_pos < beg0) continue; // out of range; skip
-                if (conf->bed && bed_overlap(conf->bed, sam_hdr_tid2name(h, tid), last_pos, last_pos + 1) == 0)
+                if (conf->reg && last_pos < beg0)
+                    continue; // out of range; skip
+                if (conf->bed && bed_overlap(conf->bed, rname, last_pos, last_pos + 1) == 0)
                     continue;
-                if (print_empty_pileup(&buf, conf, sam_hdr_tid2name(h, tid), last_pos, nfn, ref, ref_len)) {
+                if (print_empty_pileup(&buf, conf, rname, last_pos, nfn, ref, ref_len)) {
                     fprintf(stderr, "Failed to make empty pileup, tid %d, pos %"PRIhts_pos".\n", tid, last_pos);
                     goto fail;
                 }
@@ -676,6 +726,8 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
             last_pos = pos;
         }
         if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, sam_hdr_tid2name(h, tid), pos, pos+1)) continue;
+
+        mplp_get_ref(data[0], tid, &ref, &ref_len);
 
         err |= kputs(sam_hdr_tid2name(h, tid), &buf) < 0;
         err |= kputc_('\t', &buf) < 0;
@@ -917,11 +969,12 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
         }
         while (last_tid >= 0 && last_tid < sam_hdr_nref(h)) {
             mplp_get_ref(data[0], last_tid, &ref, &ref_len);
+            const char *rname = sam_hdr_tid2name(h, last_tid);
             while (++last_pos < sam_hdr_tid2len(h, last_tid)) {
                 if (last_pos >= end0) break;
-                if (conf->bed && bed_overlap(conf->bed, sam_hdr_tid2name(h, last_tid), last_pos, last_pos + 1) == 0)
+                if (conf->bed && bed_overlap(conf->bed, rname, last_pos, last_pos + 1) == 0)
                     continue;
-                if (print_empty_pileup(&buf, conf, sam_hdr_tid2name(h, last_tid), last_pos, nfn, ref, ref_len)) {
+                if (print_empty_pileup(&buf, conf, rname, last_pos, nfn, ref, ref_len)) {
                     fprintf(stderr, "Failed to make empty pileup, tid %d, pos %"PRIhts_pos".\n", last_tid, last_pos);
                     goto fail;
                 }
