@@ -1,0 +1,9 @@
+@SQ	SN:r0	LN:10
+@SQ	SN:r3	LN:10
+@SQ	SN:r4	LN:10
+@SQ	SN:r5	LN:10
+s1	0	r0	1	60	1M	*	0	0	N	I
+s2	0	r0	2	60	1M	*	0	0	N	I
+s3	1	r3	3	60	1M	*	0	0	N	I
+s4	1	r4	2	60	1M	*	0	0	N	I
+s5	1	r5	1	60	1M	*	0	0	N	I
