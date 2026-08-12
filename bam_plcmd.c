@@ -671,7 +671,10 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
     while ( (ret=bam_mplp64_auto(iter, &tid, &pos, n_plp, plp)) > 0) {
         data[0]->curr_tid = tid;
         one_seq = 1; // at least 1 output
-        if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
+        if (conf->reg && (pos < beg0 || pos >= end0))
+            continue; // out of the region requested
+        if (pos >= sam_hdr_tid2len(h, tid))
+            continue; // position out of bounds
         if (conf->all) {
             // Deal with missing portions of previous tids
             while (tid > last_tid) {
