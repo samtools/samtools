@@ -485,7 +485,8 @@ static int mplp_func(void *data, bam1_t *b)
         }
         if (ma->conf->rghash) { // exclude read groups
             uint8_t *rg = bam_aux_get(b, "RG");
-            skip = (rg && khash_str2int_get(ma->conf->rghash, (const char*)(rg+1), NULL)==0);
+            skip = (rg && *rg=='Z' &&
+               khash_str2int_get(ma->conf->rghash, (const char*)(rg+1), NULL)==0);
             if (skip) continue;
         }
         if (ma->conf->flag & MPLP_ILLUMINA13) {
@@ -1287,8 +1288,10 @@ int bam_mpileup(int argc, char *argv[])
                 FILE *fp_rg;
                 char buf[1024];
                 mplp.rghash = khash_str2int_init();
-                if ((fp_rg = fopen(optarg, "r")) == NULL)
-                    fprintf(stderr, "[%s] Fail to open file %s. Continue anyway.\n", __func__, optarg);
+                if ((fp_rg = fopen(optarg, "r")) == NULL) {
+                    fprintf(stderr, "[%s] Fail to open file %s.\n", __func__, optarg);
+                    return 1;
+                }
                 while (!feof(fp_rg) && fscanf(fp_rg, "%s", buf) > 0) // this is not a good style, but forgive me...
                     khash_str2int_inc(mplp.rghash, strdup(buf));
                 fclose(fp_rg);
