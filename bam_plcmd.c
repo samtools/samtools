@@ -1295,7 +1295,7 @@ int bam_mpileup(int argc, char *argv[])
                     fprintf(stderr, "[%s] Fail to open file %s.\n", __func__, optarg);
                     return 1;
                 }
-                while (!feof(fp_rg) && fscanf(fp_rg, "%s", buf) > 0) // this is not a good style, but forgive me...
+                while (!feof(fp_rg) && fscanf(fp_rg, "%1023s", buf) > 0)
                     khash_str2int_inc(mplp.rghash, strdup(buf));
                 fclose(fp_rg);
             }
