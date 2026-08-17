@@ -313,6 +313,12 @@ order-specific checksums (\fB-OO\fR) has been used.
 Increase verbosity.  At level 1 or higher this also shows rows that
 have zero count values, which can aid machine parsing.
 
+.TP
+.BR -V "," --version-1
+Checksums in version 1.0 were incorrectly calculated if the \fB-M\fR 
+(\fB--check-mate\fR) flag was set.  Version 2.0 fixed this issue but made
+previous checksums invalid.  This option replicates version 1.0 behaviour.
+
 .SH EXAMPLES
 .IP o 2
 To check that an aligned and position sorted file contains the same

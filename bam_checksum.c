@@ -732,11 +732,19 @@ int checksum(sam_global_args *ga, opts *o, version_number *ver, char *fn) {
 
         // flag + seq + rnext + pnext + tlen
         if (o->check_mate) {
-            uint8_t mate[4+8+8];
-            u32_to_le(b->core.mtid,  mate);
-            u64_to_le(b->core.mpos,  mate+4);
-            u64_to_le(b->core.isize, mate+12);
-            c.mate = hts_crc32(c.seq, mate, 20);
+            if (ver->major >= 2) {
+                uint8_t mate[4+8+8];
+                u32_to_le(b->core.mtid,  mate);
+                u64_to_le(b->core.mpos,  mate+4);
+                u64_to_le(b->core.isize, mate+12);
+                c.mate = hts_crc32(c.seq, mate, 20);
+            } else {
+                // this replicates the mistake in checksum v1.0
+                uint8_t mate[4+8+8];
+                u32_to_le(b->core.mtid,  mate);
+                u64_to_le(b->core.mpos,  mate+4);
+                c.mate = hts_crc32(c.seq, mate, 12);
+            }
         }
 
         // flag + seq + mapq + cigar
@@ -1183,7 +1191,7 @@ void usage_exit(FILE *fp, int ret) {
   -O, --in-order              Use order-specific checksumming [off]\n\
   -P, --check-pos             Also checksum CHR / POS [off]\n\
   -C, --check-cigar           Also checksum MAPQ / CIGAR [off]\n\
-  -M, --check_mate            Also checksum PNEXT / RNEXT / TLEN [off]\n\
+  -M, --check-mate            Also checksum PNEXT / RNEXT / TLEN [off]\n\
   -z, --sanitize FLAGS        Perform sanity checks and fix records [off]\n\
   -N, --count INT             Stop after INT number of records [0]\n\
   -o, --output FILE           Write report to FILE [stdout]\n\
@@ -1192,7 +1200,8 @@ void usage_exit(FILE *fp, int ret) {
   -a, --all                   Check all: -PCMOc -b 0xfff -f0 -F0 -z all,cigarx\n\
   -T, --tabs                  Format output as tab delimited text\n\
   -m, --merge FILE            Merge checksum output (-o opt) files\n\
-  -B, --bamseqchksum          Report in bamseqchksum format\n");
+  -B, --bamseqchksum          Report in bamseqchksum format\n\
+  -V  --version-1             Use version 1 checksums\n");
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@--");
     exit(ret);
@@ -1290,7 +1299,7 @@ int main_checksum(int argc, char **argv) {
         usage_exit(stdout, EXIT_SUCCESS);
 
     int c;
-    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:aN:vqo:TmB1",
+    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:aN:vqo:TmBV",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 'O':
@@ -1378,7 +1387,7 @@ int main_checksum(int argc, char **argv) {
             }
             break;
 
-        case '1':
+        case 'V':
             version.major = 1;
             version.minor = 0;
             break;
