@@ -124,7 +124,7 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *fn_
         print_error("tview", "cannot read \"%s\"", fn);
         exit(EXIT_FAILURE);
     }
-    // If index filename has not been specfied, look in BAM folder
+    // If index filename has not been specified, look in BAM folder
     if (fn_idx != NULL) {
         tv->idx = sam_index_load2(tv->fp, fn, fn_idx);
     } else {

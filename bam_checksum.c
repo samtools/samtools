@@ -77,7 +77,7 @@ typedef struct {
  * Utility functions.  Possible candidates for moving to htslib?
  */
 
-// Note: qual+33 is a pain, but only for the benefit of compatability with
+// Note: qual+33 is a pain, but only for the benefit of compatibility with
 // biobambam's bamseqchksum.  It's also wrong for QUAL "*" as it triggers a
 // wraparound and turning from BAM's 0xff-run to ASCII makes no sense in a
 // checksum.
@@ -1130,7 +1130,7 @@ int combine(opts *o, int argc, char **argv) {
     sums_init(&s);
     sums_init(&noRG);
 
-    free(o->tag_free); // Probably NULL, but just incase
+    free(o->tag_free); // Probably NULL, but just in case
     o->tag_free = o->tag_str = NULL;
     khash_t(chk) *h = kh_init(chk);
     if (!h)

@@ -91,7 +91,7 @@ static template_coordinate_key_t* template_coordinate_keys_get(template_coordina
     return &keys->buffers[buffer_idx][buffer_offset];
 }
 
-// Rellocates the buffers to hold at least max_k entries
+// Reallocates the buffers to hold at least max_k entries
 static int template_coordinate_keys_realloc(template_coordinate_keys_t *keys, int max_k) {
     size_t cur_m = keys->m;
     keys->m += 0x100;
@@ -3358,7 +3358,7 @@ static int set_sort_order(sam_hdr_t *h, int mapped) {
   @param  prefix   prefix of the temporary files (prefix.NNNN.bam are written)
   @param  fnout    name of the final output file to be written
   @param  modeout  sam_open() mode to be used to create the final output file
-  @param  max_mem  approxiate maximum memory (very inaccurate)
+  @param  max_mem  approximate maximum memory (very inaccurate)
   @param  in_fmt   input file format options
   @param  out_fmt  output file format and options
   @param  arg_list    command string for PG line
@@ -3515,7 +3515,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             mem_full = 1;
         }
 
-        // Set the tag if sorting by tag, or the key for template cooridinate sorting
+        // Set the tag if sorting by tag, or the key for template coordinate sorting
         switch (g_sam_order) {
             case TagQueryName:
             case TagCoordinate:

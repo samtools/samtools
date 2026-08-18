@@ -355,7 +355,7 @@ static int bam_trim_left(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     if (rec->l_data + 8 > rec_out->m_data) {
         uint8_t *new_data = realloc(rec_out->data, rec->l_data + 8);
         if (!new_data) {
-            fprintf(stderr, "[ampliconclip] error: could not allocate memoy for new bam record\n");
+            fprintf(stderr, "[ampliconclip] error: could not allocate memory for new bam record\n");
             return 1;
         }
         rec_out->data = new_data;
@@ -505,7 +505,7 @@ static int bam_trim_right(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     if (rec->l_data + 8 > rec_out->m_data) {
         uint8_t *new_data = realloc(rec_out->data, rec->l_data + 8);
         if (!new_data) {
-            fprintf(stderr, "[ampliconclip] error: could not allocate memoy for new bam record\n");
+            fprintf(stderr, "[ampliconclip] error: could not allocate memory for new bam record\n");
             return 1;
         }
         rec_out->data = new_data;

@@ -271,7 +271,7 @@ static int get_ref(faidx_t *fai, sam_hdr_t *header, ref_cache *cache,
     }
 
     if (!cache->refs && cache->last_tid > tid) {
-        // Going backwards throught the list of tids implies
+        // Going backwards through the list of tids implies
         // a non-position-ordered file, so turn on caching mode
         cache->nref = sam_hdr_nref(header);
         if (cache->nref < 0) {

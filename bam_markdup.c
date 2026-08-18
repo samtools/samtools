@@ -1148,7 +1148,7 @@ static inline int has_mate(bam1_t *b) {
 }
 
 
-/* Check all duplicates of the highest quality read (the "original") for consistancy.  Also
+/* Check all duplicates of the highest quality read (the "original") for consistency.  Also
    pre-calculate any values for use in check_duplicate_chain later.
    Returns 0 on success, >0 on coordinate reading error (program can continue) or
    <0 on an error (program should not continue. */
@@ -2393,7 +2393,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  --coords-order STR Order of regex elements. txy (default).  With t being a part of\n"
                     "                     the read names that must be equal and x/y being coordinates.\n");
     fprintf(stderr, "  --barcode-tag STR  Use barcode a tag that duplicates much match.\n");
-    fprintf(stderr, "  --barcode-name     Use the UMI/barcode in the read name (eigth colon delimited part).\n");
+    fprintf(stderr, "  --barcode-name     Use the UMI/barcode in the read name (eighth colon-delimited part).\n");
     fprintf(stderr, "  --barcode-rgx STR  Regex for barcode in the readname (alternative to --barcode-name).\n");
     fprintf(stderr, "  --move-umi-to-tag  Move UMI from read name to RX tag (use with --barcode-name/--barcode-rgx).\n");
     fprintf(stderr, "  --umi-separator CHAR   Separator for UMI (default ':').\n");

@@ -40,7 +40,7 @@ typedef struct {
     int e[2][3], p[2][2];
 } score_param_t;
 
-/* Note that although the two matrics have 10 parameters in total, only 4
+/* Note that although the two matrices have 10 parameters in total, only 4
  * (probably 3) are free.  Changing the scoring matrices in a sort of symmetric
  * way will not change the result. */
 static score_param_t g_param = { {{0,0,0},{-4,1,6}}, {{0,-14000}, {0,0}} };

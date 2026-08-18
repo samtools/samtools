@@ -1173,7 +1173,7 @@ sub querylen
 #   $args->{read_groups}    hash of read groups to output (-r or -R)
 #   $args->{read_names}     names of reads to output (-N)
 #   $args->{tag}            tag used for checking if reads match tag_values (-d or -D)
-#   $args->{tag_values}     hash of values assocated with tag to output (-d or -D)
+#   $args->{tag_values}     hash of values associated with tag to output (-d or -D)
 #   $args->{libraries}      hash of libraries to output (-l)
 #   $args->{region}         region list to output (-L and region list)
 #   $args->{strip_tags}     hash of tags to strip from alignments (-x)
@@ -1877,7 +1877,7 @@ sub gen_pair
 # which is an index of the fasta file.  Both of these are used for CRAM.
 # The SAM file is compressed with bgzf to keep the size down.
 #
-# To generate random sequence aligned against identical referenes,
+# To generate random sequence aligned against identical references,
 # pass in the 4th argument (ref_seed) with a constant value.  Otherwise a
 # random reference is generated too.
 #
@@ -2363,7 +2363,7 @@ sub test_view
     my @region_sams   = ($sam_with_ur2, $sam_with_ur);
     my @region_inputs = ([BAM  => [$bam_with_ur_out2, $bam_with_ur_out]],
                          [CRAM => [$cram_with_ur_out2, $cram_with_ur_out]]);
-    # Add indicies
+    # Add indexes
     cmd("'$$opts{bin}/samtools' index '$bam_with_ur_out'");
     cmd("'$$opts{bin}/samtools' index '$cram_with_ur_out'");
     cmd("'$$opts{bin}/samtools' index '$bam_with_ur_out2'");
@@ -4126,7 +4126,7 @@ sub test_checksum
 
     # Basic mode, two files with one read-group removed and subtle QC diffs
     # 1.1 and 2.1 checksums should have the same "all" and ERR013140 and
-    # ERR156632 groups should match, with "-" matching delted ERR016352.
+    # ERR156632 groups should match, with "-" matching deleted ERR016352.
     # tr -d '\011' is to fix windows nl-cr endings which break the comparison.
     test_cmd($opts, out=>"checksum/chk1.1.expected", cmd=>"$$opts{bin}/samtools $chk $$opts{path}/checksum/chk1.bam | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
     test_cmd($opts, out=>"checksum/chk2.1.expected", cmd=>"$$opts{bin}/samtools $chk $$opts{path}/checksum/chk2.cram | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");

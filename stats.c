@@ -1402,7 +1402,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
         }
 
         // Mismatches per cycle and GC-depth graph. For simplicity, reads overlapping GCD bins
-        //  are not splitted which results in up to seq_len-1 overlaps. The default bin size is
+        //  are not split which results in up to seq_len-1 overlaps. The default bin size is
         //  20kbp, so the effect is negligible.
         if ( stats->info->fai )
         {
@@ -2207,7 +2207,7 @@ error(const char *format, ...)
         printf("    -p, --remove-overlaps               Remove overlaps of paired-end reads from coverage and base count computations.\n");
         printf("    -g, --cov-threshold <int>           Only bases with coverage above this value will be included in the target percentage computation [0]\n");
         printf("        --ref-stats                     Create statistics on reference data.\n");
-        printf("        --ref-stats-chunk <int>         Reference retrival chunk size, in Mbs, for reference statistics [1].\n");
+        printf("        --ref-stats-chunk <int>         Reference retrieval chunk size, in Mbs, for reference statistics [1].\n");
         sam_global_opt_help(stdout, "-.--.@-.");
         printf("\n");
     }
@@ -2672,7 +2672,7 @@ void collect_refstats(stats_t *stats)
                 cntN += bc['N'] + bc['n'];
                 free(buf);
                 if (tmp < tmpend) {
-                    //asked and didnt get whole --> nothing more
+                    //asked and didn't get whole --> nothing more
                     break;
                 }
                 start += tmp;

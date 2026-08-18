@@ -796,7 +796,7 @@ static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
         // not used, we don't open a file to preserve existing behaviour.
         if (val && state->output_count < opts->max_split &&
             (iter == kh_end(state->tag_val_hash) &&
-              /*explict tag or implicit RG with sorted by RG file*/
+              /*explicit tag or implicit RG with sorted by RG file*/
               (opts->tag || newRGfile) )) {
             // Need to open a new output file
             iter = prep_sam_file(opts, state, val, arg_list, is_rg);

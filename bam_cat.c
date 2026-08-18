@@ -620,7 +620,7 @@ int cram_cat(samFile * const firstfile, int nfn, char * const *fn,
                     if (cram_write_container(out_c, c) != 0)
                         goto closefiles;
 
-                    // Contatiner compression header
+                    // Container compression header
                     if (cram_write_block(out_c, blk) != 0) {
                         cram_free_block(blk);
                         goto closefiles;

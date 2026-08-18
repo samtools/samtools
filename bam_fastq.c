@@ -1077,7 +1077,7 @@ static int removesoftclips(const char *prg, bam1_t *b, kstring_t *clipbuf, const
     uint8_t *ptr, *bptr, *qptr, *nbptr, *nqptr, op, prevop, *auxb = NULL,
         *auxq = NULL;
     uint32_t oplen, slen = 0, dlen = 0, *cptr;
-    int64_t auxlen = 0; //n64bit as later multipled with -1 in during ptr update
+    int64_t auxlen = 0; //64bit as later multiplied with -1 during ptr update
     const char seq_nt16flip_str[] = "!TGKCYSBAWRDMHVN", *base = seq_nt16_str;
     char tag[2] = {'s','0'};
     if (!b) return -1;               //invalid params

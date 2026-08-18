@@ -86,7 +86,7 @@ run_test() {
     fi
 }
 
-# Process regresion file
+# Process regression file
 regtest() {
     nupass=0; nepass=0
     nufail=0; nefail=0
