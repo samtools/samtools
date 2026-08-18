@@ -1151,6 +1151,8 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
     if (!md)
         return 1;
     md = (const uint8_t *)bam_aux2Z(md);
+    if (!md)
+        return 1; // Wrong type
 
     // Handle cost of being near a soft-clip
     uint32_t *cig = bam_get_cigar(b);

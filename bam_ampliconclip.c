@@ -657,7 +657,9 @@ static inline int tag_original_data(bam1_t *orig, kstring_t *oa_tag) {
 
     // if there is an existing OA tag the new one gets appended to it
     if ((old_oa_tag = bam_aux_get(orig, "OA"))) {
-        res |= ksprintf(oa_tag, "%s", bam_aux2Z(old_oa_tag)) < 0;
+        char *old_oa = bam_aux2Z(old_oa_tag);
+        if (old_oa)
+            res |= ksprintf(oa_tag, "%s", old_oa) < 0;
     }
 
     if (orig->core.flag & BAM_FREVERSE)
