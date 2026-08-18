@@ -38,7 +38,7 @@ const char *bam_get_library(sam_hdr_t *h, const bam1_t *b)
     kstring_t lib = { 0, 0, NULL };
     rg = (char *)bam_aux_get(b, "RG");
 
-    if (!rg)
+    if (!rg || *rg != 'Z')
         return NULL;
     else
         rg++;

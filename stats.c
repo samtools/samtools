@@ -1216,7 +1216,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
     if ( stats->rg_hash )
     {
         const uint8_t *rg = bam_aux_get(bam_line, "RG");
-        if ( !rg ) return;  // certain read groups were requested but this record has none
+        if ( !rg || *rg != 'Z') return;  // certain read groups were requested but this record has none
         khint_t k = kh_get(rg, stats->rg_hash, (const char*)(rg + 1));
         if ( k == kh_end((kh_rg_t *)stats->rg_hash) ) return;
     }
@@ -2469,29 +2469,35 @@ static stats_t* get_curr_split_stats(bam1_t* bam_line, khash_t(c2stats)* split_h
     if(tag_val == 0){
         error("Tag '%s' not found in bam_line.\n", info->split_tag);
     }
-    char* split_name = strdup(bam_aux2Z(tag_val));
 
-    // New stats object, under split
+    char* split_name = bam_aux2Z(tag_val);
+    if (!split_name)
+        error("Tag '%s' on read %s is type '%c', not 'Z' (string).\n",
+              info->split_tag, bam_get_qname(bam_line), *tag_val);
+
     khiter_t k = kh_get(c2stats, split_hash, split_name);
     if(k == kh_end(split_hash)){
+        // New stats object, under split
+        char *dup_name = strdup(split_name);
+        if (!dup_name)
+            error("Couldn't allocate name for split");
         curr_stats = stats_init(); // mallocs new instance
         if (!curr_stats) {
             error("Couldn't allocate split stats");
         }
         init_stat_structs(curr_stats, info, NULL, targets);
-        curr_stats->split_name = split_name;
+        curr_stats->split_name = dup_name;
 
         // Record index in hash
         int ret = 0;
         khiter_t iter = kh_put(c2stats, split_hash, split_name, &ret);
         if( ret < 0 ){
-            error("Failed to insert key '%s' into split_hash", split_name);
+            error("Failed to insert key '%s' into split_hash", dup_name);
         }
         kh_val(split_hash, iter) = curr_stats; // store pointer to stats
     }
     else{
         curr_stats = kh_value(split_hash, k);
-        free(split_name); // don't need to hold on to this if it wasn't new
     }
     return curr_stats;
 }

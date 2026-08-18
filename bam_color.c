@@ -46,6 +46,7 @@ char bam_aux_getCSi(bam1_t *b, int i)
     if(0 == c) return 0;
 
     cs = bam_aux2Z(c);
+    if (!cs) return 0;
     // adjust for strandedness and leading adaptor
     if(bam_is_rev(b)) {
         i = strlen(cs) - 1 - i;
