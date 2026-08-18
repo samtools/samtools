@@ -955,7 +955,7 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
     uint8_t *rg = bam_aux_get(b, "RG");
     if (rg) {
         char* decoded_rg = bam_aux2Z(rg);
-        khiter_t k = kh_get(c2c, tbl->rg_trans, decoded_rg);
+        khiter_t k = decoded_rg ? kh_get(c2c, tbl->rg_trans, decoded_rg) : kh_end(tbl->rg_trans);
         if (k != kh_end(tbl->rg_trans)) {
             char* translate_rg = kh_value(tbl->rg_trans,k);
             bam_aux_del(b, rg);
@@ -963,7 +963,7 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
                 bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1,
                                (uint8_t*)translate_rg);
             }
-        } else {
+        } else if (decoded_rg) {
             char *tmp = strdup(decoded_rg);
             fprintf(stderr,
                     "[bam_translate] RG tag \"%s\" on read \"%s\" encountered "
@@ -985,7 +985,7 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
     uint8_t *pg = bam_aux_get(b, "PG");
     if (pg) {
         char* decoded_pg = bam_aux2Z(pg);
-        khiter_t k = kh_get(c2c, tbl->pg_trans, decoded_pg);
+        khiter_t k = decoded_pg ? kh_get(c2c, tbl->pg_trans, decoded_pg) : kh_end(tbl->pg_trans);
         if (k != kh_end(tbl->pg_trans)) {
             char* translate_pg = kh_value(tbl->pg_trans,k);
             bam_aux_del(b, pg);
@@ -993,7 +993,7 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
                 bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1,
                                (uint8_t*)translate_pg);
             }
-        } else {
+        } else if (decoded_pg) {
             char *tmp = strdup(decoded_pg);
             fprintf(stderr,
                     "[bam_translate] PG tag \"%s\" on read \"%s\" encountered "

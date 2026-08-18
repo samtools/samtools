@@ -922,7 +922,7 @@ int output_index(bam1_t *b1, bam1_t *b2, bam2fq_state_t *state,
         bc = (char *)bam_aux_get(b1, opts->barcode_tag);
     if (b2 && !bc)
         bc = (char *)bam_aux_get(b2, opts->barcode_tag);
-    if (!bc)
+    if (!bc || *bc != 'Z')
         return 0;
     else
         bc++; // skip Z
@@ -931,7 +931,7 @@ int output_index(bam1_t *b1, bam1_t *b2, bam2fq_state_t *state,
         qt = (char *)bam_aux_get(b1, opts->quality_tag);
     if (b2 && !qt)
         qt = (char *)bam_aux_get(b2, opts->quality_tag);
-    if (qt && strlen(bc) != strlen(qt)-1)
+    if (qt && (*qt != 'Z' || strlen(bc) != strlen(qt)-1))
         qt = NULL;
     else if (qt)
         qt++;

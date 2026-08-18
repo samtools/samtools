@@ -338,7 +338,7 @@ static int tv_push_aln(const bam1_t *b, tview_t *tv)
     if ( tv->rg_hash )
     {
         const uint8_t *rg = bam_aux_get(b, "RG");
-        if ( !rg ) return 0; // If we don't have an RG tag exclude read
+        if ( !rg || *rg != 'Z') return 0; // If we don't have an RG tag exclude read
         khiter_t k = kh_get(kh_rg, tv->rg_hash, (const char*)(rg + 1));
         if ( k == kh_end(tv->rg_hash) ) return 0; // if RG tag is not in list of allowed tags exclude read
     }

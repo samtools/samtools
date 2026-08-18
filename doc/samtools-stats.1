@@ -465,6 +465,8 @@ based on the tagged field
 (e.g., use
 .B --split RG
 to split into read groups).
+The tag data used must have string type (Z in SAM).
+Splitting on numeric tags is not currently supported.
 
 Categorised statistics are written to files named
 .RI < prefix >_< value >.bamstat,

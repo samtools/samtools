@@ -182,7 +182,7 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     }
     if (settings->rghash || settings->exclude_no_rg) {
         uint8_t *s = bam_aux_get(b, "RG");
-        if (s) {
+        if (s && *s == 'Z') {
             if (settings->rghash) {
                 khint_t k = kh_get(str, settings->rghash, (char*)(s + 1));
                 if ((k == kh_end(settings->rghash)) != settings->rghash_discard)
