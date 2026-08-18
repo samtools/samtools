@@ -179,7 +179,7 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     }
     if (settings->rghash) {
         uint8_t *s = bam_aux_get(b, "RG");
-        if (s) {
+        if (s && *s == 'Z') {
             khint_t k = kh_get(str, settings->rghash, (char*)(s + 1));
             if ((k == kh_end(settings->rghash)) != settings->rghash_discard)
                 return 1;

@@ -178,7 +178,7 @@ static int bam_fillmd1_core(const char *ref_name, bam1_t *b, char *ref,
                 goto aux_fail;
         } else {
             int is_diff = 0;
-            if (strlen((char*)old_md+1) == str.l) {
+            if (*old_md == 'Z' && strlen((char*)old_md+1) == str.l) {
                 for (i = 0; i < str.l; ++i)
                     if (toupper(old_md[i+1]) != toupper_c(str.s[i]))
                         break;
