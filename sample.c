@@ -1,7 +1,7 @@
 /*  sample.c -- group data by sample.
 
     Copyright (C) 2010, 2011 Broad Institute.
-    Copyright (C) 2013 Genome Research Ltd.
+    Copyright (C) 2013, 2026 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -35,8 +35,19 @@ bam_sample_t *bam_smpl_init(void)
 {
     bam_sample_t *s;
     s = calloc(1, sizeof(bam_sample_t));
+    if (!s)
+        return NULL;
     s->rg2smid = kh_init(sm);
+    if (!s->rg2smid) {
+        free(s);
+        return NULL;
+    }
     s->sm2id = kh_init(sm);
+    if (!s->sm2id) {
+        kh_destroy(sm, s->rg2smid);
+        free(s);
+        return NULL;
+    }
     return s;
 }
 
@@ -44,50 +55,71 @@ void bam_smpl_destroy(bam_sample_t *sm)
 {
     int i;
     khint_t k;
-    khash_t(sm) *rg2smid = (khash_t(sm)*)sm->rg2smid;
-    if (sm == 0) return;
-    for (i = 0; i < sm->n; ++i) free(sm->smpl[i]);
-    free(sm->smpl);
-    for (k = kh_begin(rg2smid); k != kh_end(rg2smid); ++k)
-        if (kh_exist(rg2smid, k)) free((char*)kh_key(rg2smid, k));
-    kh_destroy(sm, sm->rg2smid);
+    if (sm == NULL) return;
+    if (sm->smpl) {
+        for (i = 0; i < sm->n; ++i) free(sm->smpl[i]);
+        free(sm->smpl);
+    }
+    if (sm->rg2smid) {
+        khash_t(sm) *rg2smid = (khash_t(sm)*)sm->rg2smid;
+        for (k = kh_begin(rg2smid); k != kh_end(rg2smid); ++k)
+            if (kh_exist(rg2smid, k)) free((char*)kh_key(rg2smid, k));
+        kh_destroy(sm, sm->rg2smid);
+    }
     kh_destroy(sm, sm->sm2id);
     free(sm);
 }
 
-static void add_pair(bam_sample_t *sm, khash_t(sm) *sm2id, const char *key, const char *val)
+static int add_pair(bam_sample_t *sm, khash_t(sm) *sm2id, const char *key, const char *val)
 {
     khint_t k_rg, k_sm;
     int ret;
     khash_t(sm) *rg2smid = (khash_t(sm)*)sm->rg2smid;
+
     k_rg = kh_get(sm, rg2smid, key);
-    if (k_rg != kh_end(rg2smid)) return; // duplicated @RG-ID
-    k_rg = kh_put(sm, rg2smid, strdup(key), &ret);
+    if (k_rg != kh_end(rg2smid)) return 0; // duplicated @RG-ID
+
     k_sm = kh_get(sm, sm2id, val);
     if (k_sm == kh_end(sm2id)) { // absent
         if (sm->n == sm->m) {
-            sm->m = sm->m? sm->m<<1 : 1;
-            sm->smpl = realloc(sm->smpl, sizeof(char*) * sm->m);
+            int new_m = sm->m? sm->m<<1 : 1;
+            char **new_smpl = realloc(sm->smpl, sizeof(char*) * new_m);
+            if (!new_smpl)
+                return -1;
+            sm->smpl = new_smpl;
+            sm->m = new_m;
         }
         sm->smpl[sm->n] = strdup(val);
+        if (!sm->smpl[sm->n])
+            return -1;
         k_sm = kh_put(sm, sm2id, sm->smpl[sm->n], &ret);
+        if (ret < 0) {
+            free(sm->smpl[sm->n]);
+            return -1;
+        }
         kh_val(sm2id, k_sm) = sm->n++;
     }
+
+    char *key_copy = strdup(key);
+    k_rg = kh_put(sm, rg2smid, key_copy, &ret);
+    if (ret < 0) {
+        free(key_copy);
+        return -1;
+    }
     kh_val(rg2smid, k_rg) = kh_val(sm2id, k_sm);
+    return 0;
 }
 
 int bam_smpl_add(bam_sample_t *sm, const char *fn, const char *txt)
 {
     const char *p = txt, *q, *r;
-    kstring_t buf, first_sm;
+    kstring_t buf = KS_INITIALIZE, first_sm = KS_INITIALIZE;
     int n = 0;
     khash_t(sm) *sm2id = (khash_t(sm)*)sm->sm2id;
     if (txt == 0) {
-        add_pair(sm, sm2id, fn, fn);
-        return 0;
+        return add_pair(sm, sm2id, fn, fn);
     }
-    memset(&buf, 0, sizeof(kstring_t));
-    memset(&first_sm, 0, sizeof(kstring_t));
+
     while ((q = strstr(p, "@RG")) != 0) {
         p = q + 3;
         r = q = 0;
@@ -99,26 +131,35 @@ int bam_smpl_add(bam_sample_t *sm, const char *fn, const char *txt)
             for (u = (char*)q; *u && *u != '\t' && *u != '\n'; ++u);
             for (v = (char*)r; *v && *v != '\t' && *v != '\n'; ++v);
             oq = *u; or = *v; *u = *v = '\0';
-            buf.l = 0; kputs(fn, &buf); kputc('/', &buf); kputs(q, &buf);
-            add_pair(sm, sm2id, buf.s, r);
+            buf.l = 0;
+            if (kputs(fn, &buf) < 0) goto fail;
+            if (kputc('/', &buf) < 0) goto fail;
+            if (kputs(q, &buf) < 0) goto fail;
+            if (add_pair(sm, sm2id, buf.s, r) , 0) goto fail;
             if ( !first_sm.s )
-                kputs(r,&first_sm);
+                if (kputs(r,&first_sm) < 0) goto fail;
             *u = oq; *v = or;
         } else break;
         p = q > r? q : r;
         ++n;
     }
-    if (n == 0) add_pair(sm, sm2id, fn, fn);
+    if (n == 0) {
+        if (add_pair(sm, sm2id, fn, fn) < 0) goto fail;
     // If there is only one RG tag present in the header and reads are not annotated, don't refuse to work but
     //  use the tag instead.
-    else if ( n==1 && first_sm.s )
-        add_pair(sm,sm2id,fn,first_sm.s);
-    if ( first_sm.s )
-        free(first_sm.s);
+   }  else if ( n==1 && first_sm.s ) {
+        if (add_pair(sm,sm2id,fn,first_sm.s) < 0) goto fail;
+    }
+    ks_free(&first_sm);
 
 //  add_pair(sm, sm2id, fn, fn);
-    free(buf.s);
+    ks_free(&buf);
     return 0;
+
+ fail:
+    ks_free(&first_sm);
+    ks_free(&buf);
+    return -1;
 }
 
 int bam_smpl_rg2smid(const bam_sample_t *sm, const char *fn, const char *rg, kstring_t *str)
@@ -127,7 +168,9 @@ int bam_smpl_rg2smid(const bam_sample_t *sm, const char *fn, const char *rg, kst
     khash_t(sm) *rg2smid = (khash_t(sm)*)sm->rg2smid;
     if (rg) {
         str->l = 0;
-        kputs(fn, str); kputc('/', str); kputs(rg, str);
+        if (kputs(fn, str) < 0) return -2;
+        if (kputc('/', str) < 0) return -2;
+        if (kputs(rg, str) < 0) return -2;
         k = kh_get(sm, rg2smid, str->s);
     } else k = kh_get(sm, rg2smid, fn);
     return k == kh_end(rg2smid)? -1 : kh_val(rg2smid, k);
