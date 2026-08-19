@@ -61,7 +61,13 @@ static lib_aux_t *get_aux(khash_t(lib) *aux, const char *lib)
         int ret;
         char *p = strdup(lib);
         lib_aux_t *q;
+        if (!p)
+            return NULL;
         k = kh_put(lib, aux, p, &ret);
+        if (ret < 0) {
+            free(p);
+            return NULL;
+        }
         q = &kh_val(aux, k);
         q->left = kh_init(best);
         q->rght = kh_init(best);
@@ -81,6 +87,7 @@ static inline int sum_qual(const bam1_t *b)
 static inline elem_t *push_queue(queue_t *queue, const bam1_t *b, int endpos, int score)
 {
     elem_t *p = kl_pushp(q, queue);
+    if (!p) { perror(NULL); exit(EXIT_FAILURE); }
     p->discarded = 0;
     p->endpos = endpos; p->score = score;
     if (p->b == 0) p->b = bam_init1();
@@ -167,6 +174,8 @@ int bam_rmdupse_core(samFile *in, sam_hdr_t *hdr, samFile *out, int force_se)
             int ret;
             lib = bam_get_library(hdr, b);
             q = lib? get_aux(aux, lib) : get_aux(aux, "\t");
+            if (!q)
+                goto fail;
             ++q->n_checked;
             h = (c->flag&BAM_FREVERSE)? q->rght : q->left;
             key = (c->flag&BAM_FREVERSE)? endpos : c->pos;
@@ -185,7 +194,12 @@ int bam_rmdupse_core(samFile *in, sam_hdr_t *hdr, samFile *out, int force_se)
                         }
                     }
                 } // otherwise, discard the alignment
-            } else kh_val(h, k) = push_queue(queue, b, endpos, score);
+            } else if (ret > 0) {
+                kh_val(h, k) = push_queue(queue, b, endpos, score);
+            } else {
+                perror(NULL);
+                goto fail;
+            }
         }
     }
     if (r < -1) {

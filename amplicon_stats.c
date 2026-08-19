@@ -518,11 +518,13 @@ static int accumulate_stats(astats_args_t *args, amplicons_t *amps,
             free((void *)kh_key(stats->qend, k));
             kh_del(qname, stats->qend, k);
             //fprintf(stderr, "remove overlap %d to %d\n", (int)start, (int)mstart);
-        } else {
+        } else if (ret > 0) {
             if (!(kh_key(stats->qend, k) = strdup(bam_get_qname(b))))
                 return -1;
 
             kh_value(stats->qend, k) = start | (end << 32);
+        } else {
+            return -1;
         }
     }
     for (i = mstart; i < end && i < len; i++)
@@ -1737,11 +1739,15 @@ int main_ampliconstats(int argc, char **argv) {
         return usage(&oargs, stderr, EXIT_FAILURE);
 
     khash_t(bed_list_hash) *bed_hash = kh_init(bed_list_hash);
+    if (!bed_hash) {
+        print_error_errno("ampliconstats", "Couldn't allocate hash table");
+        return 1;
+    }
     if (load_bed_file_multi_ref(argv[optind], 1, 0, bed_hash, NULL, NULL)) {
         print_error_errno("ampliconstats",
                           "Could not read file \"%s\"", argv[optind]);
+        destroy_bed_hash(bed_hash);
         return 1;
-
     }
 
     khiter_t k, ref_count = 0;

@@ -147,6 +147,7 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
                 if (hts_resize(char **, num_refs + 1, &ref_list_sz, ref_list, 0) < 0) {
                     fprintf(stderr, "[amplicon] error: unable to allocate memory for ref name list.\n");
                     ret = 1;
+                    free(ref_name);
                     goto error;
                 }
                 (*ref_list)[num_refs++] = ref_name;

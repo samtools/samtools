@@ -297,7 +297,7 @@ static int populate_lookup_from_file(const char *subcmd, strhash_t lookup, char 
         char *d = strdup(buf);
         if (d != NULL) {
             kh_put(str, lookup, d, &ret);
-            if (ret == 0) free(d); /* Duplicate */
+            if (ret <= 0) free(d); /* Duplicate or not added */
         } else {
             ret = -1;
         }

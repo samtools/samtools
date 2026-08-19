@@ -92,18 +92,32 @@ static void clear_del_set(khash_t(name) *del_set)
     kh_clear(name, del_set);
 }
 
+static lib_aux_t *add_new_aux(khash_t(lib) *aux, const char *lib)
+{
+    char *p = strdup(lib);
+    khash_t(pos) *best_hash = kh_init(pos);
+    if (!p || !best_hash)
+        goto fail;
+    int ret;
+    khint_t k = kh_put(lib, aux, p, &ret);
+    if (ret < 0)
+        goto fail;
+    lib_aux_t *q = &kh_val(aux, k);
+    q->n_checked = q->n_removed = 0;
+    q->best_hash = best_hash;
+    return q;
+
+ fail:
+    free(p);
+    kh_destroy(pos, best_hash);
+    return NULL;
+}
+
 static lib_aux_t *get_aux(khash_t(lib) *aux, const char *lib)
 {
     khint_t k = kh_get(lib, aux, lib);
     if (k == kh_end(aux)) {
-        int ret;
-        char *p = strdup(lib);
-        lib_aux_t *q;
-        k = kh_put(lib, aux, p, &ret);
-        q = &kh_val(aux, k);
-        q->n_checked = q->n_removed = 0;
-        q->best_hash = kh_init(pos);
-        return q;
+        return add_new_aux(aux, lib);
     } else return &kh_val(aux, k);
 }
 
@@ -177,6 +191,8 @@ int bam_rmdup_core(samFile *in, sam_hdr_t *hdr, samFile *out)
             int ret;
             lib = bam_get_library(hdr, b);
             q = lib? get_aux(aux, lib) : get_aux(aux, "\t");
+            if (!q)
+                goto fail;
             ++q->n_checked;
             k = kh_put(pos, q->best_hash, key, &ret);
             if (ret < 0) goto fail;
