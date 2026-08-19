@@ -597,7 +597,10 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
             fprintf(stderr,"[%s] fail to read the header of %s\n", __func__, fn[i]);
             exit(EXIT_FAILURE);
         }
-        bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : sam_hdr_str(h_tmp));
+        if (bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : sam_hdr_str(h_tmp)) < 0) {
+            fprintf(stderr, "[%s] failed to add samples from \"%s\"\n", __func__, fn[i]);
+            exit(EXIT_FAILURE);
+        }
         if (conf->reg) {
             hts_idx_t *idx = NULL;
             // If index filename has not been specified, look in BAM folder
