@@ -1,7 +1,7 @@
 /*  phase.c -- phase subcommand.
 
     Copyright (C) 2011 Broad Institute.
-    Copyright (C) 2013-2016, 2019, 2024 Genome Research Ltd.
+    Copyright (C) 2013-2016, 2019, 2024, 2026 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -62,7 +62,7 @@ typedef struct {
     samFile* out[3];
     sam_hdr_t* out_hdr[3];
     // alignment queue
-    int n, m;
+    size_t n, m;
     bam1_t **b;
 } phaseg_t;
 
@@ -162,18 +162,22 @@ static int **count_all(int l, int vpos, nseq_t *hash)
 // phasing
 static int8_t *dynaprog(int l, int vpos, int **w)
 {
-    int *f[2], *curr, *prev, max, i;
-    int8_t **b, *h = 0;
+    int *f[2]= { NULL, NULL }, *curr, *prev, max, i;
+    int8_t **b = NULL, *h = NULL;
     uint32_t x, z = 1u<<(l-1), mask = (1u<<l) - 1;
     f[0] = calloc(z, sizeof(int));
     f[1] = calloc(z, sizeof(int));
     b = calloc(vpos, sizeof(int8_t*));
+    if (!f[0] || !f[1] || !b)
+        goto fail;
     prev = f[0]; curr = f[1];
     // fill the backtrack matrix
     for (i = 0; i < vpos; ++i) {
         int *wi = w[i], *tmp;
         int8_t *bi;
         bi = b[i] = calloc(z, 1);
+        if (!bi)
+            goto fail;
         /* In the following, x is the current state, which is the
          * lexicographically smaller local haplotype. xc is the complement of
          * x, or the larger local haplotype; y0 and y1 are the two predecessors
@@ -193,6 +197,8 @@ static int8_t *dynaprog(int l, int vpos, int **w)
         uint32_t max_x = 0;
         int which = 0;
         h = calloc(vpos, 1);
+        if (!h)
+            goto fail;
         for (x = 0, max = 0, max_x = 0; x < z; ++x)
             if (prev[x] > max) max = prev[x], max_x = x;
         for (i = vpos - 1, x = max_x; i >= 0; --i) {
@@ -205,16 +211,30 @@ static int8_t *dynaprog(int l, int vpos, int **w)
     for (i = 0; i < vpos; ++i) free(b[i]);
     free(f[0]); free(f[1]); free(b);
     return h;
+
+ fail:
+    print_error_errno("phase", "Dynamic programming failed");
+    free(f[0]);
+    free(f[1]);
+    if (b) {
+        for (i = 0; i < vpos; ++i) free(b[i]);
+        free(b);
+    }
+    free(h);
+    return NULL;
 }
 
 // phase each fragment
 static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
 {
     khint_t k;
-    uint64_t *pcnt;
-    uint32_t *left, *rght, max;
+    uint64_t *pcnt = NULL;
+    uint32_t *left = NULL, *rght = NULL, max;
     left = rght = 0; max = 0;
     pcnt = calloc(vpos, 8);
+    if (!pcnt)
+        goto fail;
+
     for (k = 0; k < kh_end(hash); ++k) {
         if (kh_exist(hash, k)) {
             int i, c[2];
@@ -237,8 +257,14 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
                 if (f->vlen > max) { // enlarge the array
                     max = f->vlen;
                     kroundup32(max);
-                    left = realloc(left, max * 4);
-                    rght = realloc(rght, max * 4);
+                    uint32_t *new_left = realloc(left, max * 4);
+                    if (!new_left)
+                        goto fail;
+                    left = new_left;
+                    uint32_t *new_rght = realloc(rght, max * 4);
+                    if (!new_rght)
+                        goto fail;
+                    rght = new_rght;
                 }
                 for (i = 0, sum[0] = sum[1] = 0; i < f->vlen; ++i) { // get left counts
                     if (f->seq[i]) {
@@ -297,12 +323,21 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
     }
     free(left); free(rght);
     return pcnt;
+
+ fail:
+    print_error_errno("phase", "Couldn't phase fragments");
+    free(left);
+    free(rght);
+    free(pcnt);
+    return NULL;
 }
 
 static uint64_t *genmask(int vpos, const uint64_t *pcnt, int *_n)
 {
-    int i, max = 0, max_i = -1, m = 0, n = 0, beg = 0, score = 0;
-    uint64_t *list = 0;
+    int i, max = 0, max_i = -1, m = 1, n = 0, beg = 0, score = 0;
+    uint64_t *list = malloc(sizeof(*list));
+    if (!list)
+        goto fail;
     for (i = 0; i < vpos; ++i) {
         uint64_t x = pcnt[i];
         int c[4], pre = score, s;
@@ -316,7 +351,10 @@ static uint64_t *genmask(int vpos, const uint64_t *pcnt, int *_n)
         if ((i == vpos - 1 || score == 0) && max >= MASK_THRES) {
             if (n == m) {
                 m = m? m<<1 : 4;
-                list = realloc(list, m * 8);
+                uint64_t *new_list = realloc(list, m * sizeof(*new_list));
+                if (!new_list)
+                    goto fail;
+                list = new_list;
             }
             list[n++] = (uint64_t)beg<<32 | max_i;
             i = max_i; // reset i to max_i
@@ -326,6 +364,11 @@ static uint64_t *genmask(int vpos, const uint64_t *pcnt, int *_n)
     }
     *_n = n;
     return list;
+
+ fail:
+    print_error_errno("phase", "Couldn't generate mask");
+    free(list);
+    return NULL;
 }
 
 // trim heading and tailing ambiguous bases; mark deleted and remove sequence
@@ -360,7 +403,8 @@ static int clean_seqs(int vpos, nseq_t *hash)
 
 static int dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 {
-    int i, is_flip, drop_ambi;
+    size_t i;
+    int is_flip, drop_ambi;
     drop_ambi = g->flag & FLAG_DROP_AMBI;
     is_flip = (drand48() < 0.5);
     for (i = 0; i < g->n; ++i) {
@@ -393,7 +437,8 @@ static int dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
         bam_destroy1(b);
         g->b[i] = 0;
     }
-    memmove(g->b, g->b + i, (g->n - i) * sizeof(void*));
+    if (i < g->n)
+        memmove(g->b, g->b + i, (g->n - i) * sizeof(*g->b));
     g->n -= i;
     return 0;
 }
@@ -402,9 +447,11 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 {
     int i, j, n_seqs = kh_size(hash), n_masked = 0, min_pos;
     khint_t k;
-    frag_t **seqs;
-    int8_t *path, *sitemask;
-    uint64_t *pcnt, *regmask;
+    frag_t **seqs = NULL;
+    int8_t *path = NULL, *sitemask = NULL;
+    uint64_t *pcnt = NULL, *regmask = NULL;
+    int **cnt = NULL;
+    uint64_t *mask = NULL;
 
     if (vpos == 0) return 0;
     i = clean_seqs(vpos, hash); // i is true if hash has an element with its vpos >= vpos
@@ -427,27 +474,40 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
         return 1;
     }
     { // phase
-        int **cnt;
-        uint64_t *mask;
         printf("PS\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
         sitemask = calloc(vpos, 1);
+        if (!sitemask)
+            goto fail;
         cnt = count_all(g->k, vpos, hash);
-        if (!cnt) return -1;
+        if (!cnt)
+            goto fail;
         path = dynaprog(g->k, vpos, cnt);
+        if (!path)
+            goto fail;
         for (i = 0; i < vpos; ++i) free(cnt[i]);
-        free(cnt);
+        free(cnt); cnt = NULL;
         pcnt = fragphase(vpos, path, hash, 0); // do not fix chimeras when masking
+        if (!pcnt)
+            goto fail;
         mask = genmask(vpos, pcnt, &n_masked);
-        regmask = calloc(n_masked, 8);
-        for (i = 0; i < n_masked; ++i) {
-            regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
-            for (j = mask[i]>>32; j <= (int32_t)mask[i]; ++j)
-                sitemask[j] = 1;
+        if (!mask)
+            goto fail;
+        if (n_masked > 0) {
+            regmask = calloc(n_masked, sizeof(*regmask));
+            if (!regmask)
+                goto fail;
+            for (i = 0; i < n_masked; ++i) {
+                regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
+                for (j = mask[i]>>32; j <= (int32_t)mask[i]; ++j)
+                    sitemask[j] = 1;
+            }
         }
-        free(mask);
+        free(mask); mask = NULL;
         if (g->flag & FLAG_FIX_CHIMERA) {
             free(pcnt);
             pcnt = fragphase(vpos, path, hash, 1);
+            if (!pcnt)
+                goto fail;
         }
     }
     for (i = 0; i < n_masked; ++i)
@@ -460,13 +520,19 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
         printf("M%d\t%s\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", sitemask[i]+1, chr, (int)(cns[0]>>32) + 1, (int)(cns[i]>>32) + 1, "ACGTX"[c[(uint8_t)path[i]]], "ACGTX"[c[(uint8_t)(1-path[i])]],
             i + g->vpos_shift + 1, (int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
     }
-    free(path); free(pcnt); free(regmask); free(sitemask);
+    free(path); path = NULL;
+    free(pcnt); pcnt = NULL;
+    free(regmask); regmask = NULL;
+    free(sitemask); sitemask = NULL;
     seqs = calloc(n_seqs, sizeof(frag_t*));
+    if (!seqs)
+        goto fail;
     for (k = 0, i = 0; k < kh_end(hash); ++k)
         if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos && !kh_val(hash, k).single)
             seqs[i++] = &kh_val(hash, k);
     n_seqs = i;
-    ks_introsort_rseq(n_seqs, seqs);
+    if (ks_introsort_rseq(n_seqs, seqs) < 0)
+        goto fail;
     for (i = 0; i < n_seqs; ++i) {
         frag_t *f = seqs[i];
         printf("EV\t0\t%s\t%d\t40\t%dM\t*\t0\t0\t", chr, f->vpos + 1 + g->vpos_shift, f->vlen);
@@ -477,12 +543,25 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
         }
         printf("\t*\tYP:i:%d\tYF:i:%d\tYI:i:%d\tYO:i:%d\tYS:i:%d\n", f->phase, f->flip, f->in, f->out, f->beg+1);
     }
-    free(seqs);
+    free(seqs); seqs = NULL;
     printf("//\n");
     fflush(stdout);
     g->vpos_shift += vpos;
     if (dump_aln(g, min_pos, hash) < 0) return -1;
     return vpos;
+
+ fail:
+    free(sitemask);
+    if (cnt) {
+        for (i = 0; i < vpos; ++i) free(cnt[i]);
+        free(cnt);
+    }
+    free(path);
+    free(pcnt);
+    free(mask);
+    free(regmask);
+    free(seqs);
+    return -1;
 }
 
 static void update_vpos(int vpos, nseq_t *hash)
@@ -513,10 +592,17 @@ static int readaln(void *data, bam1_t *b)
         if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
         if ( g->pre ) {
             if (g->n == g->m) {
-                g->m = g->m? g->m<<1 : 16;
-                g->b = realloc(g->b, g->m * sizeof(bam1_t*));
+                size_t new_m = g->m? g->m<<1 : 16;
+                bam1_t **new_b = realloc(g->b, new_m * sizeof(bam1_t*));
+                if (!new_b)
+                    return -2;
+                g->m = new_m;
+                g->b = new_b;
             }
-            g->b[g->n++] = bam_dup1(b);
+            g->b[g->n] = bam_dup1(b);
+            if (!g->b[g->n])
+                return -2;
+            g->n++;
         }
         break;
     }
@@ -526,10 +612,10 @@ static int readaln(void *data, bam1_t *b)
 static khash_t(set64) *loadpos(const char *fn, sam_hdr_t *h)
 {
     gzFile fp;
-    kstream_t *ks;
-    int ret, dret;
-    kstring_t *str;
-    khash_t(set64) *hash;
+    kstream_t *ks = NULL;
+    int ret, dret, r;
+    kstring_t *str = NULL;
+    khash_t(set64) *hash = NULL;
 
     fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
     if (fp == NULL) {
@@ -539,23 +625,44 @@ static khash_t(set64) *loadpos(const char *fn, sam_hdr_t *h)
 
     hash = kh_init(set64);
     str = calloc(1, sizeof(kstring_t));
-
     ks = ks_init(fp);
-    while (ks_getuntil(ks, 0, str, &dret) >= 0) {
+
+    if (!hash || !str || !ks)
+        goto fail;
+
+    while ((r = ks_getuntil(ks, 0, str, &dret)) >= 0) {
         int tid = bam_name2id(h, str->s);
         if (tid >= 0 && dret != '\n') {
-            if (ks_getuntil(ks, 0, str, &dret) >= 0) {
+            if ((r = ks_getuntil(ks, 0, str, &dret)) >= 0) {
                 uint64_t x = (uint64_t)tid<<32 | (atoi(str->s) - 1);
                 kh_put(set64, hash, x, &ret);
+                if (ret < 0)
+                    goto fail;
             } else break;
         }
         if (dret != '\n') while ((dret = ks_getc(ks)) > 0 && dret != '\n');
-        if (dret < 0) break;
+        if (dret < 0) { r = dret; break; }
     }
+    if (r < -1)
+        goto fail;
+
     ks_destroy(ks);
     gzclose(fp);
     free(str->s); free(str);
     return hash;
+
+ fail:
+    print_error_errno("phase", "Failed to read \"%s\"",
+                      strcmp(fn, "-") != 0 ? fn : "stdin");
+    ks_destroy(ks);
+    if (fp)
+        gzclose(fp);
+    if (str) {
+        free(str->s);
+        free(str);
+    }
+    kh_destroy(set64, hash);
+    return NULL;
 }
 
 static int gl2cns(float q[16])
@@ -575,7 +682,14 @@ static int gl2cns(float q[16])
 static int start_output(phaseg_t *g, int c, const char *middle, const htsFormat *fmt)
 {
     kstring_t s = { 0, 0, NULL };
-    ksprintf(&s, "%s.%s.%s", g->pre, middle, hts_format_file_extension(fmt));
+    g->out_name[c] = NULL;
+    g->out[c] = NULL;
+    g->out_hdr[c] = NULL;
+
+    if (ksprintf(&s, "%s.%s.%s", g->pre, middle, hts_format_file_extension(fmt)) < 0) {
+        print_error_errno("phase", "Failed to build output name");
+        return -1;
+    }
     g->out_name[c] = ks_release(&s);
     g->out[c] = sam_open_format(g->out_name[c], "wb", fmt);
     if (! g->out[c]) {
@@ -599,16 +713,16 @@ static int start_output(phaseg_t *g, int c, const char *middle, const htsFormat 
 int main_phase(int argc, char *argv[])
 {
     int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0, usage = 0;
-    int status = EXIT_SUCCESS;
-    const bam_pileup1_t *plp;
-    bam_plp_t iter;
-    nseq_t *seqs;
-    uint64_t *cns = 0;
+    int status = EXIT_FAILURE;
+    const bam_pileup1_t *plp = NULL;
+    bam_plp_t iter = NULL;
+    nseq_t *seqs = NULL;
+    uint64_t *cns = NULL;
     phaseg_t g;
-    char *fn_list = 0;
-    khash_t(set64) *set = 0;
-    errmod_t *em;
-    uint16_t *bases;
+    char *fn_list = NULL;
+    khash_t(set64) *set = NULL;
+    errmod_t *em = NULL;
+    uint16_t *bases = NULL;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -618,8 +732,6 @@ int main_phase(int argc, char *argv[])
         {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
-
-    // FIXME Leaks galore in the case of error returns
 
     memset(&g, 0, sizeof(phaseg_t));
     g.flag = FLAG_FIX_CHIMERA;
@@ -671,11 +783,11 @@ int main_phase(int argc, char *argv[])
     if (g.fp_hdr == NULL) {
         fprintf(stderr, "[%s] Failed to read header for '%s'\n",
                 __func__, argv[optind]);
-        return 1;
+        goto out;
     }
     if (!g.no_pg && !(g.arg_list = stringify_argv(argc+1, argv-1))) {
         print_error("phase", "failed to create arg_list");
-        return 1;
+        goto out;
     }
     if (fn_list) { // read the list of sites to phase
         set = loadpos(fn_list, g.fp_hdr);
@@ -692,10 +804,18 @@ int main_phase(int argc, char *argv[])
     }
 
     iter = bam_plp_init(readaln, &g);
+    if (!iter) {
+        print_error_errno("phase", "Couldn't allocate pileup structure");
+        goto out;
+    }
     g.vpos_shift = 0;
     seqs = kh_init(64);
     em = errmod_init(1. - 0.83);
     bases = calloc(g.max_depth, 2);
+    if (!seqs || !em || !bases) {
+        print_error_errno("phase", "Couldn't start");
+        goto out;
+    }
     printf("CC\n");
     printf("CC\tDescriptions:\nCC\n");
     printf("CC\t  CC      comments\n");
@@ -720,7 +840,7 @@ int main_phase(int argc, char *argv[])
                 seqs = shrink_hash(seqs);
                 if (phase(&g, sam_hdr_tid2name(g.fp_hdr, lasttid),
                           vpos, cns, seqs) < 0) {
-                    return 1;
+                    goto out;
                 }
                 update_vpos(0x7fffffff, seqs);
             }
@@ -754,7 +874,12 @@ int main_phase(int argc, char *argv[])
         // add the variant
         if (vpos == max_vpos) {
             max_vpos = max_vpos? max_vpos<<1 : 128;
-            cns = realloc(cns, max_vpos * 8);
+            uint64_t *new_cns = realloc(cns, max_vpos * 8);
+            if (!new_cns) {
+                print_error_errno("phase", "Couldn't grow consensus array");
+                goto out;
+            }
+            cns = new_cns;
         }
         cns[vpos] = (uint64_t)pos<<32 | c;
         for (i = 0; i < n; ++i) {
@@ -773,6 +898,10 @@ int main_phase(int argc, char *argv[])
             // write to seqs
             key = X31_hash_string(bam_get_qname(p->b));
             k = kh_put(64, seqs, key, &tmp);
+            if (tmp < 0) {
+                print_error_errno("phase", "Couldn't add hash table entry");
+                goto out;
+            }
             f = &kh_val(seqs, k);
             if (tmp == 0) { // present in the hash table
                 if (vpos - f->vpos + 1 < MAX_VARS) {
@@ -791,7 +920,7 @@ int main_phase(int argc, char *argv[])
         if (dophase) {
             seqs = shrink_hash(seqs);
             if (phase(&g, sam_hdr_tid2name(g.fp_hdr, tid), vpos, cns, seqs) < 0) {
-                return 1;
+                goto out;
             }
             update_vpos(vpos, seqs);
             cns[0] = cns[vpos];
@@ -801,18 +930,23 @@ int main_phase(int argc, char *argv[])
     }
     if (tid >= 0) {
         if (phase(&g, sam_hdr_tid2name(g.fp_hdr, tid), vpos, cns, seqs) < 0) {
-            return 1;
+            goto out;
         }
     }
 
     if (n < 0) {
         print_error("phase", "error reading from '%s'", argv[optind]);
-        status = EXIT_FAILURE;
+        goto out;
     }
 
+    status = EXIT_SUCCESS;
+
+ out:
     sam_hdr_destroy(g.fp_hdr);
-    bam_plp_destroy(iter);
-    sam_close(g.fp);
+    if (iter)
+        bam_plp_destroy(iter);
+    if (g.fp)
+        sam_close(g.fp);
     kh_destroy(64, seqs);
     kh_destroy(set64, set);
     free(cns);
@@ -821,7 +955,7 @@ int main_phase(int argc, char *argv[])
     if (g.pre) {
         int res = 0;
         for (c = 0; c <= 2; ++c) {
-            if (sam_close(g.out[c]) < 0) {
+            if (g.out[c] && sam_close(g.out[c]) < 0) {
                 fprintf(stderr, "[%s] error on closing '%s'\n",
                         __func__, g.out_name[c]);
                 res = 1;
@@ -829,8 +963,13 @@ int main_phase(int argc, char *argv[])
             sam_hdr_destroy(g.out_hdr[c]);
             free(g.out_name[c]);
         }
-        free(g.b);
-        if (res) return 1;
+        if (g.b) {
+            size_t idx;
+            for (idx = 0; idx < g.n; idx++)
+                bam_destroy1(g.b[idx]);
+            free(g.b);
+        }
+        if (res) status = EXIT_FAILURE;
     }
     free(g.arg_list);
     sam_global_args_free(&ga);
