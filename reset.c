@@ -77,7 +77,7 @@ static void usage(FILE *fp)
 /** @param config - pointer to conf_data
 returns nothing
 */
-void update_aux_conf(conf_data *config)
+int update_aux_conf(conf_data *config)
 {
     const char rg[] = "RG";
     const char *default_tags[] = {"AS", "CC", "CG", "CP", "H1", "H2", "HI", "H0", "IH",
@@ -86,11 +86,13 @@ void update_aux_conf(conf_data *config)
     int ret = 0, i = 0;
 
     if (!config)
-        return;
+        return 0;
 
     if (!config->aux_keep && !config->aux_remove) {
         //none of aux tag filter in use, create remove filter
         config->aux_remove = kh_init(aux_exists);
+        if (!config->aux_remove)
+            return -1;
     }
     if (config->aux_keep) {
         //keep set in use, remove RG if present
@@ -107,6 +109,8 @@ void update_aux_conf(conf_data *config)
             iter = kh_get(aux_exists, config->aux_remove, TAGNUM(rg));
             if (iter == kh_end(config->aux_remove)) {
                 kh_put(aux_exists, config->aux_remove, TAGNUM(rg), &ret);
+                if (ret < 0)
+                    return -1;
             }
         }
         //add the default tags if not present in remove set
@@ -115,9 +119,12 @@ void update_aux_conf(conf_data *config)
             iter = kh_get(aux_exists, config->aux_remove, TAGNUM(default_tags[i]));
             if (iter == kh_end(config->aux_remove)) {
                 kh_put(aux_exists, config->aux_remove, TAGNUM(default_tags[i]), &ret);
+                if (ret < 0)
+                    return -1;
             }
         }
     }
+    return 0;
 }
 
 /// removeauxtags - remove aux tags in bam data which are not present in acceptable tag set
@@ -575,7 +582,10 @@ int main_reset(int argc, char *argv[])
     }
 
     //update aux tag configuration
-    update_aux_conf(&resetconf);
+    if (update_aux_conf(&resetconf) < 0) {
+        fprintf(stderr, "Couldn't set up configuration\n");
+        goto exit;
+    }
     //set output file format based on name
     sam_open_mode(outmode + 1, outname, NULL);
 
