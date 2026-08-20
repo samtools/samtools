@@ -1025,7 +1025,8 @@ int main_samview(int argc, char *argv[])
 
             if (tmp_flag < 0) {
                 print_error("view", "Unknown flag '%s'", optarg);
-                return 1;
+                ret = 1;
+                goto view_end;
             }
 
             settings.flag_on |= tmp_flag;
@@ -1036,7 +1037,8 @@ int main_samview(int argc, char *argv[])
 
             if (tmp_flag < 0) {
                 print_error("view", "Unknown flag '%s'", optarg);
-                return 1;
+                ret = 1;
+                goto view_end;
             }
 
             settings.flag_off |= tmp_flag;
@@ -1047,7 +1049,8 @@ int main_samview(int argc, char *argv[])
 
             if (tmp_flag < 0) {
                 print_error("view", "Unknown flag '%s'", optarg);
-                return 1;
+                ret = 1;
+                goto view_end;
             }
 
             settings.flag_anyon |= tmp_flag;
@@ -1058,7 +1061,8 @@ int main_samview(int argc, char *argv[])
 
             if (tmp_flag < 0) {
                 print_error("view", "Unknown flag '%s'", optarg);
-                return 1;
+                ret = 1;
+                goto view_end;
             }
 
             settings.flag_alloff |= tmp_flag;
@@ -1221,7 +1225,8 @@ int main_samview(int argc, char *argv[])
         case 'e':
             if (!(settings.filter = hts_filter_init(optarg))) {
                 print_error("main_samview", "Couldn't initialise filter");
-                return 1;
+                ret = 1;
+                goto view_end;
             }
             settings.count_rf = INT_MAX; // no way to know what we need
             break;
@@ -1230,7 +1235,8 @@ int main_samview(int argc, char *argv[])
 
             if (tmp_flag < 0) {
                 print_error("view", "Unknown flag '%s'", optarg);
-                return 1;
+                ret = 1;
+                goto view_end;
             }
 
             settings.remove_flag |= tmp_flag;
@@ -1241,7 +1247,8 @@ int main_samview(int argc, char *argv[])
 
             if (tmp_flag < 0) {
                 print_error("view", "Unknown flag '%s'", optarg);
-                return 1;
+                ret = 1;
+                goto view_end;
             }
 
             settings.add_flag |= tmp_flag;
@@ -1277,7 +1284,8 @@ int main_samview(int argc, char *argv[])
     if (settings.is_count && settings.fetch_pairs)
     {
         print_error("view","The options -P and -c cannot be combined\n");
-        return 1;
+        ret = 1;
+        goto view_end;
     }
     if (settings.fn_fai == 0 && ga.reference) settings.fn_fai = fai_path(ga.reference);
     if (is_header_only) is_header = 1;
@@ -1465,7 +1473,8 @@ int main_samview(int argc, char *argv[])
         nregs = argc - optind - 1;
     } else if ( has_index_file && argc-optind < 2) {
         print_error("view", "Incorrect number of arguments for -X option. Aborting.");
-        return 1;
+        ret = 1;
+        goto view_end;
     }
     if (regs)
         settings.count_rf |= SAM_POS | SAM_RNAME | SAM_CIGAR;
@@ -1476,7 +1485,8 @@ int main_samview(int argc, char *argv[])
         if ( !settings.hts_idx )
         {
             print_error("view", "Random alignment retrieval only works for indexed SAM.gz, BAM or CRAM files.");
-            return 1;
+            ret = 1;
+            goto view_end;
         }
     }
 
