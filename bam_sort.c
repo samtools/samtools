@@ -554,6 +554,10 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
     int num_ids, i;
     const char *rec_type = is_rg ? "RG" : "PG";
     klist_t(hdrln) *hdr_lines;
+    kstring_t orig_id = { 0, 0, NULL };        // ID in original header
+    kstring_t transformed_id = { 0, 0, NULL }; // ID in output header
+    kstring_t new_hdr_line = { 0, 0, NULL };
+    char *empty = NULL;
 
     hdr_lines = kl_init(hdrln);
 
@@ -563,11 +567,11 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
         goto fail;
 
     for (i = 0; i < num_ids; i++) {
-        kstring_t orig_id = { 0, 0, NULL };        // ID in original header
-        kstring_t transformed_id = { 0, 0, NULL }; // ID in output header
         char *map_value;    // Value to store in id_map
         bool id_changed;    // Have we changed the ID?
         bool not_found_in_output; // ID isn't in the output header (yet)
+
+        orig_id.l = transformed_id.l = 0;
 
         if (sam_hdr_find_tag_pos(translate, rec_type, i, "ID", &orig_id) < 0)
             goto fail;
@@ -608,7 +612,8 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
         // Does this line need to go into our output header?
         if (not_found_in_output) {
             // Take matched line and replace ID with transformed_id
-            kstring_t new_hdr_line = { 0, 0, NULL };
+            new_hdr_line.l = 0;
+
             if (sam_hdr_find_line_id(translate, rec_type,
                                      "ID", ks_str(&orig_id), &new_hdr_line) < 0){
                 goto fail;
@@ -644,6 +649,8 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
 
             // append line to output linked list
             char** ln = kl_pushp(hdrln, hdr_lines);
+            if (!ln)
+                goto memfail;
             *ln = ks_release(&new_hdr_line);  // Give away to linked list
 
             // Need to add it to known_ids set
@@ -651,55 +658,72 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
             iter = kh_put(cset, known_ids, ks_str(&transformed_id), &in_there);
             if (in_there < 0) goto memfail;
             assert(in_there > 0);  // Should not already be in the map
-            map_value = ks_release(&transformed_id);
+            map_value = ks_release(&transformed_id); // Now owned by hash table
         } else {
             // Use existing string in id_map
             assert(kh_exist(known_ids, iter));
             map_value = kh_key(known_ids, iter);
-            free(ks_release(&transformed_id));
         }
 
         // Insert it into our translation map
         int in_there = 0;
-        iter = kh_put(c2c, id_map, ks_release(&orig_id), &in_there);
+        iter = kh_put(c2c, id_map, ks_str(&orig_id), &in_there);
+        if (in_there < 0)
+            goto memfail;
+        ks_release(&orig_id); // Now owned by hash table
         kh_value(id_map, iter) = map_value;
     }
 
     // If there are no RG lines in the file and we are overriding add one
     if (is_rg && override && hdr_lines->size == 0) {
-        kstring_t new_id = {0, 0, NULL};
-        kstring_t line = {0, 0, NULL};
-        kstring_t empty = {0, 0, NULL};
         int in_there = 0;
         char** ln;
 
         // Get the new ID
-        if (gen_unique_id(override, known_ids, false, &new_id))
+        transformed_id.l = 0;
+        if (gen_unique_id(override, known_ids, false, &transformed_id))
             goto memfail;
 
         // Make into a header line and add to linked list
-        ksprintf(&line, "@RG\tID:%s", ks_str(&new_id));
+        new_hdr_line.l = 0;
+        if (ksprintf(&new_hdr_line, "@RG\tID:%s", ks_str(&transformed_id)) < 0)
+            goto memfail;
         ln = kl_pushp(hdrln, hdr_lines);
-        *ln = ks_release(&line);
+        if (!ln)
+            goto memfail;
+        *ln = ks_release(&new_hdr_line);
 
         // Put into known_ids set
-        iter = kh_put(cset, known_ids, ks_str(&new_id), &in_there);
+        iter = kh_put(cset, known_ids, ks_str(&transformed_id), &in_there);
         if (in_there < 0) goto memfail;
         assert(in_there > 0);  // Should be a new entry
+        char *new_id = ks_release(&transformed_id); // Now owned by hash table
 
         // Put into translation map (key is empty string)
-        if (kputs("", &empty) == EOF) goto memfail;
-        iter = kh_put(c2c, id_map, ks_release(&empty), &in_there);
+        if ((empty = strdup("")) == NULL) goto memfail;
+        iter = kh_put(c2c, id_map, empty, &in_there);
         if (in_there < 0) goto memfail;
         assert(in_there > 0);  // Should be a new entry
-        kh_value(id_map, iter) = ks_release(&new_id);
+        empty = NULL; // Now owned by hash table
+        kh_value(id_map, iter) = new_id;
     }
+
+    // Ensure these are cleaned up.  In theory only orig_id should contain
+    // anything, and then only if the last ID was already in known_ids, but
+    // no harm in checking the others.
+    ks_free(&orig_id);
+    ks_free(&transformed_id);
+    ks_free(&new_hdr_line);
 
     return hdr_lines;
 
  memfail:
     perror(__func__);
  fail:
+    ks_free(&orig_id);
+    ks_free(&transformed_id);
+    ks_free(&new_hdr_line);
+    free(empty);
     if (hdr_lines) kl_destroy(hdrln, hdr_lines);
     return NULL;
 }
@@ -976,7 +1000,11 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
             if (tmp) {
                 int in_there = 0;
                 k = kh_put(c2c, tbl->rg_trans, tmp, &in_there);
-                if (in_there > 0) kh_value(tbl->rg_trans, k) = NULL;
+                if (in_there > 0) {
+                    kh_value(tbl->rg_trans, k) = NULL;
+                } else {
+                    free(tmp); // Was not added
+                }
             }
         }
     }
@@ -1006,7 +1034,11 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
             if (tmp) {
                 int in_there = 0;
                 k = kh_put(c2c, tbl->pg_trans, tmp, &in_there);
-                if (in_there > 0) kh_value(tbl->pg_trans, k) = NULL;
+                if (in_there > 0) {
+                    kh_value(tbl->pg_trans, k) = NULL;
+                } else {
+                    free(tmp); // Was not added
+                }
             }
         }
     }
@@ -2644,6 +2676,8 @@ static int build_minhash_index(char *fn, int kmer, int window, int no_squash) {
             hashf = minhash(b, kmer, window, &pos, &end, NULL, 1, 0,
                             no_squash);
             k = kh_put(kmer, kmer_h, hashf, &ret);
+            if (ret < 0)
+                goto err;
             kh_value(kmer_h, k) = tpos+pos + (((uint64_t)!ret)<<UNIQ_BIT);
             pos = MAX(last_pos+kmer, pos+1);
             //pos++;  Slower, but indexes a bit better?
