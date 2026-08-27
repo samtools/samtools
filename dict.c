@@ -199,14 +199,14 @@ int dict_main(int argc, char *argv[])
 {
     int retval = 1;
     args_t args = {
-        NULL, // output_fname
-        NULL, // alt_fname
-        NULL, // assembly
-        NULL, // species
-        NULL, // uri
-        0, // alias
-        1, // header
-        NULL // is_alt
+        .output_fname = NULL,
+        .alt_fname = NULL,
+        .assembly = NULL,
+        .species = NULL,
+        .uri = NULL,
+        .alias = 0,
+        .header = 1,
+        .is_alt = NULL
     };
 
     static const struct option loptions[] =
