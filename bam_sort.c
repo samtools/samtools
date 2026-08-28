@@ -969,7 +969,32 @@ static void free_merged_header(merged_header_t *merged_hdr) {
     free(merged_hdr);
 }
 
-static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
+static int warn_missing_tag(const char *tag_type, const char *tag_val,
+                            const char *qname, kh_c2c_t *trans_table) {
+    char *tmp = strdup(tag_val);
+    if (!tmp)
+        return -1;
+    fprintf(stderr,
+            "[bam_translate] %s tag \"%s\" on read \"%s\" encountered "
+            "with no corresponding entry in header, tag lost. "
+            "Unknown tags are only reported once per input file for "
+            "each tag ID.\n",
+            tag_type, tag_val, qname);
+    // Prevent future whinges
+    int in_there = 0;
+    khiter_t k = kh_put(c2c, trans_table, tmp, &in_there);
+    if (in_there > 0) {
+        kh_value(trans_table, k) = NULL;
+    } else {
+        free(tmp); // Was not added
+    }
+    if (in_there < 0)
+        return -1;
+    return 0;
+}
+
+
+static int bam_translate(bam1_t* b, trans_tbl_t* tbl)
 {
     // Update target id if not unmapped tid
     if ( b->core.tid >= 0 ) { b->core.tid = tbl->tid_trans[b->core.tid]; }
@@ -984,28 +1009,15 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
             char* translate_rg = kh_value(tbl->rg_trans,k);
             bam_aux_del(b, rg);
             if (translate_rg) {
-                bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1,
-                               (uint8_t*)translate_rg);
+                if (bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1,
+                                   (uint8_t*)translate_rg) < 0)
+                    goto fail;
             }
         } else if (decoded_rg) {
-            char *tmp = strdup(decoded_rg);
-            fprintf(stderr,
-                    "[bam_translate] RG tag \"%s\" on read \"%s\" encountered "
-                    "with no corresponding entry in header, tag lost. "
-                    "Unknown tags are only reported once per input file for "
-                    "each tag ID.\n",
-                    decoded_rg, bam_get_qname(b));
+            if (warn_missing_tag("RG", decoded_rg,
+                                 bam_get_qname(b), tbl->rg_trans) < 0)
+                goto fail;
             bam_aux_del(b, rg);
-            // Prevent future whinges
-            if (tmp) {
-                int in_there = 0;
-                k = kh_put(c2c, tbl->rg_trans, tmp, &in_there);
-                if (in_there > 0) {
-                    kh_value(tbl->rg_trans, k) = NULL;
-                } else {
-                    free(tmp); // Was not added
-                }
-            }
         }
     }
 
@@ -1018,30 +1030,22 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
             char* translate_pg = kh_value(tbl->pg_trans,k);
             bam_aux_del(b, pg);
             if (translate_pg) {
-                bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1,
-                               (uint8_t*)translate_pg);
+                if (bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1,
+                                   (uint8_t*)translate_pg) < 0)
+                    goto fail;
             }
         } else if (decoded_pg) {
-            char *tmp = strdup(decoded_pg);
-            fprintf(stderr,
-                    "[bam_translate] PG tag \"%s\" on read \"%s\" encountered "
-                    "with no corresponding entry in header, tag lost. "
-                    "Unknown tags are only reported once per input file for "
-                    "each tag ID.\n",
-                    decoded_pg, bam_get_qname(b));
+            if (warn_missing_tag("PG", decoded_pg,
+                                 bam_get_qname(b), tbl->pg_trans) < 0)
+                goto fail;
             bam_aux_del(b, pg);
-            // Prevent future whinges
-            if (tmp) {
-                int in_there = 0;
-                k = kh_put(c2c, tbl->pg_trans, tmp, &in_there);
-                if (in_there > 0) {
-                    kh_value(tbl->pg_trans, k) = NULL;
-                } else {
-                    free(tmp); // Was not added
-                }
-            }
         }
     }
+    return 0;
+
+ fail:
+    print_error_errno("merge", "Couldn't update RG/PG tags");
+    return -1;
 }
 
 int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
@@ -1429,7 +1433,8 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         if (!h->entry.bam_record) goto mem_fail;
         res = iter[i] ? sam_itr_next(fp[i], iter[i], h->entry.bam_record) : sam_read1(fp[i], hdr[i], h->entry.bam_record);
         if (res >= 0) {
-            bam_translate(h->entry.bam_record, translation_tbl + i);
+            if (bam_translate(h->entry.bam_record, translation_tbl + i) < 0)
+                goto fail;
             h->tid = h->entry.bam_record->core.tid;
             h->pos = (uint64_t)(h->entry.bam_record->core.pos + 1);
             h->rev = bam_is_rev(h->entry.bam_record);
@@ -1499,7 +1504,8 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             return -1;
         }
         if ((j = (iter[heap->i]? sam_itr_next(fp[heap->i], iter[heap->i], b) : sam_read1(fp[heap->i], hdr[heap->i], b))) >= 0) {
-            bam_translate(b, translation_tbl + heap->i);
+            if (bam_translate(b, translation_tbl + heap->i) < 0)
+                goto fail;
             heap->tid = b->core.tid;
             heap->pos = (uint64_t)(b->core.pos + 1);
             heap->rev = bam_is_rev(b);
