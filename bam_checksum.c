@@ -565,7 +565,7 @@ int checksum_report(char *fn, opts *o,
         return checksum_bamseqchksum(o, all, noRG, h);
 
     // headers
-    fprintf(o->fp, "# Checksum 1.0 for file:%s%s\n",
+    fprintf(o->fp, "# Checksum 2.0 for file:%s%s\n",
             o->tabs ? "\t" : " ", fn);
     fprintf(o->fp, "# Aux tags:%s%s\n",
             o->tabs ? "\t" : "          ", o->tag_str);
@@ -857,7 +857,7 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
         if (strncmp(line.s, "# Checksum", 10) == 0) {
             int major, minor;
             if (sscanf(line.s, "# Checksum %d.%d", &major, &minor) == 2) {
-                if (major != 1 || minor != 0) {
+                if (major != 2 || minor != 0) {
                     fprintf(stderr, "Unsupported checksum output version\n");
                     goto err;
                 }
