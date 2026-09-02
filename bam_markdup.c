@@ -1629,15 +1629,15 @@ static int populate_read_groups_hash(md_param_t *param, bam_hdr_t *header, hash_
         param->read_groups = 0;
         num_groups = 0;
     }
-    
+
     return num_groups;
 }
-   
 
-static int test_for_duplication(md_param_t *param, read_queue_t *in_read, 
+
+static int test_for_duplication(md_param_t *param, read_queue_t *in_read,
             hash_collection *hashes, stats_block_t *stats, warning_t *warnings) {
     khiter_t k;
-        
+
     // look at the pairs first
     if (has_mate(in_read->b)) {
         int ret, mate_tmp;
@@ -1877,6 +1877,10 @@ static int test_for_duplication(md_param_t *param, read_queue_t *in_read,
 }
 
 
+/* markdup uses a moving window along the length of the contig.  Once the window has moved past the
+   read (left hand pos plus length) and so passed the possibility of being a duplicate it gets
+   written out and removed from memory. */
+
 static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_file_t *temp,
         position_t *positions, klist_t(read_queue) *read_buffer,
         hash_collection *hashes, check_list_t *dup_list,
@@ -1884,7 +1888,7 @@ static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_fi
     khiter_t k;
     kliter_t(read_queue) *rq;
     read_queue_t *in_read;
-    
+
     rq = kl_begin(read_buffer);
     while (rq != kl_end(read_buffer)) {
         in_read = &kl_val(rq);
@@ -1937,18 +1941,20 @@ static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_fi
         bam_destroy1(in_read->b);
         rq = kl_begin(read_buffer);
     }
-    
+
     return 0;
 }
 
 
+/* this writes out any remaining reads once the end of the bam file has been reached. */
+
 static int write_out_end_of_list(md_param_t *param, bam_hdr_t *header, tmp_file_t *temp,
         klist_t(read_queue) *read_buffer, hash_collection *hashes, check_list_t *dup_list,
         stats_block_t *stat_array, warning_t *warnings) {
-        
+
     kliter_t(read_queue) *rq;
     read_queue_t *in_read;
-        
+
      // write out the end of the list
     rq = kl_begin(read_buffer);
     while (rq != kl_end(read_buffer)) {
@@ -1995,14 +2001,16 @@ static int write_out_end_of_list(md_param_t *param, bam_hdr_t *header, tmp_file_
         bam_destroy1(in_read->b);
         rq = kl_begin(read_buffer);
     }
-    
+
     return 0;
 }
 
+/* since supplememtary reads can appear before or after the primary reads we need to do a second pass to write
+   everything out in order. */
 
 static int write_everything_with_supplementary_reads(md_param_t *param, bam_hdr_t *header, tmp_file_t *temp,
         hash_collection *hashes, stats_block_t *stat_array) {
-        
+
     bam1_t *b;
     int ret;
     khiter_t k;
@@ -2054,12 +2062,12 @@ static int write_everything_with_supplementary_reads(md_param_t *param, bam_hdr_
                 uint8_t* data = bam_aux_get(b, "dc");
                 if(data) bam_aux_del(b, data);
             }
-            
+
             if (param->move_umi) {
                 if (move_umi_to_tag(param, b) < 0)
                     return 1;
             }
-            
+
             if (sam_write1(param->out, header, b) < 0) {
                 print_error("markdup", "error, writing final output failed.\n");
                 return 1;
@@ -2071,7 +2079,7 @@ static int write_everything_with_supplementary_reads(md_param_t *param, bam_hdr_
         print_error("markdup", "error, failed to read tmp file.\n");
         return 1;
     }
-    
+
     return 0;
 }
 
@@ -2194,13 +2202,13 @@ static int bam_mark_duplicates(md_param_t *param) {
     int exclude = 0;
     check_list_t dup_list = {NULL, 0, 0};
     hash_collection hashes;
-    
+
     hashes.pair_hash    = kh_init(reads);
     hashes.single_hash  = kh_init(reads);
     hashes.dup_hash     = kh_init(duplicates);
     hashes.rg_hash      = kh_init(read_groups);
 
-    
+
     if (!hashes.pair_hash || !hashes.single_hash || !read_buffer || !hashes.dup_hash || !hashes.rg_hash) {
         print_error("markdup", "error, unable to allocate memory to initialise structures.\n");
         goto fail;
@@ -2229,7 +2237,7 @@ static int bam_mark_duplicates(md_param_t *param) {
         print_error("markdup", "error writing header.\n");
         goto fail;
     }
-    
+
     if (param->write_index) {
         if (!(idx_fn = auto_index(param->out, param->out_fn, header)))
             goto fail;
