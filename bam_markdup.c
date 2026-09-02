@@ -2075,6 +2075,8 @@ static int write_everything_with_supplementary_reads(md_param_t *param, bam_hdr_
         }
     }
 
+    bam_destroy1(b);
+
     if (ret == -1) {
         print_error("markdup", "error, failed to read tmp file.\n");
         return 1;
