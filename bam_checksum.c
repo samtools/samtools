@@ -737,13 +737,13 @@ int checksum(sam_global_args *ga, opts *o, version_number *ver, char *fn) {
                 u32_to_le(b->core.mtid,  mate);
                 u64_to_le(b->core.mpos,  mate+4);
                 u64_to_le(b->core.isize, mate+12);
-                c.mate = hts_crc32(c.seq, mate, 20);
+                c.mate = hts_crc32(c.seq, mate, sizeof(mate));
             } else {
                 // this replicates the mistake in checksum v1.0
                 uint8_t mate[4+8+8];
                 u32_to_le(b->core.mtid,  mate);
                 u64_to_le(b->core.mpos,  mate+4);
-                c.mate = hts_crc32(c.seq, mate, 12);
+                c.mate = hts_crc32(c.seq, mate, 12); // mistake was here
             }
         }
 
