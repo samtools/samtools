@@ -1,0 +1,4 @@
+@HD	VN:1.6	SO:unsorted	GO:query
+@CO	Reverse with: samtools fastq -0 unpaired.fastq -i --index-format 'i*i*'
+READ001	4	*	0	0	*	*	0	0	ATCGATCGATCG	IIIIIIIIIIII	BC:Z:ACGT+TGCA
+READ002	4	*	0	0	*	*	0	0	GCTAGCTAGCTA	HHHHHHHHHHHH	BC:Z:ACGT+TGCA
