@@ -3457,6 +3457,10 @@ sub test_stats
     test_cmd($opts,out=>'stat/14.rg.grp3.expected',cmd=>"$$opts{bin}/samtools stats -I grp3 $$opts{path}/stat/11_target.bam | tail -n +4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/14.rg.Sample.expected',cmd=>"$$opts{bin}/samtools stats -I Sample $$opts{path}/stat/11_target.bam | tail -n +4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/15.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/mpileup/ce.fa $$opts{path}/stat/15.big_del.sam | tail -n +4", exp_fix=>$efix);
+    # coverage distribution: spliced alignment whose far block lies beyond the coverage buffer
+    test_cmd($opts,out=>'stat/20.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/20_spliced.sam | grep -e\"^COV\"", exp_fix=>$efix);
+    # coverage distribution: buffer reallocation (longer read) while coverage is pending
+    test_cmd($opts,out=>'stat/21.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/21_mixed_lengths.sam | grep -e\"^COV\"", exp_fix=>$efix);
 
     #reference statistics tests
     #with ref-stats, no ref file

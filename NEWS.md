@@ -15,6 +15,18 @@ New work and changes:
 * NEW.  `samtools rmdup` now adds a `@PG` line and accepts `--no-PG` to
   suppress it, matching the other subcommands.
 
+Bug fixes:
+
+* FIX.  The `samtools stats` coverage distribution (`COV` rows and the
+  `-t`/`-g` "percentage of target genome with coverage" line) was computed in
+  a fixed-size ring buffer of five times the read length, so an aligned block
+  starting further than that beyond the read start -- the far exon of a
+  spliced RNA-seq alignment -- was added to positions near the read start
+  instead.  The buffer now grows as needed.  Also fixed the copying of pending
+  coverage counts when the buffer is reallocated for a longer read, which
+  used byte lengths where element counts were required and could drop
+  pending counts on mixed-length or long-read data.
+
 Release 1.24 (9th July 2026)
 ----------------------------
 
