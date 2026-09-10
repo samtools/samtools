@@ -16,39 +16,17 @@ jobs:
         os:      ['alpine', 'archlinux', 'centos', 'rockylinux', 'opensuse']
         include:
           - os:          alpine
-            image:       alpine:3.23
+            image:       ghcr.io/samtools/alpine-for-htslib-ci:latest
           - os:          archlinux
-            image:       archlinux:base-devel
+            image:       ghcr.io/samtools/archlinux-for-htslib-ci:latest
           - os:          centos
-            image:       quay.io/centos/centos:10
+            image:       ghcr.io/samtools/centos-for-htslib-ci:latest
           - os:          rockylinux
-            image:       quay.io/rockylinux/rockylinux:10
+            image:       ghcr.io/samtools/rockylinux-for-htslib-ci:latest
           - os:          opensuse
-            image:       opensuse/tumbleweed
+            image:       ghcr.io/samtools/opensuse-for-htslib-ci:latest
 
     steps:
-      - name: Install dependencies
-        run: |
-          case ${{ matrix.os }} in
-          *alpine*)
-            apk update
-            apk add git autoconf automake make gcc musl-dev perl bash zlib-dev bzip2-dev xz-dev curl-dev openssl-dev ncurses-dev
-            ;;
-          *archlinux*)
-            pacman -Syyu --noconfirm
-            pacman -Sy --noconfirm base-devel git libdeflate
-            ;;
-          *centos*)
-            yum install -y autoconf automake make gcc perl-Data-Dumper zlib-devel bzip2 bzip2-devel xz-devel curl-devel openssl-devel git perl-FindBin ncurses-devel
-            ;;
-          *rockylinux*)
-            yum install -y autoconf automake make gcc perl-Data-Dumper zlib-devel bzip2 bzip2-devel xz-devel curl-devel openssl-devel git perl-FindBin diffutils ncurses-devel
-            ;;
-          *opensuse*)
-            zypper --non-interactive install --allow-downgrade --force-resolution git autoconf automake make gcc perl zlib-devel libbz2-devel xz-devel libcurl-devel libopenssl-devel diffutils llvm-clang ncurses-devel bzip2
-            ;;
-          esac
-
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
