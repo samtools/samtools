@@ -367,15 +367,50 @@ void round_buffer_flush(stats_t *stats, hts_pos_t pos)
     stats->cov_rbuf.pos   = new_pos;
 }
 
+// Grow the coverage round buffer so that it can hold the reference
+// positions [rbuf->pos, rbuf->pos + needed).  The pending counts are
+// linearised into the new buffer, so afterwards rbuf->start is 0 and
+// rbuf->buffer[i] holds position rbuf->pos + i.
+static void round_buffer_resize(round_buffer_t *rbuf, hts_pos_t needed)
+{
+    if ( needed <= rbuf->size )
+        return;
+    if ( needed > INT_MAX/2 )
+        error("The coverage buffer would need %"PRIhts_pos" entries\n", needed);
+
+    int new_size = rbuf->size > 0 ? rbuf->size : 1;
+    while ( new_size < needed )
+        new_size *= 2;
+
+    int *nbuf = calloc(new_size, sizeof(*nbuf));
+    if ( !nbuf )
+        error("Could not allocate coverage distribution buffer\n");
+
+    if ( rbuf->buffer )
+    {
+        int n = rbuf->size - rbuf->start;
+        memcpy(nbuf, rbuf->buffer + rbuf->start, n * sizeof(*nbuf));
+        if ( rbuf->start > 0 )
+            memcpy(nbuf + n, rbuf->buffer, rbuf->start * sizeof(*nbuf));
+        free(rbuf->buffer);
+    }
+    rbuf->buffer = nbuf;
+    rbuf->size   = new_size;
+    rbuf->start  = 0;
+}
+
 /**
  * [from, to) - 0 based half-open
  */
 static void round_buffer_insert_read(round_buffer_t *rbuf, hts_pos_t from, hts_pos_t to)
 {
-    if ( to-from > rbuf->size )
-        error("The read length too big (%"PRIhts_pos"), please increase the buffer length (currently %d)\n", to-from, rbuf->size);
     if ( from < rbuf->pos )
         error("The reads are not sorted (%"PRIhts_pos" comes after %"PRIhts_pos").\n", from, rbuf->pos);
+    // The buffer is indexed modulo its size relative to rbuf->pos, so a
+    // block ending beyond rbuf->pos + size (e.g. the far exon of a spliced
+    // alignment) would wrap around onto positions near the read start.
+    if ( to - rbuf->pos > rbuf->size )
+        round_buffer_resize(rbuf, to - rbuf->pos);
 
     int ifrom, ito, ibuf;
     ifrom = round_buffer_lidx2ridx(rbuf->start, rbuf->size, rbuf->pos, from);
@@ -763,19 +798,8 @@ void realloc_buffers(stats_t *stats, int seq_len)
 
     stats->nbases = n;
 
-    // Realloc the coverage distribution buffer
-    int *rbuffer = calloc(sizeof(int),seq_len*5);
-    if (!rbuffer) {
-        error("Could not allocate coverage distribution buffer");
-    }
-    n = stats->cov_rbuf.size-stats->cov_rbuf.start;
-    memcpy(rbuffer,stats->cov_rbuf.buffer+stats->cov_rbuf.start,n);
-    if ( stats->cov_rbuf.start>1 )
-        memcpy(rbuffer+n,stats->cov_rbuf.buffer,stats->cov_rbuf.start);
-    stats->cov_rbuf.start = 0;
-    free(stats->cov_rbuf.buffer);
-    stats->cov_rbuf.buffer = rbuffer;
-    stats->cov_rbuf.size = seq_len*5;
+    // Realloc the coverage distribution buffer, keeping the pending counts
+    round_buffer_resize(&stats->cov_rbuf, (hts_pos_t)seq_len*5);
 
     realloc_rseq_buffer(stats);
 }
