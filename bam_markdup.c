@@ -1911,6 +1911,12 @@ static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_fi
             if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
                 bam_aux_update_int(in_read->b, "dc", in_read->dc);
             }
+
+            if (param->move_umi) {
+                if (move_umi_to_tag(param, in_read->b) < 0)
+                    return 1;
+            }
+
             if (param->supp) {
                 if (tmp_file_write(temp, in_read->b)) {
                     print_error("markdup", "error, writing temp output failed.\n");
@@ -1972,6 +1978,7 @@ static int write_out_end_of_list(md_param_t *param, bam_hdr_t *header, tmp_file_
                 if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
                     bam_aux_update_int(in_read->b, "dc",  in_read->dc);
                 }
+
                 if (param->move_umi) {
                     if (move_umi_to_tag(param, in_read->b) < 0)
                         return 1;
@@ -1983,10 +1990,6 @@ static int write_out_end_of_list(md_param_t *param, bam_hdr_t *header, tmp_file_
                         return 1;
                     }
                 } else {
-                    if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
-                        bam_aux_update_int(in_read->b, "dc", in_read->dc);
-                    }
-
                     if (sam_write1(param->out, header, in_read->b) < 0) {
                         print_error("markdup", "error, writing output failed on final write.\n");
                         return 1;
@@ -2061,11 +2064,6 @@ static int write_everything_with_supplementary_reads(md_param_t *param, bam_hdr_
             if (param->dc && (b->core.flag & BAM_FDUP)) {
                 uint8_t* data = bam_aux_get(b, "dc");
                 if(data) bam_aux_del(b, data);
-            }
-
-            if (param->move_umi) {
-                if (move_umi_to_tag(param, b) < 0)
-                    return 1;
             }
 
             if (sam_write1(param->out, header, b) < 0) {
@@ -2229,6 +2227,7 @@ static int bam_mark_duplicates(md_param_t *param) {
         ks_free(&str);
         goto fail;
     }
+
     ks_free(&str);
 
     if (samtools_add_pg_line(header, param->arg_list, param->no_pg) != 0) {
