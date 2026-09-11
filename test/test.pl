@@ -4171,6 +4171,9 @@ sub test_checksum
     # merge b/w different type, with -B, works fine
     test_cmd($opts, out=>"checksum/chk1.8.expected", cmd=>"$$opts{bin}/samtools $chk -B -m $$opts{path}/checksum/chk1.1.expected $$opts{path}/checksum/chk1.4.expected");
 
+    # check the version 1 checksum still works
+    test_cmd($opts, out=>"checksum/chk2.5.expected", cmd=>"$$opts{bin}/samtools $chk -a -V $$opts{path}/checksum/chk2.cram | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+
 
 }
 
