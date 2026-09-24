@@ -1886,6 +1886,41 @@ static int test_for_duplication(md_param_t *param, read_queue_t *in_read,
 }
 
 
+static int write_single_read(md_param_t *param, bam_hdr_t *header, tmp_file_t *temp,
+                                read_queue_t *in_read, stats_block_t *stat_array) {
+
+
+    if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
+        bam_aux_update_int(in_read->b, "dc",  in_read->dc);
+    }
+
+    if (param->move_umi) {
+        if (move_umi_to_tag(param, in_read->b) < 0)
+            return 1;
+    }
+
+    if (param->supp) {
+        if (tmp_file_write(temp, in_read->b)) {
+            print_error("markdup", "error, writing temp output failed on final write.\n");
+            return 1;
+        }
+    } else {
+        if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
+            bam_aux_update_int(in_read->b, "dc", in_read->dc);
+        }
+
+        if (sam_write1(param->out, header, in_read->b) < 0) {
+            print_error("markdup", "error, writing output failed on final write.\n");
+            return 1;
+        }
+    }
+
+    stat_array[in_read->read_group].writing++;
+
+    return 0;
+}
+
+
 /* markdup uses a moving window along the length of the contig.  Once the window has moved past the
    read (left hand pos plus length) and so passed the possibility of being a duplicate it gets
    written out and removed from memory. */
@@ -1917,28 +1952,8 @@ static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_fi
         }
 
         if (!param->remove_dups || !(in_read->b->core.flag & BAM_FDUP)) {
-            if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
-                bam_aux_update_int(in_read->b, "dc", in_read->dc);
-            }
-
-            if (param->move_umi) {
-                if (move_umi_to_tag(param, in_read->b) < 0)
-                    return 1;
-            }
-
-            if (param->supp) {
-                if (tmp_file_write(temp, in_read->b)) {
-                    print_error("markdup", "error, writing temp output failed.\n");
-                    return 1;
-                }
-            } else {
-                if (sam_write1(param->out, header, in_read->b) < 0) {
-                    print_error("markdup", "error, writing output failed.\n");
-                    return 1;
-                }
-            }
-
-            stat_array[in_read->read_group].writing++;
+            if (write_single_read(param, header, temp, in_read, stat_array))
+                return 1;
         }
 
         // remove from hash
@@ -1984,28 +1999,8 @@ static int write_out_end_of_list(md_param_t *param, bam_hdr_t *header, tmp_file_
             }
 
             if (!param->remove_dups || !(in_read->b->core.flag & BAM_FDUP)) {
-                if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
-                    bam_aux_update_int(in_read->b, "dc",  in_read->dc);
-                }
-
-                if (param->move_umi) {
-                    if (move_umi_to_tag(param, in_read->b) < 0)
-                        return 1;
-                }
-
-                if (param->supp) {
-                    if (tmp_file_write(temp, in_read->b)) {
-                        print_error("markdup", "error, writing temp output failed on final write.\n");
-                        return 1;
-                    }
-                } else {
-                    if (sam_write1(param->out, header, in_read->b) < 0) {
-                        print_error("markdup", "error, writing output failed on final write.\n");
-                        return 1;
-                    }
-                }
-
-                stat_array[in_read->read_group].writing++;
+                if (write_single_read(param, header, temp, in_read, stat_array))
+                    return 1;
             }
         }
 
