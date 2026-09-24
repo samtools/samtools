@@ -975,10 +975,12 @@ rb l .
 CRAM input only; defaults to output filename.  Any sequences with
 auto-generated read names will use \fIstring\fR as the name prefix.
 .TP
-.BI multi_seq_per_slice= 0|1
-CRAM output only; defaults to 0 (off).  By default CRAM generates one
+.BI multi_seq_per_slice= -1|0|1
+CRAM output only; defaults to -1 (auto).  By default CRAM generates one
 container per reference sequence, except in the case of many small
-references (such as a fragmented assembly).
+references (such as a fragmented assembly).  Specifying 0 or 1 turns
+off the automatic selection and never / always permits multiple
+references per container.
 .TP
 .BI version= major.minor
 CRAM output only.  Specifies the CRAM version number.  Acceptable
@@ -994,10 +996,13 @@ multiple slices.  This is unlikely to have any significant impact
 unless the number of sequences per slice is reduced.  (Together these
 two options control the granularity of random access.)
 .TP
-.BI embed_ref= 0|1
+.BI embed_ref= 0|1|2
 CRAM output only; defaults to 0 (off).  If 1, this will store portions
 of the reference sequence in each slice, permitting decode without
-having requiring an external copy of the reference sequence.
+having requiring an external copy of the reference sequence.  If 2,
+this will create a consensus from the sequence (and MD:Z tag if
+present) and embed this instead of the external reference.  This is
+also automatically selected when the external reference is unavailable.
 .TP
 .BI no_ref= 0|1
 CRAM output only; defaults to 0 (off).  If 1, sequences will be stored
