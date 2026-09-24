@@ -1275,12 +1275,6 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
     int seq_len = bam_line->core.l_qseq;
     if ( !seq_len ) return;
 
-    if ( IS_DUP(bam_line) )
-    {
-        stats->total_len_dup += seq_len;
-        stats->nreads_dup++;
-    }
-
     uint32_t order = IS_PAIRED(bam_line) ? (IS_READ1(bam_line) ? READ_ORDER_FIRST : 0) + (IS_READ2(bam_line) ? READ_ORDER_LAST : 0) : READ_ORDER_FIRST;
 
     int read_len = unclipped_length(bam_line);
@@ -1302,6 +1296,14 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
     // These stats should only be calculated for the original reads ignoring supplementary artificial reads
     // otherwise we'll accidentally double count
     if ( IS_ORIGINAL(bam_line) ) {
+        // Count duplicates here as well, so that "reads duplicated" and
+        // "bases duplicated" refer to the same reads as "sequences" and
+        // "total length" (secondary and supplementary records excluded).
+        if ( IS_DUP(bam_line) )
+        {
+            stats->total_len_dup += seq_len;
+            stats->nreads_dup++;
+        }
         stats->read_lengths[read_len]++;
         if ( order == READ_ORDER_FIRST ) stats->read_lengths_1st[read_len]++;
         if ( order == READ_ORDER_LAST ) stats->read_lengths_2nd[read_len]++;

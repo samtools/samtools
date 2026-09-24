@@ -27,6 +27,13 @@ Bug fixes:
   used byte lengths where element counts were required and could drop
   pending counts on mixed-length or long-read data.
 
+* FIX.  `samtools stats` counted secondary and supplementary records in
+  `reads duplicated` and `bases duplicated`, while `sequences` and
+  `total length` exclude them, so a duplication rate formed from those lines
+  (as MultiQC does) was overstated once `markdup -S` or Picard MarkDuplicates
+  had flagged the supplementary records of duplicates.  Duplicates are now
+  counted for the same records as `sequences`.
+
 Release 1.24 (9th July 2026)
 ----------------------------
 

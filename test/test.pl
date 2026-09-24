@@ -3475,6 +3475,8 @@ sub test_stats
     test_cmd($opts,out=>'stat/20.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/20_spliced.sam | grep -e\"^COV\"", exp_fix=>$efix);
     # coverage distribution: buffer reallocation (longer read) while coverage is pending
     test_cmd($opts,out=>'stat/21.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/21_mixed_lengths.sam | grep -e\"^COV\"", exp_fix=>$efix);
+    # duplicate counts exclude secondary and supplementary records, like "sequences"
+    test_cmd($opts,out=>'stat/22.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/22_dup_supp.sam | grep -E -e\"^SN.(sequences|reads duplicated|supplementary alignments|total length|bases duplicated):\"", exp_fix=>$efix);
 
     #reference statistics tests
     #with ref-stats, no ref file
