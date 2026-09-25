@@ -99,7 +99,7 @@ static void sparse_set_f(isize_data_t data, int at, isize_insert_t field, uint64
             a->max = max(at, a->max);
         } else {
             fprintf(stderr, "%s\n", "Failed to allocate memory for isize_sparse_record_t");
-            exit(11);
+            exit(1);
         }
     } else {
         return;
