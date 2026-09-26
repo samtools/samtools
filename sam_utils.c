@@ -164,7 +164,7 @@ int parse_aux_list(auxhash_t *h, char *optarg, const char *msgheader)
     if (!*h)
         *h = kh_init(aux_exists);
 
-    while (strlen(optarg) >= 2) {
+    while (optarg[0] != '\0' && optarg[1] != '\0') {
         int x = optarg[0]<<8 | optarg[1];
         int ret = 0;
         kh_put(aux_exists, *h, x, &ret);
@@ -181,7 +181,7 @@ int parse_aux_list(auxhash_t *h, char *optarg, const char *msgheader)
             break;
     }
 
-    if (strlen(optarg) != 0) {
+    if (*optarg != '\0') {
         fprintf(stderr, "%s: Error parsing option, "
                 "auxiliary tags should be exactly two characters long.\n", msgheader ? msgheader : "");
         kh_destroy(aux_exists, *h);
