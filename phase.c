@@ -854,7 +854,8 @@ int main_phase(int argc, char *argv[])
             const bam_pileup1_t *p = plp + i;
             uint8_t *seq;
             int q, baseQ, b;
-            if (p->is_del || p->is_refskip) continue;
+            if (p->is_del || p->is_refskip || p->qpos >= p->b->core.l_qseq)
+                continue;
             baseQ = bam_get_qual(p->b)[p->qpos];
             if (baseQ < g.min_baseQ) continue;
             seq = bam_get_seq(p->b);
