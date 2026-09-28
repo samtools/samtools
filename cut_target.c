@@ -1,7 +1,7 @@
 /*  cut_target.c -- targetcut subcommand.
 
     Copyright (C) 2011 Broad Institute.
-    Copyright (C) 2012-2013, 2015, 2016, 2019 Genome Research Ltd.
+    Copyright (C) 2012-2013, 2015, 2016, 2019, 2026 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -56,20 +56,26 @@ typedef struct {
     errmod_t *em;
 } ct_t;
 
-static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
+static int gencns(uint16_t *cns_out, ct_t *g, int n, const bam_pileup1_t *plp)
 {
     int i, j, ret, tmp, k, sum[4], qual;
     float q[16];
     if (n > g->max_bases) { // enlarge g->bases
         g->max_bases = n;
         kroundup32(g->max_bases);
-        g->bases = realloc(g->bases, (size_t) g->max_bases * 2);
+        if ((size_t) g->max_bases > SIZE_MAX / sizeof(*g->bases))
+            return -1;
+        uint16_t *new_bases = realloc(g->bases, sizeof(*new_bases) * g->max_bases);
+        if (!new_bases)
+            return -1;
+        g->bases = new_bases;
     }
     for (i = k = 0; i < n; ++i) {
         const bam_pileup1_t *p = plp + i;
         uint8_t *seq;
         int q, baseQ, b;
-        if (p->is_refskip || p->is_del) continue;
+        if (p->is_refskip || p->is_del || p->qpos >= p->b->core.l_qseq)
+            continue;
         baseQ = bam_get_qual(p->b)[p->qpos];
         if (baseQ < g->min_baseQ) continue;
         seq = bam_get_seq(p->b);
@@ -80,7 +86,10 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
         if (q > 63) q = 63;
         g->bases[k++] = q<<5 | bam_is_rev(p->b)<<4 | b;
     }
-    if (k == 0) return 0;
+    if (k == 0) {
+        *cns_out = 0;
+        return 0;
+    }
     errmod_cal(g->em, k, 4, g->bases, q);
     for (i = 0; i < 4; ++i) sum[i] = (int)(q[i<<2|i] + .499) << 2 | i;
     for (i = 1; i < 4; ++i) // insertion sort
@@ -89,7 +98,8 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
     qual = (sum[1]>>2) - (sum[0]>>2);
     k = k < 256? k : 255;
     ret = (qual < 63? qual : 63) << 2 | (sum[0]&3);
-    return ret<<8|k;
+    *cns_out = ret<<8|k;
+    return 0;
 }
 
 static void process_cns(sam_hdr_t *h, int tid, hts_pos_t l, uint16_t *cns)
@@ -225,16 +235,40 @@ int main_cut_target(int argc, char *argv[])
         if (tid < 0) break;
         if (tid != lasttid) { // change of chromosome
             if (cns) process_cns(g.h, lasttid, l, cns);
-            if (max_l < sam_hdr_tid2len(g.h, tid)) {
-                max_l = sam_hdr_tid2len(g.h, tid);
-                kroundup32(max_l);
-                cns = realloc(cns, max_l * 2);
-            }
             l = sam_hdr_tid2len(g.h, tid);
-            memset(cns, 0, max_l * 2);
+            if (max_l < l) {
+                max_l = l;
+                kroundup32(max_l);
+                if ((size_t) max_l > SIZE_MAX / sizeof(*cns)) {
+                    print_error("targetcut", "out of memory");
+                    status = EXIT_FAILURE;
+                    goto out;
+                }
+                uint16_t *new_cns = realloc(cns, sizeof(*cns) * max_l);
+                if (!new_cns) {
+                    print_error("targetcut", "out of memory");
+                    status = EXIT_FAILURE;
+                    goto out;
+                }
+                cns = new_cns;
+            }
+            memset(cns, 0, max_l * sizeof(*cns));
             lasttid = tid;
         }
-        cns[pos] = gencns(&g, n, p);
+        if (pos < l) {
+            if (gencns(&cns[pos], &g, n, p) < 0) {
+                print_error("targetcut", "out of memory");
+                status = EXIT_FAILURE;
+                goto out;
+            }
+        } else {
+            print_error("targetcut",
+                        "alignments in \"%s\" extend beyond reference length "
+                        "in header",
+                        argv[optind]);
+            status = EXIT_FAILURE;
+            goto out;
+        }
     }
     process_cns(g.h, lasttid, l, cns);
 
@@ -242,7 +276,7 @@ int main_cut_target(int argc, char *argv[])
         print_error("targetcut", "error reading from \"%s\"", argv[optind]);
         status = EXIT_FAILURE;
     }
-
+ out:
     free(cns);
     sam_hdr_destroy(g.h);
     bam_plp_destroy(plp);
