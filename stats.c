@@ -50,7 +50,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <getopt.h>
 #include <errno.h>
 #include <assert.h>
-#include <zlib.h>   // for crc32
 #include <htslib/faidx.h>
 #include <htslib/sam.h>
 #include <htslib/hts.h>
@@ -809,16 +808,16 @@ void update_checksum(bam1_t *bam_line, stats_t *stats)
     uint8_t *name = (uint8_t*) bam_get_qname(bam_line);
     int len = 0;
     while ( name[len] ) len++;
-    stats->checksum.names +=  crc32(0L, name, len);
+    stats->checksum.names +=  hts_crc32(0L, name, len);
 
     int seq_len = bam_line->core.l_qseq;
     if ( !seq_len ) return;
 
     uint8_t *seq = bam_get_seq(bam_line);
-    stats->checksum.reads += crc32(0L, seq, (seq_len+1)/2);
+    stats->checksum.reads += hts_crc32(0L, seq, (seq_len+1)/2);
 
     uint8_t *qual = bam_get_qual(bam_line);
-    stats->checksum.quals += crc32(0L, qual, seq_len);
+    stats->checksum.quals += hts_crc32(0L, qual, seq_len);
 }
 
 // Collect statistics about the barcode tags specified by init_barcode_tags method
