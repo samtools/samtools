@@ -1584,7 +1584,13 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
         nisize += stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
     }
 
-    for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
+    // Pairs with isize 0 (TLEN unknown) are left out of the main-bulk
+    // cut-off, the average and the standard deviation, from the numerator and
+    // the denominator alike.  The IS rows below still list them.
+    uint64_t nisize_zero = stats->isize->inward(stats->isize->data, 0) + stats->isize->outward(stats->isize->data, 0) + stats->isize->other(stats->isize->data, 0);
+    nisize = nisize > nisize_zero ? nisize - nisize_zero : 0;
+    if (nisize_zero > 0) ibulk = 1;
+    for (isize=1; isize<stats->isize->nitems(stats->isize->data); isize++)
     {
         uint64_t num = stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
         if (num > 0) ibulk = isize + 1;
