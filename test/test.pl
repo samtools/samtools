@@ -3461,6 +3461,12 @@ sub test_stats
     test_cmd($opts,out=>'stat/20.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/20_spliced.sam | grep -e\"^COV\"", exp_fix=>$efix);
     # coverage distribution: buffer reallocation (longer read) while coverage is pending
     test_cmd($opts,out=>'stat/21.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/21_mixed_lengths.sam | grep -e\"^COV\"", exp_fix=>$efix);
+    # duplicate counts exclude secondary and supplementary records, like "sequences"
+    test_cmd($opts,out=>'stat/22.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/22_dup_supp.sam | grep -E -e\"^SN.(sequences|reads duplicated|supplementary alignments|total length|bases duplicated):\"", exp_fix=>$efix);
+    # insert size average and standard deviation leave out pairs with isize 0
+    test_cmd($opts,out=>'stat/23.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/23_isize_zero.sam | grep -E -e\"^SN.insert size (average|standard deviation):\"", exp_fix=>$efix);
+    # the -m main-bulk cut-off leaves out pairs with isize 0 as well
+    test_cmd($opts,out=>'stat/24.stats.expected',cmd=>"$$opts{bin}/samtools stats -m 0.65 $$opts{path}/stat/23_isize_zero.sam | grep -E -e\"^SN.insert size (average|standard deviation):\"", exp_fix=>$efix);
 
     #reference statistics tests
     #with ref-stats, no ref file
