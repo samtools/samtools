@@ -21,27 +21,17 @@ New work and changes:
   with matching major and minor version numbers, `VN` is unchanged in the usual
   case.  All subcommands now add their `@PG` line via a single shared helper.
   (PR #2350.  Thanks to Benjamin Demaille)
-  
+
 * In `mpileup`, added an ENDPOS field to --output-extra.  Combined with POS,
   this gives the left and right extents on the reference for this alignment,
   meaning we can observe how close to either end this pileup base is.
   (PR #2351, fixes #2343.  Requested by Devang Thakkar)
-  
+
 * Strip UR tags from header SQ lines in `samtools view`.
-  (PR #2357, fixes #2327.  Requested by Florian Plaza Oñate) <-- FIX ENCODING
+  (PR #2357, fixes #2327.  Requested by Florian Plaza OÃ±ate)
 
 * Make `samtools view` --unmap and --unoutput work together.
   (PR #2358, fixes #2356.  Requested by Eric Boyden)
-
-
-
-
-
-
-
-
-
-
 
 Documentation:
 
@@ -60,40 +50,40 @@ Bug fixes:
   used byte lengths where element counts were required and could drop
   pending counts on mixed-length or long-read data.
   (PR #2379, fixes #2378.  Thanks to Cynthia Krafft)
-  
+
 * Fix reuse-after-free in bam_plcmd ref cache.
   (PR #2364, fixes #2363.  Reported by James Smagala)
-  
+
 * Fix --mover-umi-to-tag in `samtools markdup`.
   (PR #2382, fixes #2380.  Reported by mrubio-chavarria)
-  
+
 * Relax the --barcode-name regex in `samtools markdup`.
   (PR #2387, fixes #2385.  Reported by fjvorhoelter)
-  
+
 * Make `phase` and `targetcut` work with records where seq is '*'.
   (PR #2393, fixes #2390.  Reported by babayaga)
-  
-Non user-visible changes and build improvements: 
-  
-* Add more CI targets (various linux releases and other operating systems). 
+
+Non user-visible changes and build improvements:
+
+* Add more CI targets (various Linux releases and other operating systems).
   (PR #2353)
-  
+
 * Add --norc --noprofile to bash invocations in test.pl.
   (PR #2362)
-  
+
 * Remove unnecessary strdup(optarg) calls in CLI parsing.
   (PR #2361)
-  
+
 * Check string aux tag types before accessing data.
   (PR #2366)
-  
+
 * Fix memory leaks when samtools view CLI bails.  Minimal impact but helps with
   enabling memory leak detection in fuzzing.
   (PR #2372)
-  
+
 * Various error checking and reporting changes.
   (PR #2370, PR #2368, PR #2374, PR #2371)
-  
+
 * Switch containers to ones built by samtools/c-maint.  The reduces the
   dependence on upstream repositories.
   (PR #2381)
