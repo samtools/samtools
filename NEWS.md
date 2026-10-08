@@ -3,29 +3,81 @@ Release a.b
 
 New work and changes:
 
+* CHANGE. `samtools checksum` reported version set to 2.0.  Checksum
+  calculations differed between samtools 1.24 and previous releases. In earlier
+  releases, the *--check-mate* option produced incorrect checksums. This was
+  fixed in v1.24 but made already existing checksums invalid.
+  Therefore, the fixed checksum is now designated Checksum 2.0 while the
+  previous one is left at Checksum 1.0 in order differentiate the versions.
+  **NB** Samtools version 1.24 produced corrected checksums but erroneously
+  labelled them as version 1.0.  If you used this release with the
+  *--check-mate* option then we advise recomputing or manually editing the
+  version numbers in the output files.
+  (PR #2365, fixes #2354.  Reported by Ruben Vorderman)
+
 * CHANGE.  When the HTSlib version in use cannot be deduced from the SAMtools
   version, the `@PG` `VN` field now records it too, for example
-  `VN:1.24.1 (with HTSlib 1.25)`.  As SAMtools and HTSlib are released together
-  with matching major and minor version numbers, `VN` is unchanged in the usual
-  case.  All subcommands now add their `@PG` line via a single shared helper.
+  `VN:1.24.1 (with HTSlib 1.25)`.
+  (PR #2350.  Thanks to Benjamin Demaille)
 
-* FIX.  `samtools reset` now records the version (`VN`) in its `@PG` line, as
-  every other subcommand does; previously it wrote only the command line.
+* In `mpileup`, added an ENDPOS field to --output-extra.  Combined with POS,
+  this gives the left and right extents on the reference for this alignment,
+  meaning we can observe how close to either end this pileup base is.
+  (PR #2351, fixes #2343.  Requested by Devang Thakkar)
 
-* NEW.  `samtools rmdup` now adds a `@PG` line and accepts `--no-PG` to
-  suppress it, matching the other subcommands.
+* Strip UR tags from header SQ lines in `samtools view`.
+  (PR #2357, fixes #2327.  Requested by Florian Plaza Oñate)
+
+* Make `samtools view` --unmap and --unoutput work together.
+  (PR #2358, fixes #2356.  Requested by Eric Boyden)
+
+Documentation:
+
+* Update values in embed_ref and multi_seq_per_slice options.
+  (PR #2386)
 
 Bug fixes:
 
-* FIX.  The `samtools stats` coverage distribution (`COV` rows and the
-  `-t`/`-g` "percentage of target genome with coverage" line) was computed in
-  a fixed-size ring buffer of five times the read length, so an aligned block
-  starting further than that beyond the read start -- the far exon of a
-  spliced RNA-seq alignment -- was added to positions near the read start
-  instead.  The buffer now grows as needed.  Also fixed the copying of pending
-  coverage counts when the buffer is reallocated for a longer read, which
-  used byte lengths where element counts were required and could drop
-  pending counts on mixed-length or long-read data.
+* FIX.  In `samtools stats` grow the coverage ring buffer instead of wrapping
+  around.
+  (PR #2379, fixes #2378.  Thanks to Cynthia Krafft)
+
+* Fix reuse-after-free in bam_plcmd ref cache.
+  (PR #2364, fixes #2363.  Reported by James Smagala)
+
+* Fix --move-umi-to-tag in `samtools markdup`.
+  (PR #2382, fixes #2380.  Reported by mrubio-chavarria)
+
+* Relax the --barcode-name regex in `samtools markdup`.
+  (PR #2387, fixes #2385.  Reported by fjvorhoelter)
+
+* Make `phase` and `targetcut` work with records where seq is '*'.
+  (PR #2393, fixes #2390.  Reported by babayaga)
+
+Non user-visible changes and build improvements:
+
+* Add more CI targets (various Linux releases and other operating systems).
+  (PR #2353)
+
+* Add --norc --noprofile to bash invocations in test.pl.
+  (PR #2362)
+
+* Remove unnecessary strdup(optarg) calls in CLI parsing.
+  (PR #2361)
+
+* Check string aux tag types before accessing data.
+  (PR #2366)
+
+* Fix memory leaks when samtools view CLI bails.  Minimal impact but helps with
+  enabling memory leak detection in fuzzing.
+  (PR #2372)
+
+* Various error checking and reporting changes.
+  (PR #2370, PR #2368, PR #2374, PR #2371)
+
+* Switch containers to ones built by samtools/c-maint.  The reduces the
+  dependence on upstream repositories.
+  (PR #2381)
 
 Release 1.24 (9th July 2026)
 ----------------------------
@@ -65,6 +117,10 @@ New work and changes:
   Takes mate information from the primary and adds it to the supplementary
   alignment.  Does not affect secondary alignments.
   (PR #2347.  Thanks to Nils Homer)
+
+* In `samtools sort` use cell barcode (if present) during template coordinate
+  sort.
+  (PR #2314.  Thanks to Clint Valentine)
 
 
 Bug fixes:
