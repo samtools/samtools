@@ -153,6 +153,7 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
     uint64_t read_num = 0;
     kstring_t idx_seq  = {0};
     kstring_t idx_qual = {0};
+    kstring_t line = {0};
 
     // Any additional arguments are assumed to be r1 r2, as a
     // short cut. We support reading index tags out of those too (eg
@@ -328,6 +329,11 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
         idx_seq.l = idx_qual.l = 0;
         for (i = 0; i < n; i++) {
             if ((res = sam_read1(fp_in[ids[i]], NULL, b)) < 0) {
+                // sam_read1 fails on empty input, so check for a clean EOF
+                if (res == -3 &&
+                    hts_get_format(fp_in[ids[i]])->format == empty_format &&
+                    hts_getline(fp_in[ids[i]], '\n', &line) == -1)
+                    res = -1;
                 if (res == -1) {
                     eof++;
                     continue;
@@ -450,6 +456,7 @@ err:
     }
     ks_free(&idx_seq);
     ks_free(&idx_qual);
+    ks_free(&line);
 
     return ret;
 }
