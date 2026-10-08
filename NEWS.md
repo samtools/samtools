@@ -17,9 +17,7 @@ New work and changes:
 
 * CHANGE.  When the HTSlib version in use cannot be deduced from the SAMtools
   version, the `@PG` `VN` field now records it too, for example
-  `VN:1.24.1 (with HTSlib 1.25)`.  As SAMtools and HTSlib are released together
-  with matching major and minor version numbers, `VN` is unchanged in the usual
-  case.  All subcommands now add their `@PG` line via a single shared helper.
+  `VN:1.24.1 (with HTSlib 1.25)`.
   (PR #2350.  Thanks to Benjamin Demaille)
 
 * In `mpileup`, added an ENDPOS field to --output-extra.  Combined with POS,
@@ -40,21 +38,14 @@ Documentation:
 
 Bug fixes:
 
-* FIX.  The `samtools stats` coverage distribution (`COV` rows and the
-  `-t`/`-g` "percentage of target genome with coverage" line) was computed in
-  a fixed-size ring buffer of five times the read length, so an aligned block
-  starting further than that beyond the read start -- the far exon of a
-  spliced RNA-seq alignment -- was added to positions near the read start
-  instead.  The buffer now grows as needed.  Also fixed the copying of pending
-  coverage counts when the buffer is reallocated for a longer read, which
-  used byte lengths where element counts were required and could drop
-  pending counts on mixed-length or long-read data.
+* FIX.  In `samtools stats` grow the coverage ring buffer instead of wrapping
+  around.
   (PR #2379, fixes #2378.  Thanks to Cynthia Krafft)
 
 * Fix reuse-after-free in bam_plcmd ref cache.
   (PR #2364, fixes #2363.  Reported by James Smagala)
 
-* Fix --mover-umi-to-tag in `samtools markdup`.
+* Fix --move-umi-to-tag in `samtools markdup`.
   (PR #2382, fixes #2380.  Reported by mrubio-chavarria)
 
 * Relax the --barcode-name regex in `samtools markdup`.
@@ -126,6 +117,10 @@ New work and changes:
   Takes mate information from the primary and adds it to the supplementary
   alignment.  Does not affect secondary alignments.
   (PR #2347.  Thanks to Nils Homer)
+
+* In `samtools sort` use cell barcode (if present) during template coordinate
+  sort.
+  (PR #2314.  Thanks to Clint Valentine)
 
 
 Bug fixes:
