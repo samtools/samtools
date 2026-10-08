@@ -1275,12 +1275,6 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
     int seq_len = bam_line->core.l_qseq;
     if ( !seq_len ) return;
 
-    if ( IS_DUP(bam_line) )
-    {
-        stats->total_len_dup += seq_len;
-        stats->nreads_dup++;
-    }
-
     uint32_t order = IS_PAIRED(bam_line) ? (IS_READ1(bam_line) ? READ_ORDER_FIRST : 0) + (IS_READ2(bam_line) ? READ_ORDER_LAST : 0) : READ_ORDER_FIRST;
 
     int read_len = unclipped_length(bam_line);
@@ -1302,6 +1296,14 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
     // These stats should only be calculated for the original reads ignoring supplementary artificial reads
     // otherwise we'll accidentally double count
     if ( IS_ORIGINAL(bam_line) ) {
+        // Count duplicates here as well, so that "reads duplicated" and
+        // "bases duplicated" refer to the same reads as "sequences" and
+        // "total length" (secondary and supplementary records excluded).
+        if ( IS_DUP(bam_line) )
+        {
+            stats->total_len_dup += seq_len;
+            stats->nreads_dup++;
+        }
         stats->read_lengths[read_len]++;
         if ( order == READ_ORDER_FIRST ) stats->read_lengths_1st[read_len]++;
         if ( order == READ_ORDER_LAST ) stats->read_lengths_2nd[read_len]++;
@@ -1582,7 +1584,13 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
         nisize += stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
     }
 
-    for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
+    // Pairs with isize 0 (TLEN unknown) are left out of the main-bulk
+    // cut-off, the average and the standard deviation, from the numerator and
+    // the denominator alike.  The IS rows below still list them.
+    uint64_t nisize_zero = stats->isize->inward(stats->isize->data, 0) + stats->isize->outward(stats->isize->data, 0) + stats->isize->other(stats->isize->data, 0);
+    nisize = nisize > nisize_zero ? nisize - nisize_zero : 0;
+    if (nisize_zero > 0) ibulk = 1;
+    for (isize=1; isize<stats->isize->nitems(stats->isize->data); isize++)
     {
         uint64_t num = stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
         if (num > 0) ibulk = isize + 1;
