@@ -635,6 +635,10 @@ int main_bamshuf(int argc, char *argv[])
         fprintf(stderr, "collate: -o and -O options cannot be used together.\n");
         return usage(stderr, n_files, reads_store);
     }
+    if (n_files < 1) {
+        fprintf(stderr, "collate: -n number of files must be greater than 0.\n");
+        return usage(stderr, n_files, reads_store);
+    }
     if (!prefix) {
         prefix = generate_prefix(output_file);
         pre_mem = 1;
