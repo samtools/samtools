@@ -1188,6 +1188,9 @@ static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *
         c->b = current->b;
         c->x = -1;
         c->y = -1;
+        c->beg = 0;
+        c->end = 0;
+        c->len = -1;
         c->opt = 0;
         c->score = 0;
         c->mate_score = 0;
@@ -1274,7 +1277,7 @@ static int chain_sort(const void *a, const void *b) {
 
     if ((ret = ac->len - bc->len))
         return ret;
-    else if ((ret = memcmp(bam_get_qname(ac->b) + ac->beg, bam_get_qname(bc->b) + bc->beg, ac->len)))
+    else if (ac->len > 0 && (ret = memcmp(bam_get_qname(ac->b) + ac->beg, bam_get_qname(bc->b) + bc->beg, ac->len)))
         return ret;
 
     return (ac->x - bc->x);
@@ -1298,8 +1301,14 @@ static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_has
         while (++end_name_match < list->length) {
             check_t *chk = &list->c[end_name_match];
 
-            if ((base->len == chk->len) && memcmp(base_name + base->beg, bam_get_qname(chk->b) + chk->beg, base->len) != 0)
+            if ((base->len != chk->len) || (base->len > 0 && memcmp(base_name + base->beg, bam_get_qname(chk->b) + chk->beg, base->len) != 0))
                 break;
+        }
+
+        // reads without coordinates are never optical duplicates
+        if (base->len < 0) {
+            curr = end_name_match;
+            continue;
         }
 
         while (curr < end_name_match) {
