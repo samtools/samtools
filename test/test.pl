@@ -3851,6 +3851,7 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/19_move_umi_to_tag.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG --barcode-name --move-umi-to-tag $$opts{path}/markdup/19_move_umi_to_tag.sam -");
     test_cmd($opts, out=>'markdup/20_move_umi_in_middle.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG --barcode-rgx ':([A-Z]{7}):' --umi-separator ':' --move-umi-to-tag $$opts{path}/markdup/20_move_umi_in_middle.sam -");
     test_cmd($opts, out=>'markdup/21_move_umi_custom_sep.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG --barcode-rgx '_([A-Z]{7})_' --umi-separator '_' --move-umi-to-tag $$opts{path}/markdup/21_move_umi_custom_sep.sam -");
+    test_cmd($opts, out=>'markdup/22_optical_prefix_length.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -d 2500 -t -O sam --no-PG $$opts{path}/markdup/22_optical_prefix_length.sam -");
 }
 
 sub test_bedcov
