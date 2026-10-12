@@ -558,7 +558,10 @@ int cram_cat(samFile * const firstfile, int nfn, char * const *fn,
                 }
                 int zero = 0;
                 //fprintf(stderr, "Transcode RG %d to %d\n", 0, new_rg);
-                cram_transcode_rg(in_c, out_c, c, 1, &zero, &new_rg);
+                if (cram_transcode_rg(in_c, out_c, c, 1, &zero, &new_rg) < 0) {
+                    print_error("cat", "Cannot change RG number\n");
+                    goto closefiles;
+                }
             } else {
                 int32_t num_slices;
 
@@ -614,7 +617,10 @@ int cram_cat(samFile * const firstfile, int nfn, char * const *fn,
 
                 if (filter) {
                     // Filter or skip
-                    cram_filter_container(in_c, out_c, c, &last_ref_id);
+                    if (cram_filter_container(in_c, out_c, c, &last_ref_id) < 0) {
+                        print_error("cat", "Couldn't filter container\n");
+                        goto closefiles;
+                    }
                 } else {
                     // Copy. Consider adding a cram_copy_container API instead.
 
