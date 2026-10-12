@@ -532,7 +532,14 @@ int cram_cat(samFile * const firstfile, int nfn, char * const *fn,
         off_t before_hdr = htell(cram_fd_get_fp(in_c));
 
         // Copy contains and blocks within them
-        while ((c = cram_read_container(in_c))) {
+        for (;;) {
+            c = cram_read_container(in_c);
+            if (!c) {
+                if (cram_eof(in_c))
+                    break; // Got to end of file
+                else
+                    goto closefiles; // cram_read_container() failed
+            }
             if (cram_container_is_empty(in_c)) {
                 cram_block *blk;
                 // Container compression header
