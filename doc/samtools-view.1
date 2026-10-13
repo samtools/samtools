@@ -609,6 +609,13 @@ Do not add a @PG line to the header of the output file.
 .B --remove-ur
 Remove all the UR tags from @SQ lines in the header.
 
+.TP
+.B --filter-sq
+Remove any SQ lines that are not present in either the specified BED
+file or regions listed on the command line.
+Note that mate references (the SAM RNEXT field) that are not in the
+requested set of regions will be set to "*".
+
 .SH EXAMPLES
 .IP o 2
 Import SAM to BAM when
