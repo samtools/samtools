@@ -57,6 +57,7 @@ Bug fixes:
 Non user-visible changes and build improvements:
 
 * Add more CI targets (various Linux releases and other operating systems).
+  Fixed warnings that occurred on some platforms.
   (PR #2353)
 
 * Add --norc --noprofile to bash invocations in test.pl.
@@ -73,7 +74,7 @@ Non user-visible changes and build improvements:
   (PR #2372)
 
 * Various error checking and reporting changes.
-  (PR #2370, PR #2368, PR #2374, PR #2371)
+  (PR #2368, PR #2369, PR #2370, PR #2371, PR #2373)
 
 * Switch containers to ones built by samtools/c-maint.  The reduces the
   dependence on upstream repositories.
