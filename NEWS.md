@@ -1,3 +1,44 @@
+Release a.b
+-----------
+
+* This release bundles HTSlib 1.24.1, which includes many important
+  bug fixes.  Please see htslib/NEWS for details.
+
+* Fix reuse-after-free in bam_plcmd ref cache.
+  (PR #2364, fixes #2363.  Reported by James Smagala.
+   https://github.com/samtools/samtools/security/advisories/GHSA-xj7m-w8mc-xvf2
+   https://github.com/samtools/samtools/security/advisories/GHSA-vh3p-9c59-j3hv)
+
+* Check string aux tag types before accessing data.
+  (PR #2366
+   https://github.com/samtools/samtools/security/advisories/GHSA-3j6q-r48h-wvm3)
+
+* Fix `samtools fixmates` `-M` and `-z cigar` options.  Fixing base
+  modifications failed on reads without base modifications tags.  Trimming
+  CIGAR strings to the length of the reference sequence failed on strings
+  containing 0M.
+  (PR #2407
+   https://github.com/samtools/samtools/security/advisories/GHSA-f423-v554-fwqr)
+
+* Make `phase` and `targetcut` work with records where seq is '*'.
+  (PR #2393, fixes #2390.  Reported by babayaga)
+
+* Fixed compiler warnings that occurred on some platforms.
+  (PR #2353)
+
+* Remove unnecessary `strdup(optarg)` calls in CLI parsing.
+  (PR #2361)
+
+* Fix memory leaks when samtools view CLI bails.  Minimal impact but helps with
+  enabling memory leak detection in fuzzing.
+  (PR #2372)
+
+* Fix `samtools calmd` when correcting MD tags that aren't aux type `Z`.
+  (PR #2408)
+
+* Various error checking and reporting changes.
+  (PR #2368, PR #2369, PR #2370, PR #2371, PR #2373)
+
 Release 1.24 (9th July 2026)
 ----------------------------
 
@@ -12,6 +53,9 @@ New work and changes:
   same file will work as expected.  The previous behaviour can be replicated by
   setting the seed to zero.
   (PR #2320, fixes #1201.  Thanks to Tim Fennell. Reported by Stathis)
+
+* Improve sanity checking on numeric command-line parameters.
+  (PR #2292.  Thanks to Stephen Tanner)
 
 * Add --move-umi-to-tag option to `samtools markdup` to extract UMI from QNAME
   and add to RX tag.
@@ -37,6 +81,9 @@ New work and changes:
   alignment.  Does not affect secondary alignments.
   (PR #2347.  Thanks to Nils Homer)
 
+* In `samtools sort` use cell barcode (if present) during template coordinate
+  sort.
+  (PR #2314.  Thanks to Clint Valentine)
 
 Bug fixes:
 
