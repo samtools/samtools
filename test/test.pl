@@ -3222,17 +3222,17 @@ sub test_import
 
     # Empty input gives a header-only file, but truncated input still fails
     test_cmd($opts, out=>'import/6-s.expected.sam',
-             cmd=>"$$opts{bin}/samtools import --no-PG -s test/import/6.empty.fq");
+             cmd=>"$$opts{bin}/samtools import --no-PG --allow-empty -s test/import/6.empty.fq");
     test_cmd($opts, out=>'import/6-s.expected.sam',
-             cmd=>"cat test/import/6.empty.fq | $$opts{bin}/samtools import --no-PG -s -");
+             cmd=>"cat test/import/6.empty.fq | $$opts{bin}/samtools import --no-PG --allow-empty -s -");
     test_cmd($opts, out=>'import/6-12.expected.sam',
-             cmd=>"$$opts{bin}/samtools import --no-PG -1 test/import/6.empty.fq -2 test/import/6.empty.fq");
+             cmd=>"$$opts{bin}/samtools import --no-PG --allow-empty -1 test/import/6.empty.fq -2 test/import/6.empty.fq");
     test_cmd($opts, out=>'import/6-RG.expected.sam',
-             cmd=>"$$opts{bin}/samtools import --no-PG -1 test/import/6.empty.fq -2 test/import/6.empty.fq -r ID:rgid");
+             cmd=>"$$opts{bin}/samtools import --no-PG --allow-empty -1 test/import/6.empty.fq -2 test/import/6.empty.fq -r ID:rgid");
     test_cmd($opts, out=>'import/6-RG.expected.sam',
-             cmd=>"$$opts{bin}/samtools import --no-PG -1 test/import/6.empty.fq -2 test/import/6.empty.fq -R rgid");
+             cmd=>"$$opts{bin}/samtools import --no-PG --allow-empty -1 test/import/6.empty.fq -2 test/import/6.empty.fq -R rgid");
     test_cmd($opts, out=>'dat/empty.expected', want_fail=>1,
-             cmd=>"$$opts{bin}/samtools import --no-PG -s test/import/6.truncated.fq.gz > /dev/null");
+             cmd=>"$$opts{bin}/samtools import --no-PG --allow-empty -s test/import/6.truncated.fq.gz > /dev/null");
 }
 
 sub test_bam2fq
