@@ -186,6 +186,12 @@ or \fB*\fR to indicate all tags should be copied to the output,
 otherwise it is a comma-separated list of tag types to include with
 all others being discarded.
 
+.TP 8
+.B -E, --allow-empty
+By default import rejects empty files.  This is a safe-guard against a
+common pipeline failure of \fBsome-command | samtools import -o out.bam\fR
+where some-command fails (accompanied by a lack of \fBset -o pipefail\fR
+in the shell). Empty inputs can be permitted by specifying \fB-E\fR.
 
 .SH EXAMPLES
 Convert a single-ended fastq file to an unmapped CRAM.  Both of these
