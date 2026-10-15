@@ -1905,10 +1905,6 @@ static int write_single_read(md_param_t *param, bam_hdr_t *header, tmp_file_t *t
             return 1;
         }
     } else {
-        if (param->dc && !(in_read->b->core.flag & BAM_FDUP)) {
-            bam_aux_update_int(in_read->b, "dc", in_read->dc);
-        }
-
         if (sam_write1(param->out, header, in_read->b) < 0) {
             print_error("markdup", "error, writing output failed on final write.\n");
             return 1;
