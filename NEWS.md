@@ -69,6 +69,16 @@ Bug fixes:
   distinguishes between failure and EOF.
   (PR #2403, fixes #2401.  Reported by Matthieu Muffato)
 
+* FIX. `samtools stats` counted secondary and supplementary records in
+  *reads duplicated* and *bases duplicated*, while *sequences* and
+  *total length* exclude them.  Non-primary duplicates are now not included
+  in the counts.  Also, `samtools stats` counted pairs with insert size 0
+  (TLEN unknown) in the denominator of *insert size average* and *insert size
+  standard deviation*, and in the mean but not in the sum of squares of the
+  standard deviation.  They are now left out of both statistics and of the `-m`
+  main-bulk cut-off.
+  (PR #2388.  Addresses a question in #696.  Thanks to Cindy Krafft)
+
 Non user-visible changes and build improvements:
 
 * Add more CI targets (various Linux releases and other operating systems).
@@ -94,19 +104,6 @@ Non user-visible changes and build improvements:
 * Switch containers to ones built by samtools/c-maint.  This reduces the
   dependence on upstream repositories.
   (PR #2381)
-
-* FIX.  `samtools stats` counted secondary and supplementary records in
-  `reads duplicated` and `bases duplicated`, while `sequences` and
-  `total length` exclude them, so a duplication rate formed from those lines
-  (as MultiQC does) was overstated once `markdup -S` or Picard MarkDuplicates
-  had flagged the supplementary records of duplicates.  Duplicates are now
-  counted for the same records as `sequences`.
-
-* FIX.  `samtools stats` counted pairs with insert size 0 (TLEN unknown) in
-  the denominator of `insert size average` and `insert size standard
-  deviation`, and in the mean but not in the sum of squares of the standard
-  deviation.  They are now left out of both statistics and of the `-m`
-  main-bulk cut-off.
 
 Release 1.24 (9th July 2026)
 ----------------------------
