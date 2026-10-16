@@ -31,6 +31,10 @@ New work and changes:
 * Make `samtools view` --unmap and --unoutput work together.
   (PR #2358, fixes #2356.  Requested by Eric Boyden)
 
+* Make `samtools import` accept empty FASTQ input.  This avoids halting a
+  pipeline when one file has no data.
+  (PR #2395.  Thanks to Clint Valentine)
+
 Documentation:
 
 * Update values in embed_ref and multi_seq_per_slice options.
@@ -54,6 +58,17 @@ Bug fixes:
 * Make `phase` and `targetcut` work with records where seq is '*'.
   (PR #2393, fixes #2390.  Reported by babayaga)
 
+* Check the number of temporary files is above 0 in `samtools collate`.
+  (PR #2394.  Thanks to Pierre Lindenbaum)
+
+* Fix optical duplicates being set in `markdup` even when read name prefixes
+  differ.
+  (PR #2400, fixes #2399.  Thanks to Kris Alavattam)
+
+* Fix `samtools cat` exit code when unable to use CRAM file.  cram_cat() now
+  distinguishes between failure and EOF.
+  (PR #2403, fixes #2401.  Reported by Matthieu Muffato)
+
 Non user-visible changes and build improvements:
 
 * Add more CI targets (various Linux releases and other operating systems).
@@ -76,7 +91,7 @@ Non user-visible changes and build improvements:
 * Various error checking and reporting changes.
   (PR #2368, PR #2369, PR #2370, PR #2371, PR #2373)
 
-* Switch containers to ones built by samtools/c-maint.  The reduces the
+* Switch containers to ones built by samtools/c-maint.  This reduces the
   dependence on upstream repositories.
   (PR #2381)
 
