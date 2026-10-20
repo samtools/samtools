@@ -1,7 +1,7 @@
 /*  bam_cat.c -- efficiently concatenates bam files.
 
     Copyright (C) 2008-2009, 2011-2013, 2015-2017, 2019, 2021,
-                  2023-2024 Genome Research Ltd.
+                  2023-2024, 2026 Genome Research Ltd.
     Modified SAMtools work copyright (C) 2010 Illumina, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

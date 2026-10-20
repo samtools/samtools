@@ -1,7 +1,7 @@
 /*  reset.c --  removes aligner updates and reference data from input sam /
                 bam / cram file and makes read data raw for new processing
 
-    Copyright (C) 2022 - 2024 Genome Research Ltd.
+    Copyright (C) 2022 - 2024, 2026 Genome Research Ltd.
 
     Author: Vasudeva Sarma <vasudeva.sarma@sanger.ac.uk>
 
