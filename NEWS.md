@@ -120,6 +120,9 @@ New work and changes:
   setting the seed to zero.
   (PR #2320, fixes #1201.  Thanks to Tim Fennell. Reported by Stathis)
 
+* Improve sanity checking on numeric command-line parameters.
+  (PR #2292.  Thanks to Stephen Tanner)
+
 * Add --move-umi-to-tag option to `samtools markdup` to extract UMI from QNAME
   and add to RX tag.
   (PR #2316, fixes #2181.  Thanks to Matthias De Smet)
