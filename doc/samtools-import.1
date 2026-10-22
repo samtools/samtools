@@ -103,6 +103,8 @@ the samtools fastq decode command.
 Import paired data from a pair of FILEs.  The BAM flag PAIRED will be
 set, but not PROPER_PAIR as it has not been aligned.  READ1 and READ2
 will be stored in their original, unmapped, orientation.
+The \fB-1\fR and \fB-2\fR options override the read number inferred
+from CASAVA identifiers (\fB-i\fR) or /1 /2 read name suffixes.
 
 .TP 8
 .BI --i1\  FILE ,\ --i2\ FILE
@@ -114,6 +116,8 @@ barcode (BC) and quality (QT) tags.
 .B -i
 Specifies that the Illumina CASAVA identifiers should be processed.
 This may set the READ1, READ2 and QCFAIL flags and add a barcode tag.
+Note that when \fB-1\fR or \fB-2\fR are used, the file designation
+overrides the CASAVA read number for setting READ1/READ2 flags.
 
 .TP
 .B "-U, --UMI "
