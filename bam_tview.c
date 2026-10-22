@@ -425,7 +425,7 @@ static void HTS_FORMAT(HTS_PRINTF_FMT, 1, 2) error(const char *format, ...)
         vfprintf(stderr, format, ap);
         va_end(ap);
     }
-    exit(-1);
+    exit(1);
 }
 
 enum dipsay_mode {display_ncurses,display_html,display_text};
