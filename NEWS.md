@@ -35,7 +35,7 @@ New work and changes:
   pipeline when one file has no data.
   (PR #2395.  Thanks to Clint Valentine)
 
-* `samtools stats` change to use hts_crc23() from zlib's crc32() to take
+* `samtools stats` changed to use hts_crc32() instead of zlib's crc32() to take
   advantage of libdeflate (if used).  Plus some minor fixes.
   (PR #2406, thanks to John Marshall)
 
