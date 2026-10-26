@@ -186,7 +186,8 @@ static int bam_fillmd1_core(const char *ref_name, bam1_t *b, char *ref,
             } else is_diff = 1;
             if (is_diff) {
                 if (!quiet_mode) {
-                    fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n", bam_get_qname(b), old_md+1, str.s);
+                    fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n",
+                            bam_get_qname(b),  *old_md == 'Z' ? (char *)old_md+1 : "?", str.s);
                 }
                 if (bam_aux_del(b, old_md) < 0) goto aux_fail;
                 if (bam_aux_append(b, "MD", 'Z', str.l + 1, (uint8_t*)str.s) < 0)
