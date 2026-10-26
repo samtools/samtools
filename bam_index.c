@@ -270,7 +270,7 @@ int bam_idxstats(int argc, char *argv[])
     header = sam_hdr_read(fp);
     if (header == NULL) {
         print_error("idxstats", "failed to read header for \"%s\"", argv[optind]);
-        return 1;
+        goto err;
     }
 
     if (hts_get_format(fp)->format != bam) {
@@ -280,7 +280,7 @@ int bam_idxstats(int argc, char *argv[])
 
         if (slow_idxstats(fp, header) < 0) {
             print_error("idxstats", "failed to process \"%s\"", argv[optind]);
-            return 1;
+            goto err;
         }
     } else {
         idx = sam_index_load2(fp, argv[optind], index_name);
@@ -307,4 +307,10 @@ int bam_idxstats(int argc, char *argv[])
     sam_hdr_destroy(header);
     sam_close(fp);
     return 0;
+
+ err:
+    if (header)
+        sam_hdr_destroy(header);
+    sam_close(fp);
+    return 1;
 }
