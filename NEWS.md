@@ -83,6 +83,12 @@ Bug fixes:
   main-bulk cut-off.
   (PR #2388.  Addresses a question in #696.  Thanks to Cindy Krafft)
 
+* Fix `samtools fixmates` `-M` and `-z cigar` options.  Fixing base
+  modifications failed on reads without base modifications tags.  Trimming
+  CIGAR strings to the length of the reference sequence failed on strings
+  containing 0M.
+  (PR #2407)
+
 Non user-visible changes and build improvements:
 
 * Add more CI targets (various Linux releases and other operating systems).
