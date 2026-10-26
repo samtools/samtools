@@ -747,7 +747,8 @@ void delete_mod_tags(bam1_t *b) {
         tag = next;
     }
 
-    b->l_data = (to-2) - b->data;
+    if (to)
+        b->l_data = (to-2) - b->data;
 }
 
 int validate_MM(bam1_t *b, hts_base_mod_state *state) {
