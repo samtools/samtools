@@ -89,6 +89,9 @@ Bug fixes:
   containing 0M.
   (PR #2407)
 
+* Fix `samtools calmd` when correcting MD tags that aren't aux type `Z`.
+  (PR #2408)
+
 Non user-visible changes and build improvements:
 
 * Add more CI targets (various Linux releases and other operating systems).
