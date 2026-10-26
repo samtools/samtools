@@ -315,7 +315,7 @@ static int bam_trim(bam1_t *b, hts_pos_t end) {
         oplen = bam_cigar_oplen(cigar[i]);
         if (op == BAM_CHARD_CLIP) {
             new_cigar[j++] = cigar[i];
-        } else {
+        } else if (j > 0) {
             new_cigar[j-1] =
                 bam_cigar_gen(bam_cigar_oplen(new_cigar[j-1]) + oplen,
                               BAM_CSOFT_CLIP);
