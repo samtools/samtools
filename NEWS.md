@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.25 (27th October 2026)
+--------------------------------
+
 New work and changes:
 
 * CHANGE. `samtools checksum` reported version set to 2.0.  Checksum
@@ -46,12 +49,24 @@ Documentation:
 
 Bug fixes:
 
-* FIX.  In `samtools stats` grow the coverage ring buffer instead of wrapping
-  around.
-  (PR #2379, fixes #2378.  Thanks to Cynthia Krafft)
-
 * Fix reuse-after-free in bam_plcmd ref cache.
-  (PR #2364, fixes #2363.  Reported by James Smagala)
+  (PR #2364, fixes #2363.  Reported by James Smagala.
+   https://github.com/samtools/samtools/security/advisories/GHSA-xj7m-w8mc-xvf2
+   https://github.com/samtools/samtools/security/advisories/GHSA-vh3p-9c59-j3hv)
+
+* Check string aux tag types before accessing data.
+  (PR #2366
+   https://github.com/samtools/samtools/security/advisories/GHSA-3j6q-r48h-wvm3)
+
+* Fix `samtools fixmates` `-M` and `-z cigar` options.  Fixing base
+  modifications failed on reads without base modifications tags.  Trimming
+  CIGAR strings to the length of the reference sequence failed on strings
+  containing 0M.
+  (PR #2407
+   https://github.com/samtools/samtools/security/advisories/GHSA-f423-v554-fwqr)
+
+* In `samtools stats` grow the coverage ring buffer instead of wrapping around.
+  (PR #2379, fixes #2378.  Thanks to Cynthia Krafft)
 
 * Fix --move-umi-to-tag in `samtools markdup`.
   (PR #2382, fixes #2380.  Reported by mrubio-chavarria)
@@ -83,12 +98,6 @@ Bug fixes:
   main-bulk cut-off.
   (PR #2388.  Addresses a question in #696.  Thanks to Cindy Krafft)
 
-* Fix `samtools fixmates` `-M` and `-z cigar` options.  Fixing base
-  modifications failed on reads without base modifications tags.  Trimming
-  CIGAR strings to the length of the reference sequence failed on strings
-  containing 0M.
-  (PR #2407)
-
 * Fix `samtools calmd` when correcting MD tags that aren't aux type `Z`.
   (PR #2408)
 
@@ -103,9 +112,6 @@ Non user-visible changes and build improvements:
 
 * Remove unnecessary strdup(optarg) calls in CLI parsing.
   (PR #2361)
-
-* Check string aux tag types before accessing data.
-  (PR #2366)
 
 * Fix memory leaks when samtools view CLI bails.  Minimal impact but helps with
   enabling memory leak detection in fuzzing.
