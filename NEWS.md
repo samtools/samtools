@@ -1,5 +1,5 @@
-Release a.b
------------
+Release 1.23.3 (27th October 2026)
+----------------------------------
 
 Note: Some updates from the 1.24 release were inadvertantly
 included in version 1.23.2.  These have been reverted.
