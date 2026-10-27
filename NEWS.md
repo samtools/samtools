@@ -1,5 +1,5 @@
-Release a.b
------------
+Release 1.22.4 (27th October 2026)
+----------------------------------
 
 * This release bundles HTSlib 1.22.4, which includes many important
   bug fixes.  Please see htslib/NEWS for details.
