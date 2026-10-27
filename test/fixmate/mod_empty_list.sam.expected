@@ -1,0 +1,4 @@
+@CO	Testing of base modification fixing for fixmate -M
+@SQ	SN:I	LN:999
+ok1	0	I	1	0	20M	*	0	0	AGCTCTCCAGAGTCGNACGC	XXXXXXXXXXXXXXXXXXXX	MM:Z:C+m;C+h,0,3;	co:Z:primary	ML:B:C,19,29	MN:i:20
+ok1	256	I	4	0	3H14M3H	*	0	0	TCTCCAGAGTCGNA	XXXXXXXXXXXXXX	co:Z:secondary-H	MM:Z:C+m;C+h,3;	ML:B:C,29	MN:i:14
