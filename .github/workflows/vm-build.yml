@@ -1,0 +1,200 @@
+name: VMs
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ----------
+  FreeBSD:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      #matrix:
+      #  arch:    ['x86_64', 'aarch64']
+
+    steps:
+      - name: Checkout
+        # This is actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          submodules: true
+          fetch-depth: 3
+
+      - name: Clone htslib
+        run: |
+          git config --global --add safe.directory `pwd`
+          mkdir -p hidden-htslib
+          .ci_helpers/clone ${GITHUB_REPOSITORY_OWNER} htslib hidden-htslib ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME} ${{ github.sha }}
+
+      - name: Setup VM
+        # This is vmactions/freebsd-vm@@v1.5.2
+        uses: vmactions/freebsd-vm@77ed28d336d03fe19a3f4f7266c1d2c4714dd79d
+        with:
+          #debug-on-error: true
+          #vnc-password: ${{ secrets.VNC_PASSWORD }}
+          #arch: ${{ matrix.arch }}
+          usesh: true
+          cpu: 4
+          cache-after-prepare: true
+          prepare: |
+            pkg update
+            pkg install -y autoconf automake bash curl bzip2 gmake libdeflate perl5
+
+      # Inside VM
+      - name: Build and install htslib
+        shell: freebsd {0}
+        run: |
+          htsdir="`realpath .`/installed-htslib"
+
+          cd hidden-htslib
+          autoreconf -i
+          ./configure --disable-ref-cache --prefix="$htsdir" --with-libdeflate --enable-werror --enable-plugins CFLAGS="-g -O3 -fsanitize=address,undefined -DHTS_ALLOW_UNALIGNED=0 -Wno-format-truncation -Wno-format-overflow" CPPFLAGS="-I/usr/local/include" LDFLAGS="-fsanitize=address,undefined -L/usr/local/lib -Wl,-R/usr/local/lib"
+          gmake -k -j 5 && gmake install
+
+      - name: Configure samtools
+        shell: freebsd {0}
+        run: |
+          htsdir="`realpath .`/installed-htslib"
+          autoreconf -i
+          ./configure --with-htslib=$htsdir --enable-werror CFLAGS="-g -O3 -fsanitize=address,undefined -DHTS_ALLOW_UNALIGNED=0 -Wno-format-truncation -Wno-format-overflow" CPPFLAGS="-I/usr/local/include" LDFLAGS="-fsanitize=address,undefined -L/usr/local/lib -Wl,-R/usr/local/lib -Wl,-rpath=${htsdir}/lib"
+
+      - name: Build
+        shell: freebsd {0}
+        run: |
+          gmake -k -j5
+
+      - name: Test
+        shell: freebsd {0}
+        run: |
+          htsdir="`realpath .`/installed-htslib"
+          gmake check BGZIP=$htsdir/bin/bgzip
+
+  # ----------
+  OpenBSD:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        # This is actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          submodules: true
+          fetch-depth: 3
+
+      - name: Clone htslib
+        run: |
+          git config --global --add safe.directory `pwd`
+          mkdir -p hidden-htslib
+          .ci_helpers/clone ${GITHUB_REPOSITORY_OWNER} htslib hidden-htslib ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME} ${{ github.sha }}
+
+      - name: Setup VM
+        # This is vmactions/openbsd-vm@v1.4.5
+        uses: vmactions/openbsd-vm@c941015845c0f0c429676840963dc63b226d4f69
+        with:
+          usesh: true
+          cpu: 4
+          cache-after-prepare: true
+          prepare: |
+            pkg_add autoconf-2.71p0 automake-1.18.1 bash bzip2 curl gmake libdeflate xz
+
+      # Inside VM
+      - name: Build and install htslib
+        shell: openbsd {0}
+        run: |
+          htsdir="`realpath .`/installed-htslib"
+          export AUTOCONF_VERSION=2.71
+          export AUTOMAKE_VERSION=1.18
+          cd hidden-htslib
+          autoreconf -i
+          ./configure --disable-ref-cache --prefix="$htsdir" --with-libdeflate --enable-werror --enable-plugins CPPFLAGS="-I/usr/local/include" LDFLAGS="-L/usr/local/lib -Wl,-R/usr/local/lib"
+          gmake -k -j 5 && gmake install
+
+      - name: Configure samtools
+        shell: openbsd {0}
+        run: |
+          htsdir="`realpath .`/installed-htslib"
+          export AUTOCONF_VERSION=2.71
+          export AUTOMAKE_VERSION=1.18
+          autoreconf -i
+          ./configure --with-htslib=$htsdir --enable-werror CPPFLAGS="-I/usr/local/include" LDFLAGS="-L/usr/local/lib -Wl,-R/usr/local/lib -Wl,-rpath=${htsdir}/lib"
+
+      - name: Build
+        shell: openbsd {0}
+        run: |
+          gmake -k -j5
+
+      - name: Test
+        shell: openbsd {0}
+        run: |
+          htsdir="`realpath .`/installed-htslib"
+          gmake check BGZIP=$htsdir/bin/bgzip
+
+
+  # ----------
+  Solaris:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        # This is actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          submodules: true
+          fetch-depth: 3
+
+      - name: Clone htslib
+        run: |
+          git config --global --add safe.directory `pwd`
+          mkdir -p hidden-htslib
+          .ci_helpers/clone ${GITHUB_REPOSITORY_OWNER} htslib hidden-htslib ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME} ${{ github.sha }}
+
+      - name: Setup VM
+        # This is vmactions/solaris-vm@v1.3.8
+        uses: vmactions/solaris-vm@315163f088b66e55bbcc45928bd224d4973b2312
+        with:
+          release: "11.4-clang-19"
+          usesh: true
+          cpu: 4
+          cache-after-prepare: true
+          prepare: |
+            pkg install autoconf automake bash curl bzip2
+
+      # Inside VM
+      - name: Build and install htslib
+        shell: solaris {0}
+        run: |
+          htsdir="`realpath .`/installed-htslib"
+
+          cd hidden-htslib
+          autoreconf -i
+          ./configure --disable-ref-cache --prefix="$htsdir" --enable-werror
+          gmake -k -j 5 && gmake install
+
+      - name: Configure samtools
+        shell: solaris {0}
+        run: |
+          htsdir="`realpath .`/installed-htslib"
+          autoreconf -i
+          with_htslib="--with-htslib=$htsdir"
+          ldflags="-Wl,-rpath=${htsdir}/lib"
+          ./configure --with-htslib=$htsdir --enable-werror LDFLAGS="-Wl,-rpath=${htsdir}/lib" CFLAGS="-g -O3"
+
+      - name: Build
+        shell: solaris {0}
+        run: |
+          gmake -k -j5
+
+      - name: Test
+        shell: solaris {0}
+        run: |
+          # We need more compliant versions of tr and grep.
+          PATH=/usr/xpg4/bin:$PATH
+          export PATH
+          htsdir="`realpath .`/installed-htslib"
+          gmake check BGZIP=$htsdir/bin/bgzip

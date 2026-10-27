@@ -1,6 +1,6 @@
 /*  sam_opts.c -- utilities to aid parsing common command line options.
 
-    Copyright (C) 2015, 2019 Genome Research Ltd.
+    Copyright (C) 2015, 2019, 2025-2026 Genome Research Ltd.
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
@@ -27,7 +27,44 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <stdbool.h>
 #include "sam_opts.h"
+#include "samtools.h"
+
+/*
+ * Parse an integer from a value passed on the command-line. Return true on
+ * success, false if the string was not a valid integer.
+*/
+bool parse_int_value(const char *optarg, int *value) {
+    char *endptr;
+    if (!optarg) return false;
+    errno = 0;
+    long result = strtol(optarg, &endptr, 10);
+    if (endptr == optarg) return false; // No integer was parsed
+    if (*endptr != '\0') return false; // Extra characters ("1hello")
+    if (errno) return false; // Out of long range, result not valid
+    if (result < INT_MIN || result > INT_MAX) return false; // result out of int range
+    *value = result;
+    return true;
+}
+
+/*
+ * Parse an long int from a value passed on the command-line. Return true on
+ * success, false if the string was not a valid long int.
+*/
+bool parse_long_value(const char *optarg, long *value, int base) {
+    char *endptr;
+    if (!optarg) return false;
+    errno = 0;
+    // Typically base is 10, or 0 to allow parsing strings like 0xff
+    long result = strtol(optarg, &endptr, base);
+    if (endptr == optarg) return false; // No integer was parsed
+    if (*endptr != '\0') return false; // Extra characters ("1hello")
+    if (errno) return false; // Out of long range, result not valid
+    *value = result;
+    return true;
+}
 
 /*
  * Processes a standard "global" samtools long option.
@@ -88,13 +125,21 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
             free(ref);
             break;
         } else if (strcmp(lopt->name, "threads") == 0) {
-            ga->nthreads = atoi(optarg);
+            if (!parse_int_value(optarg, &ga->nthreads))
+            {
+                fprintf(stderr, "Invalid threads value.\n");
+                return -1;
+            }
             break;
         } else if (strcmp(lopt->name, "write-index") == 0) {
             ga->write_index = 1;
             break;
         } else if (strcmp(lopt->name, "verbosity") == 0) {
-            hts_verbose = atoi(optarg);
+            if (!parse_int_value(optarg, &hts_verbose))
+            {
+                fprintf(stderr, "Invalid verbosity value.\n");
+                return -1;
+            }
             break;
         }
     }
@@ -182,6 +227,40 @@ void sam_global_args_init(sam_global_args *ga) {
         return;
 
     memset(ga, 0, sizeof(*ga));
+}
+
+/*
+ * Add the standard samtools @PG provenance line.  See samtools.h for details.
+ */
+int samtools_add_pg_line(sam_hdr_t *h, const char *arg_list, int no_pg) {
+    if (no_pg)
+        return 0;
+
+    const char *sam_ver = samtools_version(), *hts_ver = hts_version();
+    const char *version = sam_ver;
+    char version_buf[256];
+    int sam_maj, sam_min, hts_maj, hts_min;
+
+    // SAMtools and HTSlib are released together and have matching major and
+    // minor version numbers, so the HTSlib version can normally be deduced from
+    // the SAMtools one.  Only record it when it cannot be, i.e. when the major
+    // or minor numbers differ.
+    if (!(sscanf(sam_ver, "%d.%d", &sam_maj, &sam_min) == 2 &&
+          sscanf(hts_ver, "%d.%d", &hts_maj, &hts_min) == 2 &&
+          sam_maj == hts_maj && sam_min == hts_min)) {
+        snprintf(version_buf, sizeof(version_buf), "%s (with HTSlib %s)",
+                 sam_ver, hts_ver);
+        version = version_buf;
+    }
+
+    if (sam_hdr_add_pg(h, "samtools",
+                       "VN", version,
+                       arg_list ? "CL" : NULL,
+                       arg_list ? arg_list : NULL,
+                       NULL) == -1)
+        return -1;
+
+    return 0;
 }
 
 void sam_global_args_free(sam_global_args *ga) {

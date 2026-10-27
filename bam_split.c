@@ -1,6 +1,6 @@
 /*  bam_split.c -- split subcommand.
 
-    Copyright (C) 2013-2016,2018-2019,2023,2024-2025 Genome Research Ltd.
+    Copyright (C) 2013-2016,2018-2019,2023,2024-2026 Genome Research Ltd.
 
     Author: Martin Pollard <mp15@sanger.ac.uk>
 
@@ -376,7 +376,7 @@ static khiter_t prep_sam_file(parsed_opts_t *opts, state_t *state,
         print_error_errno("split", "Couldn't copy tag value");
         return kh_end(state->tag_val_hash);
     }
-    char *dirsep = strrchr(opts->merged_input_name, '/');
+    const char *dirsep = strrchr(opts->merged_input_name, '/');
     input_base_name = strdup(dirsep? dirsep+1 : opts->merged_input_name);
     if (!input_base_name) {
         print_error_errno("split", "Filename parsing failed");
@@ -401,11 +401,7 @@ static khiter_t prep_sam_file(parsed_opts_t *opts, state_t *state,
         print_error_errno("split", "Duplicating header for file \"%s\" failed", new_file_name);
         goto fail;
     }
-    if (!opts->no_pg && sam_hdr_add_pg(new_hdr, "samtools",
-                                       "VN", samtools_version(),
-                                       arg_list ? "CL": NULL,
-                                       arg_list ? arg_list : NULL,
-                                       NULL)) {
+    if (samtools_add_pg_line(new_hdr, arg_list, opts->no_pg)) {
         print_error_errno("split", "Adding PG line to file \"%s\" failed", new_file_name);
         goto fail;
     }
@@ -577,11 +573,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
             }
         } else {
             retval->unaccounted_header = sam_hdr_dup(retval->merged_input_header);
-            if (!opts->no_pg && sam_hdr_add_pg(retval->unaccounted_header, "samtools",
-                                               "VN", samtools_version(),
-                                               arg_list ? "CL": NULL,
-                                               arg_list ? arg_list : NULL,
-                                               NULL)) {
+            if (samtools_add_pg_line(retval->unaccounted_header, arg_list, opts->no_pg)) {
                 print_error("split", "Could not rewrite header for \"%s\"", opts->unaccounted_name);
                 cleanup_state(retval, false);
                 return NULL;
@@ -638,7 +630,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
         opts->max_split = retval->output_count;
 
     // Open output files for RGs
-    char* dirsep = strrchr(opts->merged_input_name, '/');
+    const char* dirsep = strrchr(opts->merged_input_name, '/');
     char* input_base_name = strdup(dirsep? dirsep+1 : opts->merged_input_name);
     if (!input_base_name) {
         print_error_errno("split", "Filename manipulation failed");
@@ -691,12 +683,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
         // Set and edit header
         retval->output_header[i] = sam_hdr_dup(retval->merged_input_header);
         if (sam_hdr_remove_except(retval->output_header[i], "RG", "ID", retval->tag_vals[i]) ||
-            (!opts->no_pg &&
-             sam_hdr_add_pg(retval->output_header[i], "samtools",
-                            "VN", samtools_version(),
-                            arg_list ? "CL": NULL,
-                            arg_list ? arg_list : NULL,
-                            NULL))) {
+            samtools_add_pg_line(retval->output_header[i], arg_list, opts->no_pg)) {
             print_error("split", "Could not rewrite header for \"%s\"", output_filename);
             cleanup_state(retval, false);
             free(input_base_name);
@@ -809,7 +796,7 @@ static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
         // not used, we don't open a file to preserve existing behaviour.
         if (val && state->output_count < opts->max_split &&
             (iter == kh_end(state->tag_val_hash) &&
-              /*explict tag or implicit RG with sorted by RG file*/
+              /*explicit tag or implicit RG with sorted by RG file*/
               (opts->tag || newRGfile) )) {
             // Need to open a new output file
             iter = prep_sam_file(opts, state, val, arg_list, is_rg);

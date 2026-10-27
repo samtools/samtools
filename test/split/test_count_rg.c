@@ -96,7 +96,7 @@ int main(int argc, char**argv)
     // check result
     check = fopen(tempfname, "r");
     if (result_1 && count == 1 && !strcmp(output[0], "fish")
-        && kgetline(&res, (kgets_func *)fgets, check) < 0
+        && kfgetline(&res, check) < 0
         && (feof(check) || res.l == 0)) {
         ++success;
     } else {

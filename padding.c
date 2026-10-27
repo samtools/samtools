@@ -1,7 +1,7 @@
 /*  padding.c -- depad subcommand.
 
     Copyright (C) 2011, 2012 Broad Institute.
-    Copyright (C) 2014-2016, 2019-2020 Genome Research Ltd.
+    Copyright (C) 2014-2016, 2019-2020, 2026 Genome Research Ltd.
     Portions copyright (C) 2012, 2013 Peter Cock, The James Hutton Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -465,7 +465,7 @@ int main_pad2unpad(int argc, char *argv[])
         case 'S': break;
         case 'C': hts_parse_format(&ga.out, "cram"); break;
         case 's': assert(compress_level == -1); hts_parse_format(&ga.out, "sam"); break;
-        case 'o': fn_out = strdup(optarg); break;
+        case 'o': fn_out = optarg; break;
         case 'u':
             compress_level = 0;
             if (ga.out.format == unknown_format)
@@ -543,11 +543,7 @@ int main_pad2unpad(int argc, char *argv[])
             goto depad_end;
             }
 
-        if (sam_hdr_add_pg(h_fix, "samtools",
-                           "VN", samtools_version(),
-                           arg_list ? "CL": NULL,
-                           arg_list ? arg_list : NULL,
-                           NULL)) {
+        if (samtools_add_pg_line(h_fix, arg_list, 0)) {
             fprintf(stderr, "[depad] failed to add PG line to header\n");
             ret = 1;
             goto depad_end;
@@ -587,7 +583,7 @@ depad_end:
         fprintf(stderr, "[depad] error on closing output file.\n");
         ret = 1;
     }
-    free(fn_fai); free(fn_out);
+    free(fn_fai);
     if (fn_out_idx)
         free(fn_out_idx);
     sam_global_args_free(&ga);

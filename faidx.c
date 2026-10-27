@@ -353,7 +353,7 @@ static int read_regions_from_file(faidx_t *faid, hFILE *in_file, output *out, co
     kstring_t line = {0, 0, NULL};
     int ret = EXIT_FAILURE;
 
-    while (line.l = 0, kgetline(&line, (kgets_func *)hgets, in_file) >= 0) {
+    while (line.l = 0, khgetline(&line, in_file) >= 0) {
         if ((ret = write_output(faid, out, line.s, ignore, length, rev, pos_strand_name, neg_strand_name, format)) == EXIT_FAILURE) {
             break;
         }

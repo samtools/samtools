@@ -211,7 +211,7 @@ int main(int argc, char *argv[])
     check = fopen(tempfname, "r");
     if ( result_1
         && check_test_1(hdr1)
-        && kgetline(&res, (kgets_func *)fgets, check) < 0
+        && kfgetline(&res, check) < 0
         && (feof(check) || res.l == 0)) {
         ++success;
     } else {
@@ -254,7 +254,7 @@ int main(int argc, char *argv[])
     check = fopen(tempfname, "r");
     if ( result_2
         && check_test_2(hdr2)
-        && kgetline(&res, (kgets_func *)fgets, check) < 0
+        && kfgetline(&res, check) < 0
         && (feof(check) || res.l == 0)) {
         ++success;
     } else {
@@ -296,7 +296,7 @@ int main(int argc, char *argv[])
     check = fopen(tempfname, "r");
     if ( result_3
         && check_test_3(hdr3)
-        && kgetline(&res, (kgets_func *)fgets, check) < 0
+        && kfgetline(&res, check) < 0
         && (feof(check) || res.l == 0)) {
         ++success;
     } else {

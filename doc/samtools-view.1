@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-view 1 "18 March 2026" "samtools-1.23.1" "Bioinformatics tools"
+.TH samtools-view 1 "27 October 2026" "samtools-1.25" "Bioinformatics tools"
 .SH NAME
 samtools view \- views and converts SAM/BAM/CRAM files
 .\"
-.\" Copyright (C) 2008-2011, 2013-2022, 2024-25 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2022, 2024, 2026-25 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -236,9 +236,12 @@ specified) are written to either the output file or this file, but never both.
 .TP
 .BR -p ", " --unmap
 Set the UNMAP flag on alignments that are not selected by the filter options.
-These alignments are then written to the normal output.  This is not compatible
-with
-.BR -U .
+These alignments are then written to the normal output.  When the
+\fB--unoutput\fR option is used, the alignments modified by \fB-p\fR are
+output to the unoutput file instead.  Note this combination does not necessarily
+mean all unmapped reads are written to the unoutput file, as some
+non-filtered alignments may have already been unmapped.  To achieve
+this, filter flags must contain a filter on MAPPED.
 .TP
 .BI "-t " FILE ", --fai-reference " FILE
 A tab-delimited
@@ -464,16 +467,28 @@ Output only a proportion of the input alignments, as specified by 0.0 \(<=
 This subsampling acts in the same way on all of the alignment records in
 the same template or read pair, so it never keeps a read but not its mate.
 .TP
-.BI "--subsample-seed " INT
+.BI "--subsample-seed " INT | auto
 Subsampling seed used to influence
 .I which
 subset of reads is kept.
 .\" Reads are retained based on a score computed by hashing their QNAME
 .\" field and the seed value.
-When subsampling data that has previously been subsampled, be sure to use
-a different seed value from those used previously; otherwise more reads
-will be retained than expected.
-[0]
+If the value is the literal string
+.BR auto ,
+the seed is derived from a hash of the input file's header text.  Because
+each subsampling run appends an
+.B @CO
+header line recording the fraction and seed used (and, unless
+.B --no-PG
+is given, a
+.B @PG
+line as well), re-subsampling a file in \fBauto\fR mode will automatically
+produce a different seed at each step, ensuring the expected fraction of
+reads is retained.
+When subsampling data that has previously been subsampled using an explicit
+seed, be sure to use a different seed value from those used previously;
+otherwise more reads will be retained than expected.
+[auto]
 .TP
 .BI "-s " FLOAT
 Subsampling shorthand option:
@@ -481,6 +496,9 @@ Subsampling shorthand option:
 is equivalent to
 .BI "--subsample-seed " INT " --subsample"
 .RI 0. FRAC .
+.I INT
+may also be the literal string
+.BR auto .
 .TP
 .BI "-@ " INT ", --threads " INT
 Number of BAM compression threads to use in addition to main thread [0].
@@ -587,6 +605,9 @@ Combine with \fBall,cigarx\fR to perform the "=" and "X" replacement too.
 .TP
 .B --no-PG
 Do not add a @PG line to the header of the output file.
+.TP
+.B --remove-ur
+Remove all the UR tags from @SQ lines in the header.
 
 .SH EXAMPLES
 .IP o 2

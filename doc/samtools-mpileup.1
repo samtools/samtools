@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-mpileup 1 "18 March 2026" "samtools-1.23.1" "Bioinformatics tools"
+.TH samtools-mpileup 1 "27 October 2026" "samtools-1.25" "Bioinformatics tools"
 .SH NAME
 samtools mpileup \- produces "pileup" textual format from an alignment
 .\"
@@ -171,7 +171,9 @@ The fields selected appear in the same order as in SAM:
 .BR PNEXT ,
 followed by
 .BR RLEN
-for unclipped read length.
+for unclipped read length, and
+.BR ENDPOS
+for the last reference base covered by the alignment.
 .IP \(ci 2
 Comma-separated 1-based positions within the alignments, in 5' to 3'
 orientation.  E.g., 5 indicates that it is the fifth base of the
@@ -346,7 +348,7 @@ none of the mask bits set.  Hence this does not override the
 .BI --ff,\ --excl-flags \ STR|INT
 Filter flags: skip reads with any of the mask bits set.  This defaults
 to SECONDARY,QCFAIL,DUP.  The option is not accumulative, so
-specifying e.g. \fB--ff QCFAIL\fR will reenable output of
+specifying e.g. \fB--ff QCFAIL\fR will re-enable output of
 secondary and duplicate alignments.  Note this does not override the
 \fB--incl-flags\fR option.
 .TP
@@ -401,7 +403,7 @@ mpileup command in the same order as in the document (i.e.
 The names are case sensitive. Currently, only the following fields are
 supported:
 .IP
-.B QNAME, FLAG, RNAME, POS, MAPQ, RNEXT, PNEXT, RLEN
+.B QNAME, FLAG, RNAME, POS, MAPQ, RNEXT, PNEXT, RLEN, ENDPOS
 .IP
 Anything that is not on this list is treated as a potential tag, although only
 two character tags are accepted. In the mpileup output, tag columns are

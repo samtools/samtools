@@ -839,7 +839,7 @@ foreach my $f (sort keys %file) {
     my $fg = $f;                  # printable in gnuplot
     $fg =~ s/_/\\\\_/g;
 
-    #--- Template coordinates vs frequence: FILE
+    #--- Template coordinates vs frequency: FILE
     goto skip_coord if !exists($file{$f}{FTCOORD});
     my $fn = "$prefix-$ff-tcoord";  # filename prefix
     open(my $fh, ">", "$fn.gp") || die "$fn.gp";

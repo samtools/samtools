@@ -1,13 +1,14 @@
 #!/bin/sh
-# Usage: .ci_helpers/clone OWNER REPOSITORY [DIR] [BRANCH] [HTSLIB_PR]
+# Usage: .ci_helpers/clone OWNER REPOSITORY [DIR] [BRANCH] [HEAD]
 #
 # Creates a shallow clone, checking out the specified branch.  If BRANCH is
 # omitted or if there is no branch with that name, checks out origin/HEAD
 # from the samtools/htslib repository.
 #
-# If BRANCH cannot be found in htslib and HTSLIB_PR is defined (a number)
-# then we checkout that PR number instead.  This is used by Cirrus-CI when
-# making joint PRs on samtools/htslib or bcftools/htslib
+# If ran from an existing git clone, we scan the first few commits from $HEAD
+# to look for htslib#<PR> and use this PR number as the htslib branch to
+# checkout.  This is useful when making joint PRs for samtools/htslib
+# or bcftools/htslib
 
 echo CLONE: ${@+"$@"}
 
@@ -15,7 +16,7 @@ owner=$1
 repository="https://github.com/$owner/$2"
 localdir=$3
 branch=$4
-htslib_PR=$5
+head=$5
 
 ref=''
 [ -n "$branch" ] && ref=$(git ls-remote --heads "$repository" "$branch" 2>/dev/null)
@@ -24,10 +25,14 @@ ref=''
 set -x
 git clone --recurse-submodules --shallow-submodules --depth=50 ${ref:+--branch="$branch"} "$repository" "$localdir"
 
-# NB: "samtools" as the owner/organisation, not the repo name
-if [ "x$owner" = "xsamtools" -a -z "$ref" -a "x$htslib_PR" != "x" ]
+# Automatically look for htslib#PR-number in recent commit messages
+if [ -z "$ref" -a "x$head" != "x" ]
 then
-    cd "$localdir"
-    git fetch origin "pull/$htslib_PR/head"
-    git checkout FETCH_HEAD
+    htslib_PR=`git log -2 --format=%s $head | sed -n 's/.*htslib#\([0-9]*\).*/\1/p' | head -1`
+    if [ "x$htslib_PR" != "x" ]
+    then
+        cd "$localdir"
+        git fetch https://github.com/samtools/htslib.git "pull/$htslib_PR/head"
+        git checkout FETCH_HEAD
+    fi
 fi

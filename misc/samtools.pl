@@ -321,7 +321,7 @@ sub sam2fq {
 #
 
 # This subroutine does not use an XML parser. It requires that the SRA
-# XML files are properly formated.
+# XML files are properly formatted.
 sub sra2hdr {
   my %opts = ();
   getopts('', \%opts);

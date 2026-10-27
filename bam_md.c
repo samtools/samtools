@@ -1,6 +1,6 @@
 /*  bam_md.c -- calmd subcommand.
 
-    Copyright (C) 2009-2011, 2014-2015, 2019-2020, 2022 Genome Research Ltd.
+    Copyright (C) 2009-2011, 2014-2015, 2019-2020, 2022, 2026 Genome Research Ltd.
     Portions copyright (C) 2009-2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -178,7 +178,7 @@ static int bam_fillmd1_core(const char *ref_name, bam1_t *b, char *ref,
                 goto aux_fail;
         } else {
             int is_diff = 0;
-            if (strlen((char*)old_md+1) == str.l) {
+            if (*old_md == 'Z' && strlen((char*)old_md+1) == str.l) {
                 for (i = 0; i < str.l; ++i)
                     if (toupper(old_md[i+1]) != toupper_c(str.s[i]))
                         break;
@@ -186,7 +186,8 @@ static int bam_fillmd1_core(const char *ref_name, bam1_t *b, char *ref,
             } else is_diff = 1;
             if (is_diff) {
                 if (!quiet_mode) {
-                    fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n", bam_get_qname(b), old_md+1, str.s);
+                    fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n",
+                            bam_get_qname(b),  *old_md == 'Z' ? (char *)old_md+1 : "?", str.s);
                 }
                 if (bam_aux_del(b, old_md) < 0) goto aux_fail;
                 if (bam_aux_append(b, "MD", 'Z', str.l + 1, (uint8_t*)str.s) < 0)
@@ -271,7 +272,7 @@ static int get_ref(faidx_t *fai, sam_hdr_t *header, ref_cache *cache,
     }
 
     if (!cache->refs && cache->last_tid > tid) {
-        // Going backwards throught the list of tids implies
+        // Going backwards through the list of tids implies
         // a non-position-ordered file, so turn on caching mode
         cache->nref = sam_hdr_nref(header);
         if (cache->nref < 0) {
@@ -423,11 +424,7 @@ int bam_fillmd(int argc, char *argv[])
         print_error_errno("calmd", "Failed to open output");
         goto fail;
     }
-    if (!no_pg && sam_hdr_add_pg(header, "samtools",
-                                 "VN", samtools_version(),
-                                 arg_list ? "CL": NULL,
-                                 arg_list ? arg_list : NULL,
-                                 NULL)) {
+    if (samtools_add_pg_line(header, arg_list, no_pg)) {
         print_error("calmd", "failed to add PG line to header");
         goto fail;
     }

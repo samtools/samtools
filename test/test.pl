@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2013-2025 Genome Research Ltd.
+#    Copyright (C) 2013-2026 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -188,7 +188,7 @@ sub _cmd
     my $out;
     my $err;
     my ($err_fh, $err_filename) = tempfile(UNLINK => 1);
-    my $pid = open($kid_io, "-|", 'bash', '-o','pipefail','-c', "($cmd) 2> $err_filename");
+    my $pid = open($kid_io, "-|", 'bash', '--norc', '--noprofile', '-o','pipefail','-c', "($cmd) 2> $err_filename");
     if ( !defined $pid ) { error("Cannot fork: $!"); }
     if ($pid)
     {
@@ -964,6 +964,19 @@ sub test_mpileup
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.bam | grep -v mpileup");
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.cram | grep -v mpileup");
     test_cmd($opts,out=>'dat/mpileup.out.5',cmd=>"$$opts{bin}/samtools mpileup $$opts{path}/mpileup/overlap.bam | grep 128814202");
+
+    # Reads beyond ref len and -a
+    test_cmd($opts, out=>'dat/mpileup.out.6a', cmd=>"$$opts{bin}/samtools "
+             . "mpileup -Ba -f $$opts{path}/mpileup/beyond_ref.fa "
+             . "$$opts{path}/mpileup/beyond_ref.sam");
+    test_cmd($opts, out=>'dat/mpileup.out.6aa', cmd=>"$$opts{bin}/samtools "
+             . "mpileup -Baa -f $$opts{path}/mpileup/beyond_ref.fa "
+             . "$$opts{path}/mpileup/beyond_ref.sam");
+
+    # Issue 2363:
+    test_cmd($opts, out=>'dat/mpileup.out.7', cmd=>"$$opts{bin}/samtools "
+             . "mpileup -B -f $$opts{path}/mpileup/Issue2363.fa "
+             . "$$opts{path}/mpileup/Issue2363.sam");
 }
 
 sub test_usage
@@ -1160,7 +1173,7 @@ sub querylen
 #   $args->{read_groups}    hash of read groups to output (-r or -R)
 #   $args->{read_names}     names of reads to output (-N)
 #   $args->{tag}            tag used for checking if reads match tag_values (-d or -D)
-#   $args->{tag_values}     hash of values assocated with tag to output (-d or -D)
+#   $args->{tag_values}     hash of values associated with tag to output (-d or -D)
 #   $args->{libraries}      hash of libraries to output (-l)
 #   $args->{region}         region list to output (-L and region list)
 #   $args->{strip_tags}     hash of tags to strip from alignments (-x)
@@ -1864,7 +1877,7 @@ sub gen_pair
 # which is an index of the fasta file.  Both of these are used for CRAM.
 # The SAM file is compressed with bgzf to keep the size down.
 #
-# To generate random sequence aligned against identical referenes,
+# To generate random sequence aligned against identical references,
 # pass in the 4th argument (ref_seed) with a constant value.  Otherwise a
 # random reference is generated too.
 #
@@ -2121,6 +2134,14 @@ sub test_view
                   compare => $sam_with_ur);
     $test++;
 
+    my $bam_with_no_ur_out = sprintf("%s.test%03d.bam", $out, $test);
+    run_view_test($opts,
+                  msg => "$test: SAM -> BAM -> SAM",
+                  args => ['-b', '--remove-ur', $sam_with_ur, '--no-PG'],
+                  out => $bam_with_no_ur_out,
+                  compare_sam => $sam_no_ur);
+    $test++;
+
 
     # Header only options
     my $sam_header = "$$opts{tmp}/view.001.header.sam";
@@ -2342,7 +2363,7 @@ sub test_view
     my @region_sams   = ($sam_with_ur2, $sam_with_ur);
     my @region_inputs = ([BAM  => [$bam_with_ur_out2, $bam_with_ur_out]],
                          [CRAM => [$cram_with_ur_out2, $cram_with_ur_out]]);
-    # Add indicies
+    # Add indexes
     cmd("'$$opts{bin}/samtools' index '$bam_with_ur_out'");
     cmd("'$$opts{bin}/samtools' index '$cram_with_ur_out'");
     cmd("'$$opts{bin}/samtools' index '$bam_with_ur_out2'");
@@ -2616,6 +2637,89 @@ sub test_view
         }
     }
 
+    # Repeated subsampling in "auto" seed mode.  The seed is derived from a
+    # hash of the input header, which changes each round (new @CO line
+    # recording the seed, plus the @PG line), so each round should further
+    # reduce the read count.  Exercise the default, the explicit
+    # "--subsample-seed auto" form, and the "-s auto.FRAC" shorthand.
+    for my $variant (
+        { name => 'default seed',           args => sub { ('--subsample', $_[0]) } },
+        { name => '--subsample-seed auto',  args => sub { ('--subsample', $_[0], '--subsample-seed', 'auto') } },
+        { name => '-s auto.FRAC',           args => sub { ('-s', 'auto.' . (int($_[0] * 10))) } },
+    ) {
+        my $label = "Repeated subsampling reduces reads ($variant->{name})";
+        printf "\t%s ", "$test: $label";
+
+        my $input = $big_bam;
+        my $frac  = 0.5;
+        my $prev_count = $big_sam_count;
+        my $res = 0;
+
+        for my $round (1 .. 3) {
+            my $output = sprintf("%s.test%03d.round%d.bam", $out, $test, $round);
+            my @cmd = ("$$opts{bin}/samtools", "view", "-b",
+                       $variant->{args}->($frac), $input,
+                       "-o", $output);
+            system(@cmd) == 0 || die "Error running @cmd\n";
+
+            my $count = 0;
+            open(my $fh, '-|', "$$opts{bin}/samtools", "view", "-c", $output)
+                || die "Couldn't count reads in $output: $!\n";
+            $count = <$fh>;
+            chomp $count;
+            close($fh);
+
+            my $expected = $prev_count * $frac;
+            my $min = $expected * 0.7;
+            my $max = $expected * 1.3;
+
+            if ($count < $min || $count > $max) {
+                printf("\n\tRound %d: expected ~%.0f reads (%.0f..%.0f), got %d\n",
+                       $round, $expected, $min, $max, $count);
+                $res = 1;
+                last;
+            }
+
+            print ".";
+            $prev_count = $count;
+            $input = $output;
+        }
+
+        if (!$res) {
+            passed($opts, msg => "$test: $label");
+        } else {
+            failed($opts, msg => "$test: $label");
+        }
+        $test++;
+    }
+
+    # Verify that the @CO line recording the subsample fraction and seed is
+    # present in the output header.
+    {
+        my $label = "Subsample adds \@CO line with fraction and seed";
+        printf "\t%s ", "$test: $label";
+
+        my $output = sprintf("%s.test%03d.subsample_co.bam", $out, $test);
+        my @cmd = ("$$opts{bin}/samtools", "view", "-b",
+                   "--subsample", "0.5", "--subsample-seed", "42",
+                   $big_bam, "-o", $output);
+        system(@cmd) == 0 || die "Error running @cmd\n";
+
+        my $header = '';
+        open(my $fh, '-|', "$$opts{bin}/samtools", "view", "-H", $output)
+            || die "Couldn't read header from $output: $!\n";
+        { local $/; $header = <$fh>; }
+        close($fh);
+
+        if ($header =~ /^\@CO\tSub-sampled fraction=0\.5 seed=42$/m) {
+            passed($opts, msg => "$test: $label");
+        } else {
+            printf("\n\tHeader did not contain expected \@CO line:\n%s\n", $header);
+            failed($opts, msg => "$test: $label");
+        }
+        $test++;
+    }
+
     my $b_pg_sam      = "$$opts{path}/dat/view.001.sam";
     my $b_pg_expected = "$$opts{path}/dat/view.004.expected.sam";
     run_view_test($opts,
@@ -2638,7 +2742,6 @@ sub test_view
 
     # unmap excluded reads, ones marked as duplicate in this case
     $test++;
-
     my $unmapped_expected = "$$opts{path}/dat/view.005.unmap.expected.sam";
 
     run_view_test($opts,
@@ -2655,6 +2758,16 @@ sub test_view
                     out => sprintf("%s.test%03d.sam", $out, $test),
                     compare_count => 2);
 
+    # Combine unmap with unoutput
+    $test++;
+    my $base_fn = sprintf("%s.test%03d", $out, $test);
+    my $unoutput_expected = "$$opts{path}/dat/view.005.unoutput.expected.sam";
+    run_view_test($opts,
+                  msg=> "$test: Unmap + Unoutput dup flagged reads.",
+                  args => ['-h', '-U', "$base_fn.sam",
+                           '-F', 'DUP', '-p', '--no-PG', $dup_sam],
+                  out => "$base_fn.sam",
+                  compare => $unoutput_expected);
 
     # retrieve reads from a region including their mates
     my $count_output;
@@ -3106,6 +3219,20 @@ sub test_import
              cmd=>"$$opts{bin}/samtools import --no-PG -U test/bam2fq/UMI.fq.expected");
     test_cmd($opts, out=>'import/UMI-OX.expected.sam',
              cmd=>"$$opts{bin}/samtools import --no-PG -U --UMI-tag OX test/bam2fq/UMI.fq.expected");
+
+    # Empty input gives a header-only file, but truncated input still fails
+    test_cmd($opts, out=>'import/6-s.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --no-PG --allow-empty -s test/import/6.empty.fq");
+    test_cmd($opts, out=>'import/6-s.expected.sam',
+             cmd=>"cat test/import/6.empty.fq | $$opts{bin}/samtools import --no-PG --allow-empty -s -");
+    test_cmd($opts, out=>'import/6-12.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --no-PG --allow-empty -1 test/import/6.empty.fq -2 test/import/6.empty.fq");
+    test_cmd($opts, out=>'import/6-RG.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --no-PG --allow-empty -1 test/import/6.empty.fq -2 test/import/6.empty.fq -r ID:rgid");
+    test_cmd($opts, out=>'import/6-RG.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --no-PG --allow-empty -1 test/import/6.empty.fq -2 test/import/6.empty.fq -R rgid");
+    test_cmd($opts, out=>'dat/empty.expected', want_fail=>1,
+             cmd=>"$$opts{bin}/samtools import --no-PG --allow-empty -s test/import/6.truncated.fq.gz > /dev/null");
 }
 
 sub test_bam2fq
@@ -3308,42 +3435,52 @@ sub test_stats
 
     my $efix = ($^O =~ /^(?:cygwin|msys|MSWin32)$/) ? 1 : 0;
 
-    test_cmd($opts,out=>'stat/1.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/1.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/1_map_cigar_large.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/2.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/2_equal_cigar_full_seq.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/2.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/2_equal_cigar_full_seq_large.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/3.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/3_map_cigar_equal_seq.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/3.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/3_map_cigar_equal_seq_large.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/4.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/4_X_cigar_full_seq_large.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/5.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/5_insert_cigar.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/5.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/5_insert_cigar_large.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/6.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa -i 0 $$opts{path}/stat/5_insert_cigar.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/7.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/7_supp.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/7.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/7_supp_large.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/8.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/8_secondary.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/8.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/8_secondary_large.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/1.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/1.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/1_map_cigar_large.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/2.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/2_equal_cigar_full_seq.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/2.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/2_equal_cigar_full_seq_large.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/3.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/3_map_cigar_equal_seq.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/3.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/3_map_cigar_equal_seq_large.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/4.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/4_X_cigar_full_seq_large.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/5.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/5_insert_cigar.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/5.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/5_insert_cigar_large.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/6.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa -i 0 $$opts{path}/stat/5_insert_cigar.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/7.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/7_supp.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/7.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/7_supp_large.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/8.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/8_secondary.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/8.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/8_secondary_large.sam | tail -n +4", exp_fix=>$efix);
 
-    test_cmd($opts,out=>'stat/9.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4", exp_fix=>$efix,out_map=>{"stat/1_map_cigar.sam_s1_a_1.bamstat"=>"stat/1_map_cigar.sam_s1_a_1.expected.bamstat"},hskip=>3);
-    test_cmd($opts,out=>'stat/10.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/10_map_cigar.sam | tail -n+4", exp_fix=>$efix,out_map=>{"stat/10_map_cigar.sam_s1_a_1.bamstat"=>"stat/10_map_cigar.sam_s1_a_1.expected.bamstat", "stat/10_map_cigar.sam_s1_b_1.bamstat"=>"stat/10_map_cigar.sam_s1_b_1.expected.bamstat"},hskip=>3);
-    test_cmd($opts,out=>'stat/11.stats.expected',cmd=>"$$opts{bin}/samtools stats -t $$opts{path}/stat/11.stats.targets $$opts{path}/stat/11_target.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/11.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/11_target.bam ref1:10-24 ref1:30-46 ref1:39-56 | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/11.stats.g4.expected',cmd=>"$$opts{bin}/samtools stats -g 4 -t $$opts{path}/stat/11.stats.targets $$opts{path}/stat/11_target.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/11.stats.g4.expected',cmd=>"$$opts{bin}/samtools stats -g 4 $$opts{path}/stat/11_target.bam ref1:10-24 ref1:30-46 ref1:39-56 | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/12.3reads.overlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -t $$opts{path}/stat/12_3reads.bed | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/12.3reads.nooverlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -p -t $$opts{path}/stat/12_3reads.bed | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/12.2reads.overlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -t $$opts{path}/stat/12_2reads.bed | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/12.2reads.nooverlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -p -t $$opts{path}/stat/12_2reads.bed | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/13.barcodes.bc.ok.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_ok.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/13.barcodes.ox.ok.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_ok_ox_bz.sam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_bc_length.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_hyphen.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_qt_length.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/14.rg.s1.expected',cmd=>"$$opts{bin}/samtools stats -I s1 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/14.rg.grp2.expected',cmd=>"$$opts{bin}/samtools stats -I grp2 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/14.rg.grp3.expected',cmd=>"$$opts{bin}/samtools stats -I grp3 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/14.rg.Sample.expected',cmd=>"$$opts{bin}/samtools stats -I Sample $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
-    test_cmd($opts,out=>'stat/15.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/mpileup/ce.fa $$opts{path}/stat/15.big_del.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/9.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n +4", exp_fix=>$efix,out_map=>{"stat/1_map_cigar.sam_s1_a_1.bamstat"=>"stat/1_map_cigar.sam_s1_a_1.expected.bamstat"},hskip=>3);
+    test_cmd($opts,out=>'stat/10.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/10_map_cigar.sam | tail -n +4", exp_fix=>$efix,out_map=>{"stat/10_map_cigar.sam_s1_a_1.bamstat"=>"stat/10_map_cigar.sam_s1_a_1.expected.bamstat", "stat/10_map_cigar.sam_s1_b_1.bamstat"=>"stat/10_map_cigar.sam_s1_b_1.expected.bamstat"},hskip=>3);
+    test_cmd($opts,out=>'stat/11.stats.expected',cmd=>"$$opts{bin}/samtools stats -t $$opts{path}/stat/11.stats.targets $$opts{path}/stat/11_target.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/11.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/11_target.bam ref1:10-24 ref1:30-46 ref1:39-56 | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/11.stats.g4.expected',cmd=>"$$opts{bin}/samtools stats -g 4 -t $$opts{path}/stat/11.stats.targets $$opts{path}/stat/11_target.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/11.stats.g4.expected',cmd=>"$$opts{bin}/samtools stats -g 4 $$opts{path}/stat/11_target.bam ref1:10-24 ref1:30-46 ref1:39-56 | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/12.3reads.overlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -t $$opts{path}/stat/12_3reads.bed | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/12.3reads.nooverlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -p -t $$opts{path}/stat/12_3reads.bed | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/12.2reads.overlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -t $$opts{path}/stat/12_2reads.bed | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/12.2reads.nooverlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -p -t $$opts{path}/stat/12_2reads.bed | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.bc.ok.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_ok.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.ox.ok.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_ok_ox_bz.sam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_bc_length.sam | tail -n +4", expect_fail=>1, exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_hyphen.sam | tail -n +4", expect_fail=>1, exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_qt_length.sam | tail -n +4", expect_fail=>1, exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/14.rg.s1.expected',cmd=>"$$opts{bin}/samtools stats -I s1 $$opts{path}/stat/11_target.bam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/14.rg.grp2.expected',cmd=>"$$opts{bin}/samtools stats -I grp2 $$opts{path}/stat/11_target.bam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/14.rg.grp3.expected',cmd=>"$$opts{bin}/samtools stats -I grp3 $$opts{path}/stat/11_target.bam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/14.rg.Sample.expected',cmd=>"$$opts{bin}/samtools stats -I Sample $$opts{path}/stat/11_target.bam | tail -n +4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/15.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/mpileup/ce.fa $$opts{path}/stat/15.big_del.sam | tail -n +4", exp_fix=>$efix);
+    # coverage distribution: spliced alignment whose far block lies beyond the coverage buffer
+    test_cmd($opts,out=>'stat/20.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/20_spliced.sam | grep -e\"^COV\"", exp_fix=>$efix);
+    # coverage distribution: buffer reallocation (longer read) while coverage is pending
+    test_cmd($opts,out=>'stat/21.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/21_mixed_lengths.sam | grep -e\"^COV\"", exp_fix=>$efix);
+    # duplicate counts exclude secondary and supplementary records, like "sequences"
+    test_cmd($opts,out=>'stat/22.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/22_dup_supp.sam | grep -E -e\"^SN.(sequences|reads duplicated|supplementary alignments|total length|bases duplicated):\"", exp_fix=>$efix);
+    # insert size average and standard deviation leave out pairs with isize 0
+    test_cmd($opts,out=>'stat/23.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/23_isize_zero.sam | grep -E -e\"^SN.insert size (average|standard deviation):\"", exp_fix=>$efix);
+    # the -m main-bulk cut-off leaves out pairs with isize 0 as well
+    test_cmd($opts,out=>'stat/24.stats.expected',cmd=>"$$opts{bin}/samtools stats -m 0.65 $$opts{path}/stat/23_isize_zero.sam | grep -E -e\"^SN.insert size (average|standard deviation):\"", exp_fix=>$efix);
 
     #reference statistics tests
     #with ref-stats, no ref file
@@ -3459,6 +3596,16 @@ sub test_sort
     # TemplateCoordinate sort
     test_cmd($opts, out=>"sort/template-coordinate.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} --template-coordinate -m 10M $$opts{path}/sort/template-coordinate.sort.sam -O SAM -o -");
 
+    # TemplateCoordinate sort with cell barcode (CB tag): reads group by cell then by molecule within cell
+    test_cmd($opts, out=>"sort/template-coordinate.cell-barcode.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} --template-coordinate -m 10M $$opts{path}/sort/template-coordinate.cell-barcode.sort.sam -O SAM -o -");
+
+    # TemplateCoordinate sort - verify hard clips are ignored (only soft clips affect sort position)
+    test_cmd($opts, out=>"sort/template-coordinate-hardclip.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} --template-coordinate -m 10M $$opts{path}/sort/template-coordinate-hardclip.sort.sam -O SAM -o -");
+
+    # TemplateCoordinate sort of aligner output with a supplementary alignment:
+    # fixmate must add MC to the supplementary or the sort aborts (no MC tag).
+    test_cmd($opts, out=>"sort/template-coordinate-supplementary.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate -O bam $$opts{path}/sort/template-coordinate-supplementary.sam - | $$opts{bin}/samtools sort${threads} --template-coordinate -m 10M -O SAM -o -");
+
     # Minimiser sort, basic
     test_cmd($opts, out=>"sort/minimiser-basic.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{path}/dat/auto_indexed.tmp.bam | $$opts{bin}/samtools sort${threads} -m 10M -M -K10 -O SAM -o -");
 
@@ -3522,6 +3669,7 @@ sub test_fixmate
     test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
     test_cmd($opts,out=>'fixmate/8_isize_overflow_64bit.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -z off -O sam $$opts{path}/fixmate/8_isize_overflow_64bit.sam -");
     test_cmd($opts,out=>'fixmate/sanitize.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/sanitize.sam -");
+    test_cmd($opts,out=>'fixmate/9_supplementary_mc.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/9_supplementary_mc.sam -");
 
     # fixmate -M base-modification tests
     foreach (qw/ok+ ok- draft not_updated not_updated_noML not_updated_noMN
@@ -3720,6 +3868,10 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/16_optical_barcode_rgx_name_test_2.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-rgx '^([!-9;-?A-~]+):[0-9]+:' --read-coords '^[!-9;-?A-~]+:([0-9]{4})([0-9]{4})' --coords-order xy -O sam --no-PG $$opts{path}/markdup/16_optical_barcode_rgx_name_test_2.sam -");
     test_cmd($opts, out=>'markdup/17_read_group.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -d 100 --mode s -t --use-read-groups -O sam --no-PG $$opts{path}/markdup/17_read_group.sam -");
     test_cmd($opts, out=>'markdup/18_primary_duplicate_count.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} --mode t -t -O sam --no-PG --duplicate-count --barcode-tag BC -S $$opts{path}/markdup/18_primary_duplicate_count.sam -");
+    test_cmd($opts, out=>'markdup/19_move_umi_to_tag.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG --barcode-name --move-umi-to-tag $$opts{path}/markdup/19_move_umi_to_tag.sam -");
+    test_cmd($opts, out=>'markdup/20_move_umi_in_middle.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG --barcode-rgx ':([A-Z]{7}):' --umi-separator ':' --move-umi-to-tag $$opts{path}/markdup/20_move_umi_in_middle.sam -");
+    test_cmd($opts, out=>'markdup/21_move_umi_custom_sep.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG --barcode-rgx '_([A-Z]{7})_' --umi-separator '_' --move-umi-to-tag $$opts{path}/markdup/21_move_umi_custom_sep.sam -");
+    test_cmd($opts, out=>'markdup/22_optical_prefix_length.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -d 2500 -t -O sam --no-PG $$opts{path}/markdup/22_optical_prefix_length.sam -");
 }
 
 sub test_bedcov
@@ -3983,6 +4135,12 @@ sub test_reset
     test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.flg.1.expected"}, cmd=>"$$opts{bin}/samtools reset  --dupflag $$opts{bin}/test/reset/seq.sam -o $$opts{bin}/test/reset/output");
     #flag update default
     test_cmd($opts, out=>"reset/empty.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, out_map=>{"reset/output" => "reset/output.flg.2.expected"}, cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/reset/seq.sam -o $$opts{bin}/test/reset/output");
+    #cram reference support
+    cmd("cp $$opts{path}/dat/view.001.fa $$opts{bin}/test/reset/view.tmp.fa");
+    cmd("$$opts{bin}/samtools view $$opts{path}/dat/view.001.sam -T $$opts{bin}/test/reset/view.tmp.fa -o $$opts{bin}/test/reset/view.tmp.cram");
+    cmd("rm $$opts{bin}/test/reset/view.tmp.fa");
+    test_cmd($opts, out=>"reset/cram.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/reset/view.tmp.cram -T $$opts{path}/dat/view.001.fa --input-fmt-option=filter=\"pos>35\" --output-fmt-option=version=3.0 -o $$opts{bin}/test/reset/view30.tmp.cram; $$opts{bin}/samtools view -h $$opts{bin}/test/reset/view30.tmp.cram");
+    test_cmd($opts, out=>"reset/cram.expected", err=>"reset/empty.expected", hskip=>1, ignore_pg_header=>1, cmd=>"$$opts{bin}/samtools reset $$opts{bin}/test/reset/view.tmp.cram -T $$opts{path}/dat/view.001.fa --input-fmt-option=filter=\"pos>35\" --output-fmt-option=version=3.1 -o $$opts{bin}/test/reset/view31.tmp.cram; $$opts{bin}/samtools view -h $$opts{bin}/test/reset/view31.tmp.cram");
 }
 
 sub test_checksum
@@ -3993,7 +4151,7 @@ sub test_checksum
 
     # Basic mode, two files with one read-group removed and subtle QC diffs
     # 1.1 and 2.1 checksums should have the same "all" and ERR013140 and
-    # ERR156632 groups should match, with "-" matching delted ERR016352.
+    # ERR156632 groups should match, with "-" matching deleted ERR016352.
     # tr -d '\011' is to fix windows nl-cr endings which break the comparison.
     test_cmd($opts, out=>"checksum/chk1.1.expected", cmd=>"$$opts{bin}/samtools $chk $$opts{path}/checksum/chk1.bam | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
     test_cmd($opts, out=>"checksum/chk2.1.expected", cmd=>"$$opts{bin}/samtools $chk $$opts{path}/checksum/chk2.cram | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
@@ -4020,6 +4178,28 @@ sub test_checksum
         cmd("$$opts{bin}/samtools checksum -a $$opts{path}/checksum/chk2-$rg.tmp -o $$opts{path}/checksum/chk2-$rg.tmp.chk");
     }
     test_cmd($opts, out=>"checksum/chk2.2.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk2-*.tmp.chk | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+
+    # biobambam2 compatible output
+    test_cmd($opts, out=>"checksum/chk1.4.expected", cmd=>"$$opts{bin}/samtools $chk -B $$opts{path}/checksum/chk1.bam");
+    # similar but w/o RG hdr and w/o RG data
+    test_cmd($opts, out=>"checksum/chk1.5.expected", cmd=>"$$opts{bin}/samtools view test/checksum/chk1.bam -h | sed '/\@RG/d;s/\tRG\:Z\:[0-9a-zA-Z]*//g' | $$opts{bin}/samtools $chk -B -");
+    # merge biobambam2 compatible output
+    test_cmd($opts, out=>"checksum/chk1.4.expected", cmd=>"$$opts{bin}/samtools $chk -B -m $$opts{path}/checksum/chk1.4.expected");
+    test_cmd($opts, out=>"checksum/chk1.6.expected", cmd=>"$$opts{bin}/samtools $chk -B -m $$opts{path}/checksum/chk1.4.expected $$opts{path}/checksum/chk1.5.expected");
+
+    # checksum with different aux tag than default
+    cmd("$$opts{bin}/samtools $chk -t AM $$opts{path}/checksum/chk1.bam -o $$opts{path}/checksum/chk1.tmp.chk");
+    # merge with different tags, expected to fail
+    test_cmd($opts, want_fail=>1, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk1.1.expected $$opts{path}/checksum/chk1.tmp.chk");
+    # merge b/w different type, works fine
+    test_cmd($opts, out=>"checksum/chk1.7.expected", cmd=>"$$opts{bin}/samtools $chk -m $$opts{path}/checksum/chk1.1.expected $$opts{path}/checksum/chk1.4.expected");
+    # merge b/w different type, with -B, works fine
+    test_cmd($opts, out=>"checksum/chk1.8.expected", cmd=>"$$opts{bin}/samtools $chk -B -m $$opts{path}/checksum/chk1.1.expected $$opts{path}/checksum/chk1.4.expected");
+
+    # check the version 1 checksum still works
+    test_cmd($opts, out=>"checksum/chk2.5.expected", cmd=>"$$opts{bin}/samtools $chk -a -V $$opts{path}/checksum/chk2.cram | sed 's/\\(# Checksum[^:]*:\\).*/\\1/'");
+
+
 }
 
 

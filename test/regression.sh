@@ -86,7 +86,7 @@ run_test() {
     fi
 }
 
-# Process regresion file
+# Process regression file
 regtest() {
     nupass=0; nepass=0
     nufail=0; nefail=0
@@ -115,14 +115,14 @@ regtest() {
             test_iter=0
             if [ "`expr \"$cmd\" : '.*\$fmt'`" != 0 -a "$samtools" != "./samtools-0.1.19" ]
             then
-                _cmd=`printf '%s' "$cmd" | sed 's/\$fmt/bam/'`
+                _cmd=`printf '%s\n' "$cmd" | sed 's/\$fmt/bam/'`
                 run_test $p $o $_cmd
                 #_cmd=`printf '%s' "$cmd" | sed 's/\$fmt/sam/'`
                 #run_test $p $o $_cmd
-                _cmd=`printf '%s' "$cmd" | sed 's/\$fmt/cram/'`
+                _cmd=`printf '%s\n' "$cmd" | sed 's/\$fmt/cram/'`
                 run_test $p $o $_cmd
             else
-                _cmd=`printf '%s' "$cmd" | sed 's/\$fmt/bam/'`
+                _cmd=`printf '%s\n' "$cmd" | sed 's/\$fmt/bam/'`
                 run_test $p $o $_cmd
             fi
             ;;

@@ -1,7 +1,7 @@
 /*  bam_cat.c -- efficiently concatenates bam files.
 
     Copyright (C) 2008-2009, 2011-2013, 2015-2017, 2019, 2021,
-                  2023-2024 Genome Research Ltd.
+                  2023-2024, 2026 Genome Research Ltd.
     Modified SAMtools work copyright (C) 2010 Illumina, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -420,11 +420,7 @@ int cram_cat(samFile * const firstfile, int nfn, char * const *fn,
     out_c = out->fp.cram;
     cram_set_option(out_c, CRAM_OPT_VERSION, vers);
 
-    if (!no_pg && sam_hdr_add_pg(new_h, "samtools",
-                                 "VN", samtools_version(),
-                                 arg_list ? "CL": NULL,
-                                 arg_list ? arg_list : NULL,
-                                 NULL))
+    if (samtools_add_pg_line(new_h, arg_list, no_pg))
         goto closefiles;
 
     if (sam_hdr_write(out, new_h) < 0) {
@@ -532,7 +528,14 @@ int cram_cat(samFile * const firstfile, int nfn, char * const *fn,
         off_t before_hdr = htell(cram_fd_get_fp(in_c));
 
         // Copy contains and blocks within them
-        while ((c = cram_read_container(in_c))) {
+        for (;;) {
+            c = cram_read_container(in_c);
+            if (!c) {
+                if (cram_eof(in_c))
+                    break; // Got to end of file
+                else
+                    goto closefiles; // cram_read_container() failed
+            }
             if (cram_container_is_empty(in_c)) {
                 cram_block *blk;
                 // Container compression header
@@ -555,7 +558,10 @@ int cram_cat(samFile * const firstfile, int nfn, char * const *fn,
                 }
                 int zero = 0;
                 //fprintf(stderr, "Transcode RG %d to %d\n", 0, new_rg);
-                cram_transcode_rg(in_c, out_c, c, 1, &zero, &new_rg);
+                if (cram_transcode_rg(in_c, out_c, c, 1, &zero, &new_rg) < 0) {
+                    print_error("cat", "Cannot change RG number\n");
+                    goto closefiles;
+                }
             } else {
                 int32_t num_slices;
 
@@ -611,7 +617,10 @@ int cram_cat(samFile * const firstfile, int nfn, char * const *fn,
 
                 if (filter) {
                     // Filter or skip
-                    cram_filter_container(in_c, out_c, c, &last_ref_id);
+                    if (cram_filter_container(in_c, out_c, c, &last_ref_id) < 0) {
+                        print_error("cat", "Couldn't filter container\n");
+                        goto closefiles;
+                    }
                 } else {
                     // Copy. Consider adding a cram_copy_container API instead.
 
@@ -624,7 +633,7 @@ int cram_cat(samFile * const firstfile, int nfn, char * const *fn,
                     if (cram_write_container(out_c, c) != 0)
                         goto closefiles;
 
-                    // Contatiner compression header
+                    // Container compression header
                     if (cram_write_block(out_c, blk) != 0) {
                         cram_free_block(blk);
                         goto closefiles;
@@ -721,11 +730,7 @@ int bam_cat(samFile * const firstfile, int nfn, char * const *fn, sam_hdr_t *h, 
         goto fail;
     }
 
-    if (!no_pg && sam_hdr_add_pg(new_h, "samtools",
-                                    "VN", samtools_version(),
-                                    arg_list ? "CL": NULL,
-                                    arg_list ? arg_list : NULL,
-                                    NULL))
+    if (samtools_add_pg_line(new_h, arg_list, no_pg))
         goto fail;
 
     if (bam_hdr_write(fp, new_h) < 0) {
@@ -862,7 +867,7 @@ int main_cat(int argc, char *argv[])
                 sam_close(fph);
                 break;
             }
-            case 'o': outfn = strdup(optarg); break;
+            case 'o': outfn = optarg; break;
             case 'b': {
                 // add file names in "optarg" to the list
                 // of files to concatenate
@@ -976,7 +981,6 @@ int main_cat(int argc, char *argv[])
             free(infns[i]);
     }
 
-    free(outfn);
     free(infns);
     free(arg_list);
     if (h)

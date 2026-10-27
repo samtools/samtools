@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-rmdup 1 "18 March 2026" "samtools-1.23.1" "Bioinformatics tools"
+.TH samtools-rmdup 1 "27 October 2026" "samtools-1.25" "Bioinformatics tools"
 .SH NAME
 samtools rmdup \- removes duplicate reads (obsolete)
 .\"
@@ -67,6 +67,9 @@ paired-end reads only.
 .TP 8
 .B -S
 Treat paired-end reads and single-end reads.
+.TP 8
+.B --no-PG
+Do not add a @PG line to the header of the output file.
 
 .SH LIMITATIONS
 .IP o 2

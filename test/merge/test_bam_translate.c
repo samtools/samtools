@@ -1,6 +1,6 @@
 /*  test/merge/test_bam_translate.c -- header merging test harness.
 
-    Copyright (C) 2013, 2014-2015 Genome Research Ltd.
+    Copyright (C) 2013, 2014-2015, 2026 Genome Research Ltd.
 
     Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
@@ -386,7 +386,7 @@ int main(int argc, char**argv)
     // check result
     check = fopen(tempfname, "r");
     res.l = 0;
-    if (kgetline(&res, (kgets_func *)fgets, check) < 0 &&
+    if (kfgetline(&res, check) < 0 &&
         (feof(check) || res.l == 0) ) {
         ++success;
     } else {
@@ -424,7 +424,7 @@ int main(int argc, char**argv)
     // check result
     check = fopen(tempfname, "r");
     res.l = 0;
-    if (kgetline(&res, (kgets_func *)fgets, check) < 0 &&
+    if (kfgetline(&res, check) < 0 &&
         (feof(check) || res.l == 0) ) {
         ++success;
     } else {
@@ -462,7 +462,7 @@ int main(int argc, char**argv)
     // check result
     check = fopen(tempfname, "r");
     res.l = 0;
-    if (kgetline(&res, (kgets_func *)fgets, check) < 0 &&
+    if (kfgetline(&res, check) < 0 &&
         (feof(check) || res.l == 0)) {
         ++success;
     } else {
@@ -499,7 +499,7 @@ int main(int argc, char**argv)
     // check result
     check = fopen(tempfname, "r");
     res.l = 0;
-    if (kgetline(&res, (kgets_func *)fgets, check) >= 0 &&
+    if (kfgetline(&res, check) >= 0 &&
         strcmp("[bam_translate] RG tag \"rg4hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost. Unknown tags are only reported once per input file for each tag ID.",res.s) == 0) {
         ++success;
     } else {
@@ -536,7 +536,7 @@ int main(int argc, char**argv)
     // check result
     check = fopen(tempfname, "r");
     res.l = 0;
-    if (kgetline(&res, (kgets_func *)fgets, check) >= 0 &&
+    if (kfgetline(&res, check) >= 0 &&
         strcmp("[bam_translate] PG tag \"pg5hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost. Unknown tags are only reported once per input file for each tag ID.",res.s) == 0) {
         ++success;
     } else {
@@ -574,7 +574,7 @@ int main(int argc, char**argv)
     // check result
     check = fopen(tempfname, "r");
     res.l = 0;
-    if (kgetline(&res, (kgets_func *)fgets, check) < 0 &&
+    if (kfgetline(&res, check) < 0 &&
         (feof(check) || res.l == 0) ) {
         ++success;
     } else {

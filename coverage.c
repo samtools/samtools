@@ -252,7 +252,7 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
         }
         fprintf(file_out, full_utf ? VERTICAL_LINE : "|");
         for (col = 0; col < hist_size; ++col) {
-            // get the difference in eights, or halfs when full UTF8 is not supported
+            // get the difference in eighths, or halves when full UTF8 is not supported
             int cur_val_diff = round(blockchar_len * (hist_data[col] - current_bin) / row_bin_size) - 1;
             if (cur_val_diff < 0) {
                 fputc(' ', file_out);

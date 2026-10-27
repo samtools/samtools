@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-stats 1 "18 March 2026" "samtools-1.23.1" "Bioinformatics tools"
+.TH samtools-stats 1 "27 October 2026" "samtools-1.25" "Bioinformatics tools"
 .SH NAME
 samtools stats \- produces comprehensive statistics from alignment file
 .\"
@@ -465,6 +465,8 @@ based on the tagged field
 (e.g., use
 .B --split RG
 to split into read groups).
+The tag data used must have string type (Z in SAM).
+Splitting on numeric tags is not currently supported.
 
 Categorised statistics are written to files named
 .RI < prefix >_< value >.bamstat,

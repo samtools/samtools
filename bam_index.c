@@ -1,6 +1,6 @@
 /*  bam_index.c -- index and idxstats subcommands.
 
-    Copyright (C) 2008-2011, 2013-2016, 2018, 2019, 2023-2024  Genome Research Ltd.
+    Copyright (C) 2008-2011, 2013-2016, 2018, 2019, 2023-2025  Genome Research Ltd.
     Portions copyright (C) 2010 Broad Institute.
     Portions copyright (C) 2013 Peter Cock, The James Hutton Institute.
 
@@ -93,10 +93,23 @@ int bam_index(int argc, char *argv[])
         switch (c) {
         case 'b': csi = 0; break;
         case 'c': csi = 1; break;
-        case 'm': csi = 1; min_shift = atoi(optarg); break;
+        case 'm':
+            csi = 1;
+            if (!parse_int_value(optarg, &min_shift)) {
+                print_error("index", "invalid min_shift");
+                index_usage(stderr);
+                return 1;
+            }
+            break;
         case 'M': multiple = 1; break;
         case 'o': fn_idx = optarg; break;
-        case '@': n_threads = atoi(optarg); break;
+        case '@':
+            if (!parse_int_value(optarg, &n_threads)) {
+                print_error("index", "invalid thread count");
+                index_usage(stderr);
+                return 1;
+            }
+            break;
         default:
             index_usage(stderr);
             return 1;
@@ -257,7 +270,7 @@ int bam_idxstats(int argc, char *argv[])
     header = sam_hdr_read(fp);
     if (header == NULL) {
         print_error("idxstats", "failed to read header for \"%s\"", argv[optind]);
-        return 1;
+        goto err;
     }
 
     if (hts_get_format(fp)->format != bam) {
@@ -267,7 +280,7 @@ int bam_idxstats(int argc, char *argv[])
 
         if (slow_idxstats(fp, header) < 0) {
             print_error("idxstats", "failed to process \"%s\"", argv[optind]);
-            return 1;
+            goto err;
         }
     } else {
         idx = sam_index_load2(fp, argv[optind], index_name);
@@ -294,4 +307,10 @@ int bam_idxstats(int argc, char *argv[])
     sam_hdr_destroy(header);
     sam_close(fp);
     return 0;
+
+ err:
+    if (header)
+        sam_hdr_destroy(header);
+    sam_close(fp);
+    return 1;
 }

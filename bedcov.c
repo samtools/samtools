@@ -213,7 +213,7 @@ int main_bedcov(int argc, char *argv[])
         aux[i]->min_mapQ = min_mapQ;
         aux[i]->fp = sam_open_format(argv[i+optind+1], "r", &ga.in);
         if (aux[i]->fp) {
-            // If index filename has not been specfied, look in BAM folder
+            // If index filename has not been specified, look in BAM folder
             if (has_index_file) {
                 idx[i] = sam_index_load2(aux[i]->fp, argv[i+optind+1], argv[i+optind+n+1]);
             } else {

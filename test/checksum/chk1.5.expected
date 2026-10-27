@@ -1,0 +1,5 @@
+###	set	count		b_seq	name_b_seq	b_seq_qual	b_seq_tags(BC,FI,QT,RT,TC)
+all	all	144		12eebb31	7e82e134	156fc353	12eebb31
+all	pass	144		12eebb31	7e82e134	156fc353	12eebb31
+	all	144		12eebb31	7e82e134	156fc353	12eebb31
+	pass	144		12eebb31	7e82e134	156fc353	12eebb31

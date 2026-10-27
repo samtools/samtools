@@ -1,0 +1,53 @@
+name: Containers
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  Containers:
+    # comment out if we're using the cache
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:      ['alpine', 'archlinux', 'centos', 'rockylinux', 'opensuse']
+        include:
+          - os:          alpine
+            image:       ghcr.io/samtools/alpine-for-htslib-ci:latest
+          - os:          archlinux
+            image:       ghcr.io/samtools/archlinux-for-htslib-ci:latest
+          - os:          centos
+            image:       ghcr.io/samtools/centos-for-htslib-ci:latest
+          - os:          rockylinux
+            image:       ghcr.io/samtools/rockylinux-for-htslib-ci:latest
+          - os:          opensuse
+            image:       ghcr.io/samtools/opensuse-for-htslib-ci:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 3
+
+      - name: Clone htslib
+        run: |
+          git config --global --add safe.directory `pwd`
+          .ci_helpers/clone ${GITHUB_REPOSITORY_OWNER} htslib htslib ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME} ${{ github.sha }}
+
+      - name: Configure samtools
+        run: |
+          (cd htslib; autoreconf -i)
+          autoreconf -i
+          ./configure --disable-ref-cache --enable-werror CFLAGS="-g -O3"
+
+      - name: Build htslib and samtools
+        run: |
+          make -k -j5
+
+      - name: Test
+        run: |
+          make check

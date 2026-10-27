@@ -77,7 +77,7 @@ void run_test(TestState *state, const char* format_string, const char* basename,
     if (expected != NULL) {
         // Good input, should produce a file name
         if (check && output != NULL && !strcmp(output, expected)
-            && kgetline(&state->res, (kgets_func *)fgets, check) < 0
+            && kfgetline(&state->res, check) < 0
             && (feof(check) || state->res.l == 0)) {
             ++state->success;
         } else {
@@ -87,7 +87,7 @@ void run_test(TestState *state, const char* format_string, const char* basename,
     } else {
         // Bad input, should return NULL and print an error message
         if (check && output == NULL
-            && kgetline(&state->res, (kgets_func *)fgets, check) == 0
+            && kfgetline(&state->res, check) == 0
             && state->res.l > 0) {
             ++state->success;
         } else {

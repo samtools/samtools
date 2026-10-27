@@ -1,6 +1,6 @@
 /*  bam_tview.c -- tview subcommand.
 
-    Copyright (C) 2008-2016, 2019-2020 Genome Research Ltd.
+    Copyright (C) 2008-2016, 2019-2020, 2026 Genome Research Ltd.
     Portions copyright (C) 2013 Pierre Lindenbaum, Institut du Thorax, INSERM U1087, Université de Nantes.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -124,7 +124,7 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *fn_
         print_error("tview", "cannot read \"%s\"", fn);
         exit(EXIT_FAILURE);
     }
-    // If index filename has not been specfied, look in BAM folder
+    // If index filename has not been specified, look in BAM folder
     if (fn_idx != NULL) {
         tv->idx = sam_index_load2(tv->fp, fn, fn_idx);
     } else {
@@ -338,7 +338,7 @@ static int tv_push_aln(const bam1_t *b, tview_t *tv)
     if ( tv->rg_hash )
     {
         const uint8_t *rg = bam_aux_get(b, "RG");
-        if ( !rg ) return 0; // If we don't have an RG tag exclude read
+        if ( !rg || *rg != 'Z') return 0; // If we don't have an RG tag exclude read
         khiter_t k = kh_get(kh_rg, tv->rg_hash, (const char*)(rg + 1));
         if ( k == kh_end(tv->rg_hash) ) return 0; // if RG tag is not in list of allowed tags exclude read
     }
@@ -425,7 +425,7 @@ static void HTS_FORMAT(HTS_PRINTF_FMT, 1, 2) error(const char *format, ...)
         vfprintf(stderr, format, ap);
         va_end(ap);
     }
-    exit(-1);
+    exit(1);
 }
 
 enum dipsay_mode {display_ncurses,display_html,display_text};

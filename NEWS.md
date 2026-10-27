@@ -1,3 +1,200 @@
+Release 1.25 (27th October 2026)
+--------------------------------
+
+New work and changes:
+
+* CHANGE. `samtools checksum` reported version set to 2.0.  Checksum
+  calculations differed between samtools 1.24 and previous releases. In earlier
+  releases, the *--check-mate* option produced incorrect checksums. This was
+  fixed in v1.24 but made already existing checksums invalid.
+  Therefore, the fixed checksum is now designated Checksum 2.0 while the
+  previous one is left at Checksum 1.0 in order differentiate the versions.
+  **NB** Samtools version 1.24 produced corrected checksums but erroneously
+  labelled them as version 1.0.  If you used this release with the
+  *--check-mate* option then we advise recomputing or manually editing the
+  version numbers in the output files.
+  (PR #2365, fixes #2354.  Reported by Ruben Vorderman)
+
+* CHANGE.  When the HTSlib version in use cannot be deduced from the SAMtools
+  version, the `@PG` `VN` field now records it too, for example
+  `VN:1.24.1 (with HTSlib 1.25)`.
+  (PR #2350.  Thanks to Benjamin Demaille)
+
+* In `mpileup`, added an ENDPOS field to --output-extra.  Combined with POS,
+  this gives the left and right extents on the reference for this alignment,
+  meaning we can observe how close to either end this pileup base is.
+  (PR #2351, fixes #2343.  Requested by Devang Thakkar)
+
+* Strip UR tags from header SQ lines in `samtools view`.
+  (PR #2357, fixes #2327.  Requested by Florian Plaza Oñate)
+
+* Make `samtools view` --unmap and --unoutput work together.
+  (PR #2358, fixes #2356.  Requested by Eric Boyden)
+
+* Make `samtools import` accept empty FASTQ input.  This avoids halting a
+  pipeline when one file has no data.
+  (PR #2395.  Thanks to Clint Valentine)
+
+* `samtools stats` changed to use hts_crc32() instead of zlib's crc32() to take
+  advantage of libdeflate (if used).  Plus some minor fixes.
+  (PR #2406, thanks to John Marshall)
+
+Documentation:
+
+* Update values in embed_ref and multi_seq_per_slice options.
+  (PR #2386)
+
+Bug fixes:
+
+* Fix reuse-after-free in bam_plcmd ref cache.
+  (PR #2364, fixes #2363.  Reported by James Smagala.
+   https://github.com/samtools/samtools/security/advisories/GHSA-xj7m-w8mc-xvf2
+   https://github.com/samtools/samtools/security/advisories/GHSA-vh3p-9c59-j3hv)
+
+* Check string aux tag types before accessing data.
+  (PR #2366
+   https://github.com/samtools/samtools/security/advisories/GHSA-3j6q-r48h-wvm3)
+
+* Fix `samtools fixmates` `-M` and `-z cigar` options.  Fixing base
+  modifications failed on reads without base modifications tags.  Trimming
+  CIGAR strings to the length of the reference sequence failed on strings
+  containing 0M.
+  (PR #2407
+   https://github.com/samtools/samtools/security/advisories/GHSA-f423-v554-fwqr)
+
+* In `samtools stats` grow the coverage ring buffer instead of wrapping around.
+  (PR #2379, fixes #2378.  Thanks to Cynthia Krafft)
+
+* Fix --move-umi-to-tag in `samtools markdup`.
+  (PR #2382, fixes #2380.  Reported by mrubio-chavarria)
+
+* Relax the --barcode-name regex in `samtools markdup`.
+  (PR #2387, fixes #2385.  Reported by fjvorhoelter)
+
+* Make `phase` and `targetcut` work with records where seq is '*'.
+  (PR #2393, fixes #2390.  Reported by babayaga)
+
+* Check the number of temporary files is above 0 in `samtools collate`.
+  (PR #2394.  Thanks to Pierre Lindenbaum)
+
+* Fix optical duplicates being set in `markdup` even when read name prefixes
+  differ.
+  (PR #2400, fixes #2399.  Thanks to Kris Alavattam)
+
+* Fix `samtools cat` exit code when unable to use CRAM file.  cram_cat() now
+  distinguishes between failure and EOF.
+  (PR #2403, fixes #2401.  Reported by Matthieu Muffato)
+
+* FIX. `samtools stats` counted secondary and supplementary records in
+  *reads duplicated* and *bases duplicated*, while *sequences* and
+  *total length* exclude them.  Non-primary duplicates are now not included
+  in the counts.  Also, `samtools stats` counted pairs with insert size 0
+  (TLEN unknown) in the denominator of *insert size average* and *insert size
+  standard deviation*, and in the mean but not in the sum of squares of the
+  standard deviation.  They are now left out of both statistics and of the `-m`
+  main-bulk cut-off.
+  (PR #2388.  Addresses a question in #696.  Thanks to Cindy Krafft)
+
+* Fix `samtools calmd` when correcting MD tags that aren't aux type `Z`.
+  (PR #2408)
+
+Non user-visible changes and build improvements:
+
+* Add more CI targets (various Linux releases and other operating systems).
+  Fixed warnings that occurred on some platforms.
+  (PR #2353)
+
+* Add --norc --noprofile to bash invocations in test.pl.
+  (PR #2362)
+
+* Remove unnecessary strdup(optarg) calls in CLI parsing.
+  (PR #2361)
+
+* Fix memory leaks when samtools view CLI bails.  Minimal impact but helps with
+  enabling memory leak detection in fuzzing.
+  (PR #2372)
+
+* Various error checking and reporting changes.
+  (PR #2368, PR #2369, PR #2370, PR #2371, PR #2373)
+
+* Switch containers to ones built by samtools/c-maint.  This reduces the
+  dependence on upstream repositories.
+  (PR #2381)
+
+Release 1.24 (9th July 2026)
+----------------------------
+
+New work and changes:
+
+* NEW.  Contribution guidelines, Including sections on complexity, completeness,
+  signing and our AI policy.
+  (PR #2335)
+
+* CHANGE.  The default seed for `samtools view --subsample` is now based on the
+  input file header and not zero.  This means that repeated subsampling of the
+  same file will work as expected.  The previous behaviour can be replicated by
+  setting the seed to zero.
+  (PR #2320, fixes #1201.  Thanks to Tim Fennell. Reported by Stathis)
+
+* Improve sanity checking on numeric command-line parameters.
+  (PR #2292.  Thanks to Stephen Tanner)
+
+* Add --move-umi-to-tag option to `samtools markdup` to extract UMI from QNAME
+  and add to RX tag.
+  (PR #2316, fixes #2181.  Thanks to Matthias De Smet)
+
+* Ensure indirect function calls have the correct type.  This uses the new
+  HTSlib interface introduced in samtools/htslib#1994.
+  (PR #2322)
+
+* Changes to make `checksum` merging compatible with biobambam2 checksums.
+  (PR #2329, fixes #2323.  Reported by Keith James)
+
+* Speed improvement for `samtools stats`.
+  (PR #2326)
+
+* Changed --customized-index-file to --customized-index in `samtools stats` to
+  match other subcommands.  As this option had never worked (see #2315) this
+  should not cause any compatibility problems.
+  (PR #2334, fixes #2333.  Thanks to Alexis Lucattini)
+
+* Fill in mate information on supplementary alignments in `samtools fixmate`.
+  Takes mate information from the primary and adds it to the supplementary
+  alignment.  Does not affect secondary alignments.
+  (PR #2347.  Thanks to Nils Homer)
+
+* In `samtools sort` use cell barcode (if present) during template coordinate
+  sort.
+  (PR #2314.  Thanks to Clint Valentine)
+
+
+Bug fixes:
+
+* Various option fixes.  Removed the mistaken required argument from
+  --customized-index-file in `stats`.  Also removed some unused and undocumented
+  options from bam_plcmd.c.
+  (PR #2317, fixes #2315.  Reported by Alexis Lucattini)
+
+* For `samtools stats` check before and after region with -target-regions.
+  Previously doing only one or the other.
+  (PR #2328, fixes #2303.  Reported by Yuan Tian)
+
+
+Non user-visible changes and build improvements:
+
+* Add Github actions builds for Linux and Mac OS.  This replaces the Cirrus CI
+  tests that were discontinued.
+  (PR #2330)
+
+* Ensure PACKAGE_VERSION is set in the Makefile.
+  (PR #2342, fixes #2337.  Reported by James Ferguson)
+
+* Make version.sh work when .git is present but the git executable is not.
+  (PR #2345)
+
+* Adjust tail commands so they work on Solaris.
+  (PR #2346)
+
 Release 1.23.1 (18th March 2026)
 --------------------------------
 

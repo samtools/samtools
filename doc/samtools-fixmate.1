@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-fixmate 1 "18 March 2026" "samtools-1.23.1" "Bioinformatics tools"
+.TH samtools-fixmate 1 "27 October 2026" "samtools-1.25" "Bioinformatics tools"
 .SH NAME
 samtools fixmate \- fills in mate coordinates and insert size fields.
 .\"
@@ -51,8 +51,10 @@ samtools fixmate
 
 .SH DESCRIPTION
 .PP
-Fill in mate coordinates, ISIZE and mate related flags from a
-name-sorted or name-collated alignment.
+Fill in mate coordinates, ISIZE and mate related flags and tags from a
+name-sorted or name-collated alignment.  This includes the mate CIGAR (MC)
+and mate mapping quality (MQ) tags, on both primary and supplementary
+alignments.
 
 .SH OPTIONS
 .TP 11

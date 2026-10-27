@@ -1,6 +1,6 @@
 /*  bam_fastq.c -- FASTA and FASTQ file generation
 
-    Copyright (C) 2009-2017, 2019-2020, 2023-2025 Genome Research Ltd.
+    Copyright (C) 2009-2017, 2019-2020, 2023-2026 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -218,7 +218,7 @@ static int add_tag_file(bam2fq_opts_t *opts, char *fn) {
         return -1;
     }
 
-    while (ks.l = 0, kgetline(&ks, (kgets_func *)fgets, fp) >= 0) {
+    while (ks.l = 0, kfgetline(&ks, fp) >= 0) {
         if (add_tag_value(opts, ks.s) < 0) {
             ks_free(&ks);
             return -1;
@@ -310,6 +310,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         {"UMI-tag", required_argument, NULL, LONGOPT('U')},
         { NULL, 0, NULL, 0 }
     };
+    long parsed_number;
     while ((c = getopt_long(argc, argv, "0:1:2:o:f:F:G:niNOs:c:tT:v:@:d:D:U",
                             lopts, NULL)) > 0) {
         switch (c) {
@@ -322,12 +323,45 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
             case '1': opts->fnr[1] = optarg; break;
             case '2': opts->fnr[2] = optarg; break;
             case 'o': opts->fnr[1] = optarg; opts->fnr[2] = optarg; break;
-            case 'f': opts->flag_on |= strtol(optarg, 0, 0); break;
-            // note that flag_off does not have |= because it has a default
-            // value of 0x900 which needs to be replaced by the optarg
-            case 'F': opts->flag_off = strtol(optarg, 0, 0); break;
-            case 'G': opts->flag_alloff |= strtol(optarg, 0, 0); break;
-            case LONGOPT('g'): opts->flag_anyon |= strtol(optarg, 0, 0); break;
+            case 'f':
+                if (!parse_long_value(optarg, &parsed_number, 0)) {
+                    print_error("fastq",
+                    "invalid -f value \"%s\"",
+                    optarg);
+                    return false;
+                }
+                opts->flag_on |= parsed_number;
+                break;
+            case 'F':
+                if (!parse_long_value(optarg, &parsed_number, 0)) {
+                    print_error("fastq",
+                    "invalid -F value \"%s\"",
+                    optarg);
+                    return false;
+                }
+                // note that flag_off does not have |= because it has a default
+                // value of 0x900 which needs to be replaced by the optarg
+                opts->flag_off = parsed_number;
+                break;
+
+            case 'G':
+                if (!parse_long_value(optarg, &parsed_number, 0)) {
+                    print_error("fastq",
+                    "invalid -f value \"%s\"",
+                    optarg);
+                    return false;
+                }
+                opts->flag_alloff |= parsed_number;
+                break;
+            case LONGOPT('g'):
+                if (!parse_long_value(optarg, &parsed_number, 0)) {
+                    print_error("fastq",
+                    "invalid -f value \"%s\"",
+                    optarg);
+                    return false;
+                }
+                opts->flag_anyon |= parsed_number;
+                break;
             case 'n': opts->has12 = false; break;
             case 'N': opts->has12always = true; break;
             case 'O': opts->use_oq = true; break;
@@ -346,7 +380,15 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
                     opts->compression_level = 9;
                 break;
             case 'T': opts->extra_tags = optarg; break;
-            case 'v': opts->def_qual = atoi(optarg); break;
+            case 'v':
+                if (!parse_int_value(optarg, &opts->def_qual)) {
+                    print_error("fastq",
+                                "Invalid -v value: \"%s\"",
+                                optarg);
+                    free_opts(opts);
+                    return false;
+                }
+                break;
 
             case 'd':
                 if (strlen(optarg) < 2 ||
@@ -880,7 +922,7 @@ int output_index(bam1_t *b1, bam1_t *b2, bam2fq_state_t *state,
         bc = (char *)bam_aux_get(b1, opts->barcode_tag);
     if (b2 && !bc)
         bc = (char *)bam_aux_get(b2, opts->barcode_tag);
-    if (!bc)
+    if (!bc || *bc != 'Z')
         return 0;
     else
         bc++; // skip Z
@@ -889,7 +931,7 @@ int output_index(bam1_t *b1, bam1_t *b2, bam2fq_state_t *state,
         qt = (char *)bam_aux_get(b1, opts->quality_tag);
     if (b2 && !qt)
         qt = (char *)bam_aux_get(b2, opts->quality_tag);
-    if (qt && strlen(bc) != strlen(qt)-1)
+    if (qt && (*qt != 'Z' || strlen(bc) != strlen(qt)-1))
         qt = NULL;
     else if (qt)
         qt++;
@@ -1035,7 +1077,7 @@ static int removesoftclips(const char *prg, bam1_t *b, kstring_t *clipbuf, const
     uint8_t *ptr, *bptr, *qptr, *nbptr, *nqptr, op, prevop, *auxb = NULL,
         *auxq = NULL;
     uint32_t oplen, slen = 0, dlen = 0, *cptr;
-    int64_t auxlen = 0; //n64bit as later multipled with -1 in during ptr update
+    int64_t auxlen = 0; //64bit as later multiplied with -1 during ptr update
     const char seq_nt16flip_str[] = "!TGKCYSBAWRDMHVN", *base = seq_nt16_str;
     char tag[2] = {'s','0'};
     if (!b) return -1;               //invalid params

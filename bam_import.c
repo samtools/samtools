@@ -4,7 +4,7 @@
  *   samtools import a_1.fq a_2.fq
  *   samtools import a_interleaved.fq
  *
- * Copyright (C) 2020-2021, 2023-2025 Genome Research Ltd.
+ * Copyright (C) 2020-2021, 2023-2026 Genome Research Ltd.
  *
  * Author: James Bonfield <jkb@sanger.ac.uk>
  */
@@ -65,6 +65,8 @@ static int usage(FILE *fp, int exit_status) {
     fprintf(fp, "  -o FILE      Output to FILE instead of stdout\n");
     fprintf(fp, "  -u           Uncompressed output\n");
     fprintf(fp, "  --order TAG  Store Nth record count in TAG\n");
+    fprintf(fp, "  -E, --allow-empty\n");
+    fprintf(fp, "               Permit the input file to be empty\n");
     fprintf(fp, "\n");
     fprintf(fp, "      --no-PG  Do not add a PG line\n");
     sam_global_opt_help(fp, "-.O.-@--");
@@ -103,6 +105,7 @@ typedef struct {
     int compress_level;
     htsThreadPool p;
     int name2;
+    int allow_empty;
 } opts_t;
 
 // Append a sequence and quality string from a BAM record to a BC:Z and
@@ -153,6 +156,7 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
     uint64_t read_num = 0;
     kstring_t idx_seq  = {0};
     kstring_t idx_qual = {0};
+    kstring_t line = {0};
 
     // Any additional arguments are assumed to be r1 r2, as a
     // short cut. We support reading index tags out of those too (eg
@@ -282,11 +286,7 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
             print_error("view", "failed to create arg_list");
             goto err;
         }
-        if (sam_hdr_add_pg(hdr_out, "samtools",
-                           "VN", samtools_version(),
-                           arg_list ? "CL" : NULL,
-                           arg_list ? arg_list : NULL,
-                           NULL)) {
+        if (samtools_add_pg_line(hdr_out, arg_list, 0)) {
             fprintf(stderr, "Failed to add PG line to the header");
             free(arg_list);
             goto err;
@@ -332,6 +332,11 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
         idx_seq.l = idx_qual.l = 0;
         for (i = 0; i < n; i++) {
             if ((res = sam_read1(fp_in[ids[i]], NULL, b)) < 0) {
+                // sam_read1 fails on empty input, so check for a clean EOF
+                if (opts->allow_empty &&
+                    hts_get_format(fp_in[ids[i]])->format == empty_format &&
+                    hts_getline(fp_in[ids[i]], '\n', &line) == -1)
+                    res = -1;
                 if (res == -1) {
                     eof++;
                     continue;
@@ -454,6 +459,7 @@ err:
     }
     ks_free(&idx_seq);
     ks_free(&idx_qual);
+    ks_free(&line);
 
     return ret;
 }
@@ -477,6 +483,7 @@ int main_import(int argc, char *argv[]) {
         .order_str = 0,
         .compress_level = -1,
         .name2 = 0,
+        .allow_empty = 0,
     };
     kstring_t rg = {0};
 
@@ -495,10 +502,11 @@ int main_import(int argc, char *argv[]) {
         {"UMI-tag", required_argument, NULL, 6},
         {"name2", no_argument, NULL, 'N'},
         {"umi", no_argument, NULL, 'U'},
+        {"allow-empty", no_argument, NULL, 'E'},
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "1:2:s:0:bhiT:r:R:o:O:u@:NU", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "1:2:s:0:bhiT:r:R:o:O:u@:NUE", lopts, NULL)) >= 0) {
         switch (c) {
         case 'b': opts.idx_both = 1; break;
         case '0': opts.fn[FQ_R0] = optarg; break;
@@ -526,6 +534,7 @@ int main_import(int argc, char *argv[]) {
             break;
 
         case 'N': opts.name2 = 1; break;
+        case 'E': opts.allow_empty = 1; break;
 
         case 9: opts.no_pg = 1; break;
         case 3:

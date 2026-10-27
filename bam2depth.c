@@ -1,7 +1,7 @@
 /*  bam2depth.c -- depth subcommand.
 
     Copyright (C) 2011, 2012 Broad Institute.
-    Copyright (C) 2012-2016, 2018, 2019-2022, 2024 Genome Research Ltd.
+    Copyright (C) 2012-2016, 2018, 2019-2022, 2024, 2026 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk> (to 2020)
     Author: James Bonfield <jkb@sanger.ac.uk> (2021 rewrite)
@@ -602,16 +602,19 @@ static int fastdepth_core(depth_opt *opt, uint32_t nfiles, char **fn,
             if (k == kh_end(overlaps[i])) {
                 // not seen before
                 hts_pos_t endpos = bam_endpos(b[i]);
-
                 // Don't add if mate location is known and can't overlap.
                 if (b[i]->core.mpos == -1 ||
                     (b[i]->core.tid == b[i]->core.mtid &&
                      b[i]->core.mpos <= endpos)) {
-                    k = kh_put(olap_hash, overlaps[i], bam_get_qname(b[i]),
-                               &ret);
-                    if (ret < 0)
+                    char *name_copy = strdup(bam_get_qname(b[i]));
+                    if (!name_copy)
                         return -1;
-                    kh_key(overlaps[i], k) = strdup(bam_get_qname(b[i]));
+
+                    k = kh_put(olap_hash, overlaps[i], name_copy, &ret);
+                    if (ret < 0) {
+                        free(name_copy);
+                        return -1;
+                    }
                     kh_value(overlaps[i], k) = endpos;
                 }
             } else {

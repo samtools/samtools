@@ -65,79 +65,80 @@ dnl an option that includes a hash sign...
         # Tests for flags to enable C compiler warnings
         # GCC compatible
         AS_IF([test "x$GCC" = "xyes" &&
-               "$CC" -c -Wall conftest.c > /dev/null 2>&1 &&
+               $CC -c -Wall conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
                test -f conftest.o],[dnl
           AS_IF([test "x$ansi" = "x"],
                 [hts_cv_prog_cc_warnings="-Wall"],
                 [hts_cv_prog_cc_warnings="-Wall -ansi -pedantic"])
         ],
         # Sun Studio or Solaris C compiler
-        ["$CC" -V 2>&1 | $GREP -i -E "WorkShop|Sun C" > /dev/null 2>&1 &&
-         "$CC" -c -v -Xc conftest.c > /dev/null 2>&1 &&
+        [$CC -V 2>&1 | $GREP -i -E "WorkShop|Sun C" >&AS_MESSAGE_LOG_FD 2>&1 &&
+         $CC -c -v -Xc conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
          test -f conftest.o],[dnl
           AS_IF([test "x$ansi" = "x"],
                 [hts_cv_prog_cc_warnings="-v"],
                 [hts_cv_prog_cc_warnings="-v -Xc"])
         ],
         # Digital Unix C compiler
-        ["$CC" -V 2>&1 | $GREP -i "Digital UNIX Compiler" > /dev/null 2>&1 &&
-         "$CC" -c -verbose -w0 -warnprotos -std1 conftest.c > /dev/null 2>&1 &&
+        [$CC -V 2>&1 | $GREP -i "Digital UNIX Compiler" >&AS_MESSAGE_LOG_FD 2>&1 &&
+         $CC -c -verbose -w0 -warnprotos -std1 conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
          test -f conftest.o],[dnl
           AS_IF([test "x$ansi" = "x"],
                 [hts_cv_prog_cc_warnings="-verbose -w0 -warnprotos"],
                 [hts_cv_prog_cc_warnings="-verbose -w0 -warnprotos -std1"])
         ],
         # C for AIX Compiler
-        ["$CC" 2>&1 | $GREP -i "C for AIX Compiler" > /dev/null 2>&1 &&
-         "$CC" -c -qlanglvl=ansi -qinfo=all conftest.c > /dev/null 2>&1 &&
+        [$CC 2>&1 | $GREP -i "C for AIX Compiler" >&AS_MESSAGE_LOG_FD 2>&1 &&
+         $CC -c -qlanglvl=ansi -qinfo=all conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
          test -f conftest.o],[dnl
           AS_IF([test "x$ansi" = "x"],
                 [hts_cv_prog_cc_warnings="-qsrcmsg -qinfo=all:noppt:noppc:noobs:nocnd"],
                 [hts_cv_prog_cc_warnings="-qsrcmsg -qinfo=all:noppt:noppc:noobs:nocnd -qlanglvl=ansi"])
         ],
         # IRIX C compiler
-        ["$CC" -version 2>&1 | $GREP -i "MIPSpro Compilers" > /dev/null 2>&1 &&
-         "$CC" -c -fullwarn -ansi -ansiE conftest.c > /dev/null 2>&1 &&
+        [$CC -version 2>&1 | $GREP -i "MIPSpro Compilers" >&AS_MESSAGE_LOG_FD 2>&1 &&
+         $CC -c -fullwarn -ansi -ansiE conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
          test -f conftest.o],[dnl
           AS_IF([test "x$ansi" = "x"],
                 [hts_cv_prog_cc_warnings="-fullwarn"],
                 [hts_cv_prog_cc_warnings="-fullwarn -ansi -ansiE"])
         ],
         # HP-UX C compiler
-        [what "$CC" 2>&1 | $GREP -i "HP C Compiler" > /dev/null 2>&1 &&
-         "$CC" -c -Aa +w1 conftest.c > /dev/null 2>&1 &&
+        [what "$CC" 2>&1 | $GREP -i "HP C Compiler" >&AS_MESSAGE_LOG_FD 2>&1 &&
+         $CC -c -Aa +w1 conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
          test -f conftest.o],[dnl
           AS_IF([test "x$ansi" = "x"],
                 [hts_cv_prog_cc_warnings="+w1"],
                 [hts_cv_prog_cc_warnings="+w1 -Aa"])
         ],
         # The NEC SX series (Super-UX 10) C compiler
-        ["$CC" -V 2>&1 | $GREP "/SX" > /dev/null 2>&1 &&
-         "$CC" -c -pvctl[,]fullmsg -Xc conftest.c > /dev/null 2>&1 &&
+        [$CC -V 2>&1 | $GREP "/SX" >&AS_MESSAGE_LOG_FD 2>&1 &&
+         $CC -c -pvctl[,]fullmsg -Xc conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
          test -f conftest.o],[dnl
           AS_IF([test "x$ansi" = "x"],
                 [hts_cv_prog_cc_warnings="-pvctl[,]fullmsg"],
                 [hts_cv_prog_cc_warnings="-pvctl[,]fullmsg -Xc"])
         ],
         # The Cray C compiler (Unicos)
-        ["$CC" -V 2>&1 | $GREP -i "Cray" > /dev/null 2>&1 &&
-         "$CC" -c -h msglevel_2 conftest.c > /dev/null 2>&1 &&
+        [$CC -V 2>&1 | $GREP -i "Cray" >&AS_MESSAGE_LOG_FD 2>&1 &&
+         $CC -c -h msglevel_2 conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
          test -f conftest.o],[dnl
           AS_IF([test "x$ansi" = "x"],
                 [hts_cv_prog_cc_warnings="-h#msglevel_2"],
                 [hts_cv_prog_cc_warnings="-h#msglevel_2,conform"])
         ],
         # The Tiny C Compiler
-        ["$CC" -v 2>&1 | $GREP "tcc version" > /dev/null &&
-         "$CC" -Wall -c conftest.c > /dev/null 2>&1 &&
+        [$CC -v 2>&1 | $GREP "tcc version" >&AS_MESSAGE_LOG_FD &&
+         $CC -Wall -c conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
          test -f conftest.o],[dnl
          hts_cv_prog_cc_warnings="-Wall"
         ])
         rm -f conftest.*
+        rm -rf conftest.dSYM
       ])
     ])
 
-    AS_IF([test "x$hts_cv_prog_cc_warnings" != "x"],[
+    AS_IF([test "x$hts_cv_prog_cc_warnings" != "x"],[dnl
 dnl Print result, with underscores as spaces
 ac_arg_result=`echo "$hts_cv_prog_cc_warnings" | tr '#' ' '`
 AC_MSG_RESULT($ac_arg_result)
@@ -183,22 +184,23 @@ EOF
          # Tests for flags to make the C compiler treat warnings as errors
          # GCC compatible
          [test "x$GCC" = "xyes" &&
-          "$CC" -c -Werror conftest.c > /dev/null 2>&1 &&
+          $CC -c -Werror conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
           test -f conftest.o],[hts_cv_prog_cc_werror="-Werror"],
          # Sun Studio or Solaris C compiler
-         ["$CC" -V 2>&1 | $GREP -i -E "WorkShop|Sun C" > /dev/null 2>&1 &&
-          "$CC" -c -errwarn=%all conftest.c > /dev/null 2>&1 &&
+         [$CC -V 2>&1 | $GREP -i -E "WorkShop|Sun C" >&AS_MESSAGE_LOG_FD 2>&1 &&
+          $CC -c -errwarn=%all conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
           test -f conftest.o],[hts_cv_prog_cc_werror="-errwarn=%all"],
          # The Tiny C Compiler
-         ["$CC" -v 2>&1 | $GREP "tcc version" > /dev/null &&
-          "$CC" -Wall -c conftest.c > /dev/null 2>&1 &&
+         [$CC -v 2>&1 | $GREP "tcc version" >&AS_MESSAGE_LOG_FD &&
+          $CC -Wall -c conftest.c >&AS_MESSAGE_LOG_FD 2>&1 &&
           test -f conftest.o],[hts_cv_prog_cc_werror="-Werror"]
          dnl TODO: Add more compilers
         )
         rm -f conftest.*
+        rm -rf conftest.dSYM
       ])
     ])
-    AS_IF([test "x$hts_cv_prog_cc_werror" != x],[dnl
+    AS_IF([test "x$hts_cv_prog_cc_werror" != x],[
       AC_MSG_RESULT($hts_cv_prog_cc_werror)
       AS_IF([test "x$1" != x],[eval AS_TR_SH([$1])="$hts_cv_prog_cc_werror"])
     ],[dnl

@@ -1302,7 +1302,7 @@ sub plot_read_len_hist
     my $args = get_defaults($opts,"$$opts{prefix}read-length.png");
     my $fh = $$args{fh};
 
-    # anonymous subroutines for code readibility
+    # anonymous subroutines for code readability
     my $log_bin = sub {
         my $x = $_[0];
         return floor((log($x) / log(10)) * 10);

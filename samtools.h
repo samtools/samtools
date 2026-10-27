@@ -1,6 +1,6 @@
 /*  samtools.h -- utility routines.
 
-    Copyright (C) 2013-2015, 2019, 2023 Genome Research Ltd.
+    Copyright (C) 2013-2015, 2019, 2023, 2026 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
 
@@ -30,6 +30,26 @@ DEALINGS IN THE SOFTWARE.  */
 #include "sam_utils.h"
 
 const char *samtools_version(void);
+
+/*
+ * Add the standard samtools @PG line to header h, recording the program
+ * (PN:samtools), the version (VN) and, when arg_list is not NULL, the command
+ * line (CL).  htslib assigns a collision-free ID and links PP: to the previous
+ * @PG record.
+ *
+ * VN holds the samtools version.  As SAMtools and HTSlib are released together
+ * with matching major and minor version numbers, the HTSlib version can usually
+ * be deduced from it; when it cannot (the major or minor numbers differ) it is
+ * appended, e.g. "1.23.1 (with HTSlib 1.24)".
+ *
+ * When no_pg is non-zero this is a no-op (the --no-PG opt-out), so callers can
+ * unconditionally call it and pass their opt-out flag through.  arg_list may be
+ * NULL if no command line is available.
+ *
+ * Returns 0 on success,
+ *        -1 on failure.
+ */
+int samtools_add_pg_line(sam_hdr_t *h, const char *arg_list, int no_pg);
 
 /* BAM sanitizer options */
 #define FIX_POS     2

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-checksum 1 "18 March 2026" "samtools-1.23.1" "Bioinformatics tools"
+.TH samtools-checksum 1 "27 October 2026" "samtools-1.25" "Bioinformatics tools"
 .SH NAME
 samtools checksum \- produces checksums of SAM / BAM / CRAM content
 .\"
-.\" Copyright (C) 2024 Genome Research Ltd.
+.\" Copyright (C) 2024, 2026 Genome Research Ltd.
 .\"
 .\" Author: James Bonfield <jkb@sanger.ac.uk>
 .\"
@@ -312,6 +312,17 @@ order-specific checksums (\fB-OO\fR) has been used.
 .BR -v ", " --verbose
 Increase verbosity.  At level 1 or higher this also shows rows that
 have zero count values, which can aid machine parsing.
+
+.TP
+.BR -V "," --version-1
+Checksums in version 1.0 were incorrectly calculated if the \fB-M\fR 
+(\fB--check-mate\fR) flag was set.  Version 2.0 fixed this issue but made
+previous checksums invalid.  This option replicates version 1.0 behaviour.
+
+Note Samtools version 1.24 produced corrected checksums but
+erroneously labelled them as version 1.0.  If you used this release
+with the \fB--check-mate\fR option then we advise recomputing or
+manually editing the version numbers in the output files.
 
 .SH EXAMPLES
 .IP o 2

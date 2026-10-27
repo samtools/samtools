@@ -119,7 +119,7 @@ P 81.out $samtools mpileup --output-BP-5 output-BP.sam
 P 78.out $samtools mpileup --reverse-del mpileup.1.bam
 
 # Extra columns and tags; --output-extra
-P 79.out $samtools mpileup -O --output-extra POS,FLAG,NM,QNAME,RG ../dat/view.001.sam
+P 79.out $samtools mpileup -O --output-extra POS,FLAG,NM,QNAME,RG,ENDPOS ../dat/view.001.sam
 
 # -a and -aa.  See depth.reg too
 P a0.out  $samtools mpileup -Q40 -r 17:1-4200 -f mpileup.ref.fa -a mpileup.1.$fmt

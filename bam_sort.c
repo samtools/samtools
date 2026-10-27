@@ -1,6 +1,6 @@
 /*  bam_sort.c -- sorting and merging.
 
-    Copyright (C) 2008-2025 Genome Research Ltd.
+    Copyright (C) 2008-2026 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -68,6 +68,7 @@ typedef struct {
     bool neg1;
     bool neg2;
     const char *library;
+    char *cid;
     char *mid;
     char *name;
     bool is_upper_of_pair;
@@ -90,7 +91,7 @@ static template_coordinate_key_t* template_coordinate_keys_get(template_coordina
     return &keys->buffers[buffer_idx][buffer_offset];
 }
 
-// Rellocates the buffers to hold at least max_k entries
+// Reallocates the buffers to hold at least max_k entries
 static int template_coordinate_keys_realloc(template_coordinate_keys_t *keys, int max_k) {
     size_t cur_m = keys->m;
     keys->m += 0x100;
@@ -553,6 +554,10 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
     int num_ids, i;
     const char *rec_type = is_rg ? "RG" : "PG";
     klist_t(hdrln) *hdr_lines;
+    kstring_t orig_id = { 0, 0, NULL };        // ID in original header
+    kstring_t transformed_id = { 0, 0, NULL }; // ID in output header
+    kstring_t new_hdr_line = { 0, 0, NULL };
+    char *empty = NULL;
 
     hdr_lines = kl_init(hdrln);
 
@@ -562,11 +567,11 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
         goto fail;
 
     for (i = 0; i < num_ids; i++) {
-        kstring_t orig_id = { 0, 0, NULL };        // ID in original header
-        kstring_t transformed_id = { 0, 0, NULL }; // ID in output header
         char *map_value;    // Value to store in id_map
         bool id_changed;    // Have we changed the ID?
         bool not_found_in_output; // ID isn't in the output header (yet)
+
+        orig_id.l = transformed_id.l = 0;
 
         if (sam_hdr_find_tag_pos(translate, rec_type, i, "ID", &orig_id) < 0)
             goto fail;
@@ -607,7 +612,8 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
         // Does this line need to go into our output header?
         if (not_found_in_output) {
             // Take matched line and replace ID with transformed_id
-            kstring_t new_hdr_line = { 0, 0, NULL };
+            new_hdr_line.l = 0;
+
             if (sam_hdr_find_line_id(translate, rec_type,
                                      "ID", ks_str(&orig_id), &new_hdr_line) < 0){
                 goto fail;
@@ -643,6 +649,8 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
 
             // append line to output linked list
             char** ln = kl_pushp(hdrln, hdr_lines);
+            if (!ln)
+                goto memfail;
             *ln = ks_release(&new_hdr_line);  // Give away to linked list
 
             // Need to add it to known_ids set
@@ -650,55 +658,72 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
             iter = kh_put(cset, known_ids, ks_str(&transformed_id), &in_there);
             if (in_there < 0) goto memfail;
             assert(in_there > 0);  // Should not already be in the map
-            map_value = ks_release(&transformed_id);
+            map_value = ks_release(&transformed_id); // Now owned by hash table
         } else {
             // Use existing string in id_map
             assert(kh_exist(known_ids, iter));
             map_value = kh_key(known_ids, iter);
-            free(ks_release(&transformed_id));
         }
 
         // Insert it into our translation map
         int in_there = 0;
-        iter = kh_put(c2c, id_map, ks_release(&orig_id), &in_there);
+        iter = kh_put(c2c, id_map, ks_str(&orig_id), &in_there);
+        if (in_there < 0)
+            goto memfail;
+        ks_release(&orig_id); // Now owned by hash table
         kh_value(id_map, iter) = map_value;
     }
 
     // If there are no RG lines in the file and we are overriding add one
     if (is_rg && override && hdr_lines->size == 0) {
-        kstring_t new_id = {0, 0, NULL};
-        kstring_t line = {0, 0, NULL};
-        kstring_t empty = {0, 0, NULL};
         int in_there = 0;
         char** ln;
 
         // Get the new ID
-        if (gen_unique_id(override, known_ids, false, &new_id))
+        transformed_id.l = 0;
+        if (gen_unique_id(override, known_ids, false, &transformed_id))
             goto memfail;
 
         // Make into a header line and add to linked list
-        ksprintf(&line, "@RG\tID:%s", ks_str(&new_id));
+        new_hdr_line.l = 0;
+        if (ksprintf(&new_hdr_line, "@RG\tID:%s", ks_str(&transformed_id)) < 0)
+            goto memfail;
         ln = kl_pushp(hdrln, hdr_lines);
-        *ln = ks_release(&line);
+        if (!ln)
+            goto memfail;
+        *ln = ks_release(&new_hdr_line);
 
         // Put into known_ids set
-        iter = kh_put(cset, known_ids, ks_str(&new_id), &in_there);
+        iter = kh_put(cset, known_ids, ks_str(&transformed_id), &in_there);
         if (in_there < 0) goto memfail;
         assert(in_there > 0);  // Should be a new entry
+        char *new_id = ks_release(&transformed_id); // Now owned by hash table
 
         // Put into translation map (key is empty string)
-        if (kputs("", &empty) == EOF) goto memfail;
-        iter = kh_put(c2c, id_map, ks_release(&empty), &in_there);
+        if ((empty = strdup("")) == NULL) goto memfail;
+        iter = kh_put(c2c, id_map, empty, &in_there);
         if (in_there < 0) goto memfail;
         assert(in_there > 0);  // Should be a new entry
-        kh_value(id_map, iter) = ks_release(&new_id);
+        empty = NULL; // Now owned by hash table
+        kh_value(id_map, iter) = new_id;
     }
+
+    // Ensure these are cleaned up.  In theory only orig_id should contain
+    // anything, and then only if the last ID was already in known_ids, but
+    // no harm in checking the others.
+    ks_free(&orig_id);
+    ks_free(&transformed_id);
+    ks_free(&new_hdr_line);
 
     return hdr_lines;
 
  memfail:
     perror(__func__);
  fail:
+    ks_free(&orig_id);
+    ks_free(&transformed_id);
+    ks_free(&new_hdr_line);
+    free(empty);
     if (hdr_lines) kl_destroy(hdrln, hdr_lines);
     return NULL;
 }
@@ -944,7 +969,32 @@ static void free_merged_header(merged_header_t *merged_hdr) {
     free(merged_hdr);
 }
 
-static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
+static int warn_missing_tag(const char *tag_type, const char *tag_val,
+                            const char *qname, kh_c2c_t *trans_table) {
+    char *tmp = strdup(tag_val);
+    if (!tmp)
+        return -1;
+    fprintf(stderr,
+            "[bam_translate] %s tag \"%s\" on read \"%s\" encountered "
+            "with no corresponding entry in header, tag lost. "
+            "Unknown tags are only reported once per input file for "
+            "each tag ID.\n",
+            tag_type, tag_val, qname);
+    // Prevent future whinges
+    int in_there = 0;
+    khiter_t k = kh_put(c2c, trans_table, tmp, &in_there);
+    if (in_there > 0) {
+        kh_value(trans_table, k) = NULL;
+    } else {
+        free(tmp); // Was not added
+    }
+    if (in_there < 0)
+        return -1;
+    return 0;
+}
+
+
+static int bam_translate(bam1_t* b, trans_tbl_t* tbl)
 {
     // Update target id if not unmapped tid
     if ( b->core.tid >= 0 ) { b->core.tid = tbl->tid_trans[b->core.tid]; }
@@ -954,29 +1004,20 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
     uint8_t *rg = bam_aux_get(b, "RG");
     if (rg) {
         char* decoded_rg = bam_aux2Z(rg);
-        khiter_t k = kh_get(c2c, tbl->rg_trans, decoded_rg);
+        khiter_t k = decoded_rg ? kh_get(c2c, tbl->rg_trans, decoded_rg) : kh_end(tbl->rg_trans);
         if (k != kh_end(tbl->rg_trans)) {
             char* translate_rg = kh_value(tbl->rg_trans,k);
             bam_aux_del(b, rg);
             if (translate_rg) {
-                bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1,
-                               (uint8_t*)translate_rg);
+                if (bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1,
+                                   (uint8_t*)translate_rg) < 0)
+                    goto fail;
             }
-        } else {
-            char *tmp = strdup(decoded_rg);
-            fprintf(stderr,
-                    "[bam_translate] RG tag \"%s\" on read \"%s\" encountered "
-                    "with no corresponding entry in header, tag lost. "
-                    "Unknown tags are only reported once per input file for "
-                    "each tag ID.\n",
-                    decoded_rg, bam_get_qname(b));
+        } else if (decoded_rg) {
+            if (warn_missing_tag("RG", decoded_rg,
+                                 bam_get_qname(b), tbl->rg_trans) < 0)
+                goto fail;
             bam_aux_del(b, rg);
-            // Prevent future whinges
-            if (tmp) {
-                int in_there = 0;
-                k = kh_put(c2c, tbl->rg_trans, tmp, &in_there);
-                if (in_there > 0) kh_value(tbl->rg_trans, k) = NULL;
-            }
         }
     }
 
@@ -984,31 +1025,27 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
     uint8_t *pg = bam_aux_get(b, "PG");
     if (pg) {
         char* decoded_pg = bam_aux2Z(pg);
-        khiter_t k = kh_get(c2c, tbl->pg_trans, decoded_pg);
+        khiter_t k = decoded_pg ? kh_get(c2c, tbl->pg_trans, decoded_pg) : kh_end(tbl->pg_trans);
         if (k != kh_end(tbl->pg_trans)) {
             char* translate_pg = kh_value(tbl->pg_trans,k);
             bam_aux_del(b, pg);
             if (translate_pg) {
-                bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1,
-                               (uint8_t*)translate_pg);
+                if (bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1,
+                                   (uint8_t*)translate_pg) < 0)
+                    goto fail;
             }
-        } else {
-            char *tmp = strdup(decoded_pg);
-            fprintf(stderr,
-                    "[bam_translate] PG tag \"%s\" on read \"%s\" encountered "
-                    "with no corresponding entry in header, tag lost. "
-                    "Unknown tags are only reported once per input file for "
-                    "each tag ID.\n",
-                    decoded_pg, bam_get_qname(b));
+        } else if (decoded_pg) {
+            if (warn_missing_tag("PG", decoded_pg,
+                                 bam_get_qname(b), tbl->pg_trans) < 0)
+                goto fail;
             bam_aux_del(b, pg);
-            // Prevent future whinges
-            if (tmp) {
-                int in_there = 0;
-                k = kh_put(c2c, tbl->pg_trans, tmp, &in_there);
-                if (in_there > 0) kh_value(tbl->pg_trans, k) = NULL;
-            }
         }
     }
+    return 0;
+
+ fail:
+    print_error_errno("merge", "Couldn't update RG/PG tags");
+    return -1;
 }
 
 int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
@@ -1396,7 +1433,8 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         if (!h->entry.bam_record) goto mem_fail;
         res = iter[i] ? sam_itr_next(fp[i], iter[i], h->entry.bam_record) : sam_read1(fp[i], hdr[i], h->entry.bam_record);
         if (res >= 0) {
-            bam_translate(h->entry.bam_record, translation_tbl + i);
+            if (bam_translate(h->entry.bam_record, translation_tbl + i) < 0)
+                goto fail;
             h->tid = h->entry.bam_record->core.tid;
             h->pos = (uint64_t)(h->entry.bam_record->core.pos + 1);
             h->rev = bam_is_rev(h->entry.bam_record);
@@ -1429,11 +1467,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
         return -1;
     }
     hts_set_opt(fpout, HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
-    if (!no_pg && sam_hdr_add_pg(hout, "samtools",
-                                 "VN", samtools_version(),
-                                 arg_list ? "CL": NULL,
-                                 arg_list ? arg_list : NULL,
-                                 NULL)) {
+    if (samtools_add_pg_line(hout, arg_list, no_pg)) {
         print_error(cmd, "failed to add PG line to the header of \"%s\"", out);
         sam_close(fpout);
         return -1;
@@ -1470,7 +1504,8 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             return -1;
         }
         if ((j = (iter[heap->i]? sam_itr_next(fp[heap->i], iter[heap->i], b) : sam_read1(fp[heap->i], hdr[heap->i], b))) >= 0) {
-            bam_translate(b, translation_tbl + heap->i);
+            if (bam_translate(b, translation_tbl + heap->i) < 0)
+                goto fail;
             heap->tid = b->core.tid;
             heap->pos = (uint64_t)(b->core.pos + 1);
             heap->rev = bam_is_rev(b);
@@ -1650,11 +1685,21 @@ int bam_merge(int argc, char *argv[])
         case 't': sort_tag = optarg; break;
         case '1': flag |= MERGE_LEVEL1; level = 1; break;
         case 'u': flag |= MERGE_UNCOMP; level = 0; break;
-        case 'R': reg = strdup(optarg); break;
-        case 'l': level = atoi(optarg); break;
+        case 'R': reg = optarg; break;
+        case 'l':
+            if (!parse_int_value(optarg, &level)) {
+                fprintf(stderr, "Invalid compression level\n");
+                ret = 1; goto end;
+            }
+            break;
         case 'c': flag |= MERGE_COMBINE_RG; break;
         case 'p': flag |= MERGE_COMBINE_PG; break;
-        case 's': random_seed = atol(optarg); break;
+        case 's':
+            if (!parse_long_value(optarg, &random_seed, 10)) {
+                fprintf(stderr, "Invalid random seed\n");
+                ret = 1; goto end;
+            }
+            break;
         case 'X': has_index_file = 1; break; // -X flag for index filename
         case 'L': fn_bed = optarg; break;
         case 'b': {
@@ -1767,7 +1812,6 @@ end:
     }
     free(fn);
     free(fn_idx);
-    free(reg);
     free(arg_list);
     sam_global_args_free(&ga);
     return ret;
@@ -1915,11 +1959,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
     }
     hts_set_opt(fpout, HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
 
-    if (!no_pg && sam_hdr_add_pg(hout, "samtools",
-                                 "VN", samtools_version(),
-                                 arg_list ? "CL": NULL,
-                                 arg_list ? arg_list : NULL,
-                                 NULL)) {
+    if (samtools_add_pg_line(hout, arg_list, no_pg)) {
         print_error(cmd, "failed to add PG line to the header of \"%s\"", out);
         sam_close(fpout);
         return -1;
@@ -2188,6 +2228,7 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
     key->tid1 = key->tid2 = INT32_MAX;
     key->pos1 = key->pos2 = HTS_POS_MAX;
     key->neg1 = key->neg2 = false;
+    key->cid  = "";
     key->mid  = "";
 
     // update values
@@ -2202,7 +2243,7 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
     if (!(b->core.flag & BAM_FUNMAP)) { // read is mapped, update coordinates
         key->tid1 = b->core.tid;
         key->neg1 = bam_is_rev(b);
-        key->pos1 = (key->neg1) ? unclipped_end(b) : unclipped_start(b);
+        key->pos1 = (key->neg1) ? unclipped_end(b, 0) : unclipped_start(b, 0);
     }
     if (b->core.flag & BAM_FPAIRED && !(b->core.flag & BAM_FMUNMAP)) { // mate is mapped, update coordinates
         char *cigar;
@@ -2217,7 +2258,14 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
         }
         key->tid2 = b->core.mtid;
         key->neg2 = bam_is_mrev(b);
-        key->pos2 = (key->neg2) ? unclipped_other_end(b->core.mpos, cigar) : unclipped_other_start(b->core.mpos, cigar);
+        key->pos2 = (key->neg2) ? unclipped_other_end(b->core.mpos, cigar, 0) : unclipped_other_start(b->core.mpos, cigar, 0);
+    }
+
+    if ((data = bam_aux_get(b, "CB"))) {
+        if (!(key->cid=bam_aux2Z(data))) {
+            fprintf(stderr, "[bam_sort] error: CB tag wrong type (not a string).\n");
+            return NULL;
+        }
     }
 
     if ((data = bam_aux_get(b, "MI"))) {
@@ -2258,9 +2306,10 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
 // 1. the earlier unclipped 5' coordinate of the read pair
 // 2. the higher unclipped 5' coordinate of the read pair
 // 3. library (from read group)
-// 4. the molecular identifier (if present)
-// 5. read name
-// 6. if unpaired, or if R1 has the lower coordinates of the pair
+// 4. the cellular barcode (CB tag, if present)
+// 5. the molecular identifier (MI tag, if present)
+// 6. read name
+// 7. if unpaired, or if R1 has the lower coordinates of the pair
 // Returns a value less than, equal to or greater than zero if a is less than,
 // equal to or greater than b, respectively.
 static inline int bam1_cmp_template_coordinate(const bam1_tag a, const bam1_tag b)
@@ -2279,6 +2328,7 @@ static inline int bam1_cmp_template_coordinate(const bam1_tag a, const bam1_tag 
     if (0 == retval) retval = key_a->neg1 == key_b->neg1 ? 0 : (key_a->neg1 ? -1 : 1);
     if (0 == retval) retval = key_a->neg2 == key_b->neg2 ? 0 : (key_a->neg2 ? -1 : 1);
     if (0 == retval) retval = strcmp(key_a->library, key_b->library);
+    if (0 == retval) retval = strcmp(key_a->cid, key_b->cid);
     if (0 == retval) retval = template_coordinate_key_compare_mid(key_a->mid, key_b->mid);
     if (0 == retval) retval = strcmp(key_a->name, key_b->name);
     if (0 == retval) retval = key_a->is_upper_of_pair == key_b->is_upper_of_pair ? 0 : (key_a->is_upper_of_pair ? 1 : -1);
@@ -2334,10 +2384,7 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
     fp = sam_open_format(fn, mode, fmt);
     if (fp == NULL) return -1;
     hts_set_opt(fp, HTS_OPT_BLOCK_SIZE, BAM_BLOCK_SIZE);
-    if (!no_pg && sam_hdr_add_pg((sam_hdr_t *)h, "samtools", "VN", samtools_version(),
-                                 arg_list ? "CL": NULL,
-                                 arg_list ? arg_list : NULL,
-                                 NULL)) {
+    if (samtools_add_pg_line((sam_hdr_t *)h, arg_list, no_pg)) {
         goto fail;
     }
     if (sam_hdr_write(fp, h) != 0) goto fail;
@@ -2635,6 +2682,8 @@ static int build_minhash_index(char *fn, int kmer, int window, int no_squash) {
             hashf = minhash(b, kmer, window, &pos, &end, NULL, 1, 0,
                             no_squash);
             k = kh_put(kmer, kmer_h, hashf, &ret);
+            if (ret < 0)
+                goto err;
             kh_value(kmer_h, k) = tpos+pos + (((uint64_t)!ret)<<UNIQ_BIT);
             pos = MAX(last_pos+kmer, pos+1);
             //pos++;  Slower, but indexes a bit better?
@@ -3349,7 +3398,7 @@ static int set_sort_order(sam_hdr_t *h, int mapped) {
   @param  prefix   prefix of the temporary files (prefix.NNNN.bam are written)
   @param  fnout    name of the final output file to be written
   @param  modeout  sam_open() mode to be used to create the final output file
-  @param  max_mem  approxiate maximum memory (very inaccurate)
+  @param  max_mem  approximate maximum memory (very inaccurate)
   @param  in_fmt   input file format options
   @param  out_fmt  output file format and options
   @param  arg_list    command string for PG line
@@ -3506,7 +3555,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             mem_full = 1;
         }
 
-        // Set the tag if sorting by tag, or the key for template cooridinate sorting
+        // Set the tag if sorting by tag, or the key for template coordinate sorting
         switch (g_sam_order) {
             case TagQueryName:
             case TagCoordinate:
@@ -3778,7 +3827,12 @@ int bam_sort(int argc, char *argv[])
                 break;
             }
         case 'T': kputs(optarg, &tmpprefix); break;
-        case 'l': level = atoi(optarg); break;
+        case 'l':
+            if (!parse_int_value(optarg, &level)) {
+                fprintf(stderr, "Invalid compression level\n");
+                sort_usage(stderr); ret = EXIT_FAILURE; goto sort_end;
+            }
+            break;
         case 'u': level = 0; break;
         case   1: no_pg = 1; break;
         case   2: sam_order = TemplateCoordinate; break;
@@ -3789,11 +3843,19 @@ int bam_sort(int argc, char *argv[])
             break;
         case 'H': no_squash = 0; break;
 
-        case 'w': window = atoi(optarg); break;
+        case 'w':
+            if (!parse_int_value(optarg, &window)) {
+                fprintf(stderr, "Invalid window\n");
+                sort_usage(stderr); ret = EXIT_FAILURE; goto sort_end;
+            }
+            break;
 
         case 'R': try_rev = false; break;
         case 'K':
-            minimiser_kmer = atoi(optarg);
+            if (!parse_int_value(optarg, &minimiser_kmer)) {
+                fprintf(stderr, "Invalid kmer\n");
+                sort_usage(stderr); ret = EXIT_FAILURE; goto sort_end;
+            }
             if (minimiser_kmer < 1)
                 minimiser_kmer = 1;
             else if (minimiser_kmer > 31)

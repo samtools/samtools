@@ -1,7 +1,7 @@
 /*  bam_ampliconclip.c -- loads amplicon primers from a BED file and cuts reads
                           from the 5' end.
 
-    Copyright (C) 2020-2024 Genome Research Ltd.
+    Copyright (C) 2020-2024, 2026 Genome Research Ltd.
 
     Authors: Andrew Whitwham <aw7@sanger.ac.uk>
              Rob Davies <rmd+git@sanger.ac.uk>
@@ -48,7 +48,7 @@ typedef enum {
 } clipping_type;
 
 typedef struct {
-    int add_pg;
+    int no_pg;
     int use_strand;
     int write_clipped;
     int mark_fail;
@@ -104,7 +104,7 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
     }
 
 
-    while (line.l = 0, kgetline(&line, (kgets_func *)hgets, fp) >= 0) {
+    while (line.l = 0, khgetline(&line, fp) >= 0) {
         line_count++;
         int hret;
 
@@ -147,6 +147,7 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
                 if (hts_resize(char **, num_refs + 1, &ref_list_sz, ref_list, 0) < 0) {
                     fprintf(stderr, "[amplicon] error: unable to allocate memory for ref name list.\n");
                     ret = 1;
+                    free(ref_name);
                     goto error;
                 }
                 (*ref_list)[num_refs++] = ref_name;
@@ -355,7 +356,7 @@ static int bam_trim_left(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     if (rec->l_data + 8 > rec_out->m_data) {
         uint8_t *new_data = realloc(rec_out->data, rec->l_data + 8);
         if (!new_data) {
-            fprintf(stderr, "[ampliconclip] error: could not allocate memoy for new bam record\n");
+            fprintf(stderr, "[ampliconclip] error: could not allocate memory for new bam record\n");
             return 1;
         }
         rec_out->data = new_data;
@@ -505,7 +506,7 @@ static int bam_trim_right(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     if (rec->l_data + 8 > rec_out->m_data) {
         uint8_t *new_data = realloc(rec_out->data, rec->l_data + 8);
         if (!new_data) {
-            fprintf(stderr, "[ampliconclip] error: could not allocate memoy for new bam record\n");
+            fprintf(stderr, "[ampliconclip] error: could not allocate memory for new bam record\n");
             return 1;
         }
         rec_out->data = new_data;
@@ -657,7 +658,9 @@ static inline int tag_original_data(bam1_t *orig, kstring_t *oa_tag) {
 
     // if there is an existing OA tag the new one gets appended to it
     if ((old_oa_tag = bam_aux_get(orig, "OA"))) {
-        res |= ksprintf(oa_tag, "%s", bam_aux2Z(old_oa_tag)) < 0;
+        char *old_oa = bam_aux2Z(old_oa_tag);
+        if (old_oa)
+            res |= ksprintf(oa_tag, "%s", old_oa) < 0;
     }
 
     if (orig->core.flag & BAM_FREVERSE)
@@ -727,10 +730,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
 
     ks_free(&str);
 
-    if (param->add_pg && sam_hdr_add_pg(header, "samtools", "VN", samtools_version(),
-                        param->arg_list ? "CL" : NULL,
-                        param->arg_list ? param->arg_list : NULL,
-                        NULL) != 0) {
+    if (samtools_add_pg_line(header, param->arg_list, param->no_pg) != 0) {
         fprintf(stderr, "[ampliconclip] warning: unable to add @PG line to header.\n");
     }
     if (sam_hdr_write(out, header) < 0) {
@@ -1083,7 +1083,7 @@ int amplicon_clip_main(int argc, char **argv) {
     htsThreadPool p = {NULL, 0};
     samFile *in = NULL, *out = NULL, *reject = NULL;
     clipping_type clipping = soft_clip;
-    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, 0, 1, 5, 0, NULL, NULL, NULL};
+    cl_param_t param = {0, 0, 0, 0, 0, -1, -1, 0, 0, 1, 5, 0, NULL, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -1112,7 +1112,7 @@ int amplicon_clip_main(int argc, char **argv) {
             case 'o': fnout = optarg; break;
             case 'f': param.stats_file = optarg; break;
             case 'u': wmode[2] = '0'; break;
-            case 1002: param.add_pg = 0; break;
+            case 1002: param.no_pg = 1; break;
             case 1003: clipping = soft_clip; break;
             case 1004: clipping = hard_clip; break;
             case 1005: param.use_strand = 1; break;

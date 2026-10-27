@@ -1,0 +1,13 @@
+@HD	VN:1.6	SO:unsorted	GO:query	SS:unsorted:template-coordinate
+@SQ	SN:ref1	LN:200
+@RG	ID:grp1	LB:lib1
+pair_D	99	ref1	20	60	3S10M	=	50	40	AAAAAAAAAAAAA	*************	RG:Z:grp1	MC:Z:3S10M
+pair_D	147	ref1	50	60	3S10M	=	20	-40	AAAAAAAAAAAAA	*************	RG:Z:grp1	MC:Z:3S10M
+pair_E	99	ref1	20	60	5H3S10M	=	50	40	AAAAAAAAAAAAA	*************	RG:Z:grp1	MC:Z:5H3S10M
+pair_E	147	ref1	50	60	5H3S10M	=	20	-40	AAAAAAAAAAAAA	*************	RG:Z:grp1	MC:Z:5H3S10M
+pair_A	99	ref1	20	60	10M	=	50	40	AAAAAAAAAA	**********	RG:Z:grp1	MC:Z:10M
+pair_A	147	ref1	50	60	10M	=	20	-40	AAAAAAAAAA	**********	RG:Z:grp1	MC:Z:10M
+pair_B	99	ref1	20	60	5H10M	=	50	40	AAAAAAAAAA	**********	RG:Z:grp1	MC:Z:5H10M
+pair_B	147	ref1	50	60	5H10M	=	20	-40	AAAAAAAAAA	**********	RG:Z:grp1	MC:Z:5H10M
+pair_C	99	ref1	20	60	10H10M	=	50	40	AAAAAAAAAA	**********	RG:Z:grp1	MC:Z:10H10M
+pair_C	147	ref1	50	60	10H10M	=	20	-40	AAAAAAAAAA	**********	RG:Z:grp1	MC:Z:10H10M

@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-import 1 "18 March 2026" "samtools-1.23.1" "Bioinformatics tools"
+.TH samtools-import 1 "27 October 2026" "samtools-1.25" "Bioinformatics tools"
 .SH NAME
 samtools import \- converts FASTQ files to unmapped SAM/BAM/CRAM
 .\"
@@ -186,6 +186,12 @@ or \fB*\fR to indicate all tags should be copied to the output,
 otherwise it is a comma-separated list of tag types to include with
 all others being discarded.
 
+.TP 8
+.B -E, --allow-empty
+By default import rejects empty files.  This is a safe-guard against a
+common pipeline failure of \fBsome-command | samtools import -o out.bam\fR
+where some-command fails (accompanied by a lack of \fBset -o pipefail\fR
+in the shell). Empty inputs can be permitted by specifying \fB-E\fR.
 
 .SH EXAMPLES
 Convert a single-ended fastq file to an unmapped CRAM.  Both of these

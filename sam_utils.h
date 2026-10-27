@@ -1,6 +1,6 @@
 /*  sam_utils.c -- to hold utility functions and types
 
-    Copyright (C) 2023 Genome Research Ltd.
+    Copyright (C) 2023, 2026 Genome Research Ltd.
 
     Author: Vasudeva Sarma <vasudeva.sarma@sanger.ac.uk>
 

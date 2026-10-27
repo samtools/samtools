@@ -1,6 +1,6 @@
 # Makefile for samtools, utilities for the Sequence Alignment/Map format.
 #
-#    Copyright (C) 2008-2022, 2024 Genome Research Ltd.
+#    Copyright (C) 2008-2022, 2024, 2026 Genome Research Ltd.
 #    Portions copyright (C) 2010-2012 Broad Institute.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -78,6 +78,7 @@ MISC_SCRIPTS = \
 	misc/fasta-sanitize.pl misc/interpolate_sam.pl misc/novo2sam.pl \
 	misc/plot-ampliconstats misc/plot-bamstats misc/psl2sam.pl \
 	misc/sam2vcf.pl misc/samtools.pl misc/seq_cache_populate.pl \
+	misc/seq_cache_populate.py \
 	misc/soap2sam.pl misc/wgsim_eval.pl misc/zoom2sam.pl
 
 TEST_PROGRAMS = \
@@ -111,7 +112,7 @@ include config.mk
 
 # If not using GNU make, you need to copy the version number from version.sh
 # into here.
-PACKAGE_VERSION = $(shell ./version.sh)
+PACKAGE_VERSION := $(shell ./version.sh)
 
 # Force version.h to be remade if $(PACKAGE_VERSION) has changed.
 version.h: $(if $(wildcard version.h),$(if $(findstring "$(PACKAGE_VERSION)",$(shell cat version.h)),,force))
@@ -121,7 +122,13 @@ version.h: $(if $(wildcard version.h),$(if $(findstring "$(PACKAGE_VERSION)",$(s
 # version.h: force
 #	echo '#define SAMTOOLS_VERSION "`git describe --always --dirty`"' > $@
 version.h:
-	echo '#define SAMTOOLS_VERSION "$(PACKAGE_VERSION)"' > $@
+	@if test 'x$(PACKAGE_VERSION)' != x ; then \
+		echo "echo '#define SAMTOOLS_VERSION "'"$(PACKAGE_VERSION)"'"' > $@" ; \
+		echo '#define SAMTOOLS_VERSION "$(PACKAGE_VERSION)"' > $@ ; \
+	else \
+		echo "Error: PACKAGE_VERSION is not defined.  Check version.sh works." 1>&2 ; \
+		false ; \
+	fi
 	echo '#define SAMTOOLS_CC "$(CC)"' >> $@
 	echo '#define SAMTOOLS_CPPFLAGS "$(CPPFLAGS)"' >> $@
 	echo '#define SAMTOOLS_CFLAGS "$(CFLAGS)"' >> $@
@@ -182,7 +189,7 @@ bam_mate.o: bam_mate.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_k
 bam_md.o: bam_md.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_kstring_h) $(htslib_thread_pool_h) $(sam_opts_h) $(samtools_h)
 bam_plbuf.o: bam_plbuf.c config.h $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
 bam_checksum.o: bam_checksum.c config.h $(htslib_sam_h) $(htslib_khash_h) $(htslib_kstring_h) $(htslib_hts_endian_h) $(sam_opts_h) $(sam_utils_h) $(samtools_h)
-bam_consensus.o: bam_consensus.c bam_consensus_tab.h config.h $(htslib_sam_h) $(htslib_hfile_h) $(htslib_faidx_h) $(htslib_thread_pool_h) $(htslib_cram_h) $(samtools_h) $(sam_opts_h) $(bam_plbuf_h) $(consensus_pileup_h)
+bam_consensus.o: bam_consensus.c bam_consensus_tab.h config.h $(htslib_sam_h) $(htslib_hfile_h) $(htslib_faidx_h) $(htslib_thread_pool_h) $(htslib_cram_h) $(samtools_h) $(sam_opts_h) $(bam_plbuf_h) $(consensus_pileup_h) $(bedidx_h)
 bam_plcmd.o: bam_plcmd.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstring_h) $(htslib_klist_h) $(htslib_khash_str2int_h) $(samtools_h) $(bedidx_h) $(sam_opts_h) $(sample_h) $(htslib_cram_h) $(bam_plbuf_h)
 bam_quickcheck.o: bam_quickcheck.c config.h $(htslib_hts_h) $(htslib_sam_h)
 bam_reheader.o: bam_reheader.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_cram_h) $(samtools_h)
@@ -201,13 +208,13 @@ bedcov.o: bedcov.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_thread_
 bedidx.o: bedidx.c config.h $(bedidx_h) $(htslib_ksort_h) $(htslib_kseq_h) $(htslib_khash_h) $(sam_utils_h)
 consensus_pileup.o: consensus_pileup.c config.h $(htslib_sam_h) $(consensus_pileup_h)
 cram_size.o: cram_size.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(htslib_kstring_h) $(htslib_khash_h) $(samtools_h) $(sam_opts_h) $(htslib_hfile_h)
-cut_target.o: cut_target.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(samtools_h) $(sam_opts_h)
+cut_target.o: cut_target.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(htslib_hts_alloc_h) $(samtools_h) $(sam_opts_h)
 dict.o: dict.c config.h $(htslib_khash_h) $(htslib_kseq_h) $(htslib_hts_h) $(samtools_h)
 faidx.o: faidx.c config.h $(htslib_faidx_h) $(htslib_hts_h) $(htslib_hfile_h) $(htslib_kstring_h) $(htslib_bgzf_h) $(htslib_thread_pool_h) $(sam_opts_h) $(samtools_h)
 padding.o: padding.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_faidx_h) $(sam_opts_h) $(samtools_h)
 phase.o: phase.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_kstring_h) $(sam_opts_h) $(samtools_h) $(htslib_hts_os_h) $(htslib_kseq_h) $(htslib_khash_h) $(htslib_ksort_h)
 reference.o: reference.c config.h $(htslib_sam_h) $(htslib_cram_h) $(samtools_h) $(sam_opts_h)
-sam_opts.o: sam_opts.c config.h $(sam_opts_h)
+sam_opts.o: sam_opts.c config.h $(sam_opts_h) $(samtools_h)
 sam_utils.o: sam_utils.c config.h $(sam_utils_h)
 sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_kstring_h) $(htslib_hfile_h) $(htslib_thread_pool_h) $(htslib_hts_expr_h) $(samtools_h) $(sam_opts_h) $(bam_h) $(bedidx_h) $(sam_utils_h)
 sample.o: sample.c config.h $(sample_h) $(htslib_khash_h)

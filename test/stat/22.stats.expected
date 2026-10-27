@@ -1,0 +1,5 @@
+SN	sequences:	20
+SN	reads duplicated:	8	# PCR or optical duplicate bit set
+SN	supplementary alignments:	4
+SN	total length:	2000	# ignores clipping
+SN	bases duplicated:	800

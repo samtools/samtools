@@ -1,6 +1,6 @@
 /*  bam_checksum.c -- produces checksums on SAM/BAM/CRAM/FASTA/FASTQ data
 
-    Copyright (C) 2024-2025 Genome Research Ltd.
+    Copyright (C) 2024-2026 Genome Research Ltd.
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
@@ -73,11 +73,16 @@ typedef struct {
     int compat;    // compatibility with bamseqchksum format
 } opts;
 
+typedef struct {
+    int major;
+    int minor;
+} version_number;
+
 /* ----------------------------------------------------------------------
  * Utility functions.  Possible candidates for moving to htslib?
  */
 
-// Note: qual+33 is a pain, but only for the benefit of compatability with
+// Note: qual+33 is a pain, but only for the benefit of compatibility with
 // biobambam's bamseqchksum.  It's also wrong for QUAL "*" as it triggers a
 // wraparound and turning from BAM's 0xff-run to ASCII makes no sense in a
 // checksum.
@@ -559,14 +564,14 @@ int checksum_bamseqchksum(opts *o, sums_t *all, sums_t *noRG, khash_t(chk) *h){
     return 0;
 }
 
-int checksum_report(char *fn, opts *o,
+int checksum_report(char *fn, opts *o, version_number *ver,
                     sums_t *all, sums_t *noRG, khash_t(chk) *h) {
     if (o->compat)
         return checksum_bamseqchksum(o, all, noRG, h);
 
     // headers
-    fprintf(o->fp, "# Checksum 1.0 for file:%s%s\n",
-            o->tabs ? "\t" : " ", fn);
+    fprintf(o->fp, "# Checksum %d.%d for file:%s%s\n",
+            ver->major, ver->minor, o->tabs ? "\t" : " ", fn);
     fprintf(o->fp, "# Aux tags:%s%s\n",
             o->tabs ? "\t" : "          ", o->tag_str);
     char *s=bam_flag2str(o->flag_mask);
@@ -613,7 +618,7 @@ int checksum_report(char *fn, opts *o,
     return 0;
 }
 
-int checksum(sam_global_args *ga, opts *o, char *fn) {
+int checksum(sam_global_args *ga, opts *o, version_number *ver, char *fn) {
     samFile *fp = NULL;
     sam_hdr_t *hdr = NULL;
     bam1_t *b = bam_init1();
@@ -727,11 +732,19 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
 
         // flag + seq + rnext + pnext + tlen
         if (o->check_mate) {
-            uint8_t mate[4+8+8];
-            u32_to_le(b->core.mtid,  mate);
-            u64_to_le(b->core.mpos,  mate+4);
-            u64_to_le(b->core.isize, mate+12);
-            c.mate = hts_crc32(c.seq, mate, 12);
+            if (ver->major >= 2) {
+                uint8_t mate[4+8+8];
+                u32_to_le(b->core.mtid,  mate);
+                u64_to_le(b->core.mpos,  mate+4);
+                u64_to_le(b->core.isize, mate+12);
+                c.mate = hts_crc32(c.seq, mate, sizeof(mate));
+            } else {
+                // this replicates the mistake in checksum v1.0
+                uint8_t mate[4+8+8];
+                u32_to_le(b->core.mtid,  mate);
+                u64_to_le(b->core.mpos,  mate+4);
+                c.mate = hts_crc32(c.seq, mate, 12); // mistake was here
+            }
         }
 
         // flag + seq + mapq + cigar
@@ -797,7 +810,7 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
     fp = NULL;
 
     // Report hashes
-    if (checksum_report(fn, o, &h32, &noRG, h) < 0)
+    if (checksum_report(fn, o, ver, &h32, &noRG, h) < 0)
         goto err;
 
     ret = 0;
@@ -824,7 +837,6 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
         }
         kh_destroy(chk, h);
     }
-
     return ret;
 }
 
@@ -835,9 +847,11 @@ int checksum(sam_global_args *ga, opts *o, char *fn) {
  */
 
 // Process an individual file, aggregating to s, noRG and h
-static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
+static int sums_parse(opts *o, version_number *ver, char *fn, sums_t *sums, sums_t *noRG,
                       khash_t(chk) *h) {
-    int ret = -1;
+    int ret = -1, minfields = 8;    //samtools style chksum
+    typedef enum hdrtype {HDR_NF, HDR_SAMCHKSUM, HDR_BAMBAMCHKSUM} hdrtype;
+    hdrtype hdr = HDR_NF;
     FILE *fp;
     if ((fp = fopen(fn, "r")) == NULL) {
         perror(fn);
@@ -852,12 +866,14 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
     } header[11] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, -1};
     crcs_t crcs = {1,1,1,1,1,1,1};
 
-    while (line.l = 0, kgetline(&line, (kgets_func *)fgets, fp) >= 0) {
+    while (line.l = 0, kfgetline(&line, fp) >= 0) {
         if (strncmp(line.s, "# Checksum", 10) == 0) {
             int major, minor;
             if (sscanf(line.s, "# Checksum %d.%d", &major, &minor) == 2) {
-                if (major != 1 || minor != 0) {
-                    fprintf(stderr, "Unsupported checksum output version\n");
+                if (major != ver->major || minor != ver->minor) {
+                    fprintf(stderr, "Not current checksum output version:"
+                     "found %d.%d, expected %d.%d\n", major, minor,
+                     ver->major, ver->minor);
                     goto err;
                 }
             }
@@ -869,6 +885,11 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
             int n, i = 0, idx;
             char *ptr = line.s+2;
             char token[20];
+            if (hdr != HDR_NF) {
+                fprintf(stderr, "Invalid header, repeat of header line\n");
+                goto err;
+            }
+            hdr = HDR_SAMCHKSUM;    //sam style
             while ((n = sscanf(ptr, "%19s%n", token, &idx)) == 1) {
                 if (strcmp(token, "Group") == 0)
                     header[i] = H_GROUP;
@@ -892,7 +913,7 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
                     header[i] = H_MATE, o->check_mate = 1;
                 else if (strcmp(token, "combined") == 0)
                     header[i] = H_COMBINED;
-                else  {
+                else {
                     fprintf(stderr, "Unrecognised header token '%s'\n", token);
                     goto err;
                 }
@@ -908,10 +929,20 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
         if (strncmp(line.s, "# Aux", 5) == 0) {
             int idx;
             char c;
-            if (sscanf(line.s, "# Aux tags: %c%n", &c, &idx) == 1)
-                if (!o->tag_str)
+            if (sscanf(line.s, "# Aux tags: %c%n", &c, &idx) == 1) {
+                if (!o->tag_str) {
                     o->tag_free = o->tag_str = strdup(line.s + idx-1);
-
+                    if (!o->tag_str) {
+                        fprintf(stderr, "Out of memory\n");
+                        goto err;
+                    }
+                } else {  //check for matching tags
+                    if (strcmp(o->tag_str, line.s + idx - 1)) {
+                        fprintf(stderr, "Aux tag mismatch, %s - %s\n", o->tag_str, line.s + idx - 1);
+                        goto err;
+                    }
+                }
+            }
             continue;
         }
 
@@ -920,6 +951,68 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
             char c;
             if (sscanf(line.s, "# BAM flags: %c%n", &c, &idx) == 1)
                 o->flag_mask = bam_str2flag(line.s + idx-1);
+
+            continue;
+        }
+
+        if (strncmp(line.s, "###\t", 4) == 0) { //bambam style checksum
+            int n, i = 0, idx;
+            char *ptr = line.s;
+            char token[50];
+            if (hdr != HDR_NF) {
+                fprintf(stderr, "Invalid header, repeat of header line\n");
+                goto err;
+            }
+            hdr = HDR_BAMBAMCHKSUM;    //biobambam style
+            minfields = 7;
+            while ((n = sscanf(ptr, "%49s%n", token, &idx)) == 1) {
+                if (strcmp(token, "###") == 0)
+                    header[i] = H_GROUP;
+                else if (strcmp(token, "set") == 0)
+                    header[i] = H_QC;
+                else if (strcmp(token, "count") == 0)
+                    header[i] = H_COUNT;
+                else if (strcmp(token, "b_seq") == 0)
+                    header[i] = H_SEQ;
+                else if (strcmp(token, "name_b_seq") == 0)
+                    header[i] = H_NAME;
+                else if (strcmp(token, "b_seq_qual") == 0)
+                    header[i] = H_QUAL;
+                else if (strncmp(token, "b_seq_tags(", 11) == 0) {
+                    char *tag = NULL;
+                    header[i] = H_AUX;
+                    if (!o->tag_str) {
+                        tag = strdup(token+11);
+                        if (tag) {
+                            size_t ln = strlen(tag);
+                            if (ln) {
+                                tag[ln-1] = '\0';   //remove ')'
+                            }
+                            o->tag_free = o->tag_str = tag;
+                        } else {
+                            fprintf(stderr, "Out of memory\n");
+                            goto err;
+                        }
+                    } else {    //check for matching tags
+                        tag = token + 11;
+                        size_t ln = strlen(tag);
+                        if (ln) {
+                            tag[ln-1] = '\0';   //remove ')'
+                        }
+                        if (strcmp(o->tag_str, tag)) {
+                            fprintf(stderr, "Aux tag mismatch, %s - %s\n", o->tag_str, tag);
+                            goto err;
+                        }
+                    }
+                } else  {
+                    fprintf(stderr, "Unrecognised header token '%s'\n", token);
+                    goto err;
+                }
+
+                i++;
+                ptr += idx;
+            }
+            nheader = i;
 
             continue;
         }
@@ -937,6 +1030,10 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
         int nf;
         for (nf = 0; nf < 11; nf++) {
             int idx;
+            if (!nf && hdr == HDR_BAMBAMCHKSUM && *ptr == '\t') {   //bambam noRG case
+                col[0][0] = '\0';
+                continue;   //'\t' ll be discarded in next read!
+            }
             int n = sscanf(ptr, "%127s%n", col[nf], &idx);
             if (n <= 0)
                 break;
@@ -948,7 +1045,7 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
         }
 
         // Sanity check that header and rows match
-        if (nf < 8 || nf != nheader) {
+        if (nf < minfields || nf != nheader) {
             fprintf(stderr, "Incorrect number of columns in line: %s\n",
                     line.s);
             goto err;
@@ -1010,7 +1107,7 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
         }
 
         // Add group entry
-        if (strcmp(col[0], "-") == 0) {
+        if (strcmp(col[0], "-") == 0 || col[0][0] == '\0') {    //no RG in sam/bambam o/p
             sums_update_row(qc, noRG, &crcs, 0, count);
         } else {
             int kret;
@@ -1042,24 +1139,24 @@ static int sums_parse(opts *o, char *fn, sums_t *sums, sums_t *noRG,
 }
 
 // Combine multiple checksum files together and report the merged stats
-int combine(opts *o, int argc, char **argv) {
+int combine(opts *o, version_number *ver, int argc, char **argv) {
     int ret = -1;
     sums_t s, noRG;
     sums_init(&s);
     sums_init(&noRG);
 
-    free(o->tag_free); // Probably NULL, but just incase
+    free(o->tag_free); // Probably NULL, but just in case
     o->tag_free = o->tag_str = NULL;
     khash_t(chk) *h = kh_init(chk);
     if (!h)
         goto err;
     for (int i = 0; i < argc; i++) {
-        if (sums_parse(o, argv[i], &s, &noRG, h) < 0) {
+        if (sums_parse(o, ver, argv[i], &s, &noRG, h) < 0) {
             fprintf(stderr, "Failed to parse checksum file '%s'\n", argv[i]);
             goto err;
         }
     }
-    checksum_report("merge", o, &s, &noRG, h);
+    checksum_report("merge", o, ver, &s, &noRG, h);
 
     ret = 0;
  err:
@@ -1094,7 +1191,7 @@ void usage_exit(FILE *fp, int ret) {
   -O, --in-order              Use order-specific checksumming [off]\n\
   -P, --check-pos             Also checksum CHR / POS [off]\n\
   -C, --check-cigar           Also checksum MAPQ / CIGAR [off]\n\
-  -M, --check_mate            Also checksum PNEXT / RNEXT / TLEN [off]\n\
+  -M, --check-mate            Also checksum PNEXT / RNEXT / TLEN [off]\n\
   -z, --sanitize FLAGS        Perform sanity checks and fix records [off]\n\
   -N, --count INT             Stop after INT number of records [0]\n\
   -o, --output FILE           Write report to FILE [stdout]\n\
@@ -1103,7 +1200,8 @@ void usage_exit(FILE *fp, int ret) {
   -a, --all                   Check all: -PCMOc -b 0xfff -f0 -F0 -z all,cigarx\n\
   -T, --tabs                  Format output as tab delimited text\n\
   -m, --merge FILE            Merge checksum output (-o opt) files\n\
-  -B, --bamseqchksum          Report in bamseqchksum format\n");
+  -B, --bamseqchksum          Report in bamseqchksum format\n\
+  -V  --version-1             Use version 1 checksums\n");
     fprintf(fp, "\nGlobal options:\n");
     sam_global_opt_help(fp, "-.---@--");
     exit(ret);
@@ -1188,14 +1286,20 @@ int main_checksum(int argc, char **argv) {
         {"tabs",          no_argument,       NULL, 'T'},
         {"merge",         no_argument,       NULL, 'm'},
         {"bamseqchksum",  no_argument,       NULL, 'B'},
+        {"version-1",     no_argument,       NULL, 'V'},
         {NULL, 0, NULL, 0}
+    };
+
+    version_number version = {
+        .major = 2,
+        .minor = 0,
     };
 
     if (argc == 1 && isatty(STDIN_FILENO))
         usage_exit(stdout, EXIT_SUCCESS);
 
     int c;
-    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:aN:vqo:TmB",
+    while ((c = getopt_long(argc, argv, "@:f:F:t:cPCMOb:z:aN:vqo:TmBV",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 'O':
@@ -1283,6 +1387,11 @@ int main_checksum(int argc, char **argv) {
             }
             break;
 
+        case 'V':
+            version.major = 1;
+            version.minor = 0;
+            break;
+
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0)
                 break;
@@ -1299,13 +1408,13 @@ int main_checksum(int argc, char **argv) {
 
     int ret = 0;
     if (opts.merge) {
-        ret = combine(&opts, argc - optind, argv+optind);
+        ret = combine(&opts, &version, argc - optind, argv+optind);
     } else {
         if (argc-optind) {
             while (optind < argc)
-                ret |= checksum(&ga, &opts, argv[optind++]) < 0;
+                ret |= checksum(&ga, &opts, &version, argv[optind++]) < 0;
         } else {
-            ret = checksum(&ga, &opts, "-") < 0;
+            ret = checksum(&ga, &opts, &version, "-") < 0;
         }
     }
 

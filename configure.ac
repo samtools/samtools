@@ -59,6 +59,13 @@ dnl Flags to treat warnings as errors.  These need to be applied to CFLAGS
 dnl later as they can interfere with some of the tests (notably AC_SEARCH_LIBS)
 HTS_PROG_CC_WERROR(hts_late_cflags)
 
+# Define _XOPEN_SOURCE (for strdup, etc.) unless the user has already done
+# so via $CPPFLAGS.
+AC_CHECK_DECL([_XOPEN_SOURCE], [],
+  [AC_DEFINE([_XOPEN_SOURCE], [700], [Specify X/Open requirements])],
+  [])
+
+
 AC_SYS_LARGEFILE
 
 AX_WITH_HTSLIB

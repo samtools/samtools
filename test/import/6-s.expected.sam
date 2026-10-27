@@ -1,0 +1,2 @@
+@HD	VN:1.6	SO:unsorted	GO:query
+@CO	Reverse with: samtools fastq -n -o paired.fastq
