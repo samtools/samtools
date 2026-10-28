@@ -250,6 +250,8 @@ hts_pos_t unclipped_other_end(int64_t op, char *cigar, int include_hard_clips) {
             num = 1;
         }
 
+        if (!*c) break; // number without a letter
+
         switch (*c) {
             case 'M':
             case 'D':
