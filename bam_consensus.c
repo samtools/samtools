@@ -2039,6 +2039,7 @@ static hts_pos_t update_ref(ctx *c, int tid) {
     thread_data_t *tdata = thread_data(opts);
     if (tid == tdata->ref_tid && tdata->ref) {
         c->ref = tdata->ref;
+        c->ref_len = tdata->ref_len;
         return tdata->ref_len;
     }
 
@@ -2124,6 +2125,12 @@ static int empty_pileup2(ctx *c, sam_hdr_t *h, int tid, int threaded,
     char *rseq = NULL;
     if (opts->ref_fn && (err |= (update_ref(c, tid) <= 0)) == 0)
         rseq = c->ref;
+
+    if (rseq && end > c->ref_len) {
+        hts_log_warning("SQ header for '%s' has length larger than fasta"
+                        " file; clipping", name);
+        end = c->ref_len;
+    }
 
     if (threaded) {
         kstring_t *ks = &c->ks_pileup;
@@ -2375,7 +2382,9 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
                         if ((rlen = update_ref(c, c->last_tid)) < 0)
                             return -1;
                         for (i = 0; i < N; i++) {
-                            seq->s[seq->l++] = c->ref[c->last_pos+i];
+                            seq->s[seq->l++] = c->last_pos+i < c->ref_len
+                                ? c->ref[c->last_pos+i]
+                                : 'N';
                             qual->s[qual->l++] = opts->ref_qual + '!';
                         }
                     } else {
@@ -2433,8 +2442,16 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
                 return -1;
             if (c->ref) {
                 // last bases of the previous reference
-                memcpy(seq->s + seq->l, c->ref + c->last_pos,
-                       pos - (c->last_pos+1));
+                if (pos < c->ref_len) {
+                    memcpy(seq->s + seq->l, c->ref + c->last_pos,
+                           pos - (c->last_pos+1));
+                } else {
+                    // Slow and safe
+                    hts_pos_t p;
+                    size_t l=seq->l;
+                    for (p = c->last_pos; p < pos; p++)
+                        seq->s[l++] = p < c->ref_len ? c->ref[p] : 'N';
+                }
                 if (opts->fmt == FASTQ)
                     memset(qual->s + qual->l, opts->ref_qual + '!',
                            pos - (c->last_pos+1));
@@ -2509,7 +2526,15 @@ int ref_or_Ns(ctx *c, kstring_t *seq, kstring_t *qual,
         hts_pos_t rlen;
         if ((rlen = update_ref(c, c->tid)) < 0)
             return -1;
-        memcpy(seq->s + seq->l, &c->ref[pos], Nlen);
+        if (pos + Nlen < rlen) {
+            memcpy(seq->s + seq->l, &c->ref[pos], Nlen);
+        } else {
+            // Slow and safe
+            hts_pos_t p;
+            size_t l=seq->l;
+            for (p = pos; p < pos+Nlen; p++)
+                seq->s[l++] = p < c->ref_len ? c->ref[p] : 'N';
+        }
         seq->s[seq->l += Nlen] = 0;
         if (opts->fmt == FASTQ) {
             memset(qual->s + qual->l, opts->ref_qual + '!', Nlen);
@@ -3037,7 +3062,7 @@ int pileup_loop_serial(consensus_opts *opts) {
                         goto err;
                     while (pos++ < len) {
                         c.ks_ins_seq.s [c.ks_ins_seq.l++]  =
-                            c.ref ? c.ref[pos-1] : 'N';
+                            c.ref && pos-1 < c.ref_len ? c.ref[pos-1] : 'N';
                         c.ks_ins_qual.s[c.ks_ins_qual.l++] =
                             (c.ref ? opts->ref_qual : 0) + '!';
                     }
