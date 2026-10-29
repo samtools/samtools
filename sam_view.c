@@ -40,6 +40,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/hfile.h"
 #include "htslib/thread_pool.h"
 #include "htslib/hts_expr.h"
+#include "htslib/hts_alloc.h"
 #include "samtools.h"
 #include "sam_opts.h"
 #include "bam.h" // for bam_get_library and bam_remove_B
@@ -84,7 +85,7 @@ typedef struct samview_settings {
     auxhash_t keep_tag;
 
     hts_idx_t *hts_idx;
-    sam_hdr_t *header;
+    sam_hdr_t *header, *header_filt;
     samFile *in, *out, *un_out;
     int64_t count;
     int64_t processed;
@@ -97,6 +98,8 @@ typedef struct samview_settings {
     int count_rf; // CRAM_OPT_REQUIRED_FIELDS for view -c
     int exclude_no_rg;
     int remove_ur;
+    int filter_sq;
+    int *tid_map; // if filtered, maps old to new SQ lines
 } samview_settings_t;
 
 // Copied from htslib/sam.c.
@@ -722,21 +725,29 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
 static inline int process_one_record(samview_settings_t *conf, bam1_t *b,
                                      int *write_error) {
     conf->processed++;
+
+    if (conf->tid_map && b->core.tid >= 0)
+        b->core.tid  = conf->tid_map[b->core.tid];
+    if (conf->tid_map && b->core.mtid >= 0)
+        b->core.mtid = conf->tid_map[b->core.mtid];
+
+    sam_hdr_t *hdr_out = conf->header_filt ? conf->header_filt : conf->header;
+
     if (conf->sanitize)
-        if (bam_sanitize(conf->header, b, conf->sanitize) < 0)
+        if (bam_sanitize(hdr_out, b, conf->sanitize) < 0)
             return -1;
 
     int p;
-    if ((p = process_aln(conf->header, b, conf)) < 0) {
+    if ((p = process_aln(hdr_out, b, conf)) < 0) {
         // error
         return -1;
     } else if (p == 0) {
         // emit read
         if (!conf->is_count) {
             change_flag(b, conf);
-            if (adjust_tags(conf->header, b, conf) != 0)
+            if (adjust_tags(hdr_out, b, conf) != 0)
                 return -1;
-            if (check_sam_write1(conf->out, conf->header,
+            if (check_sam_write1(conf->out, hdr_out,
                                  b, conf->fn_out, write_error) < 0) {
                 return -1;
             }
@@ -756,15 +767,15 @@ static inline int process_one_record(samview_settings_t *conf, bam1_t *b,
         }
 
         int ret = conf->un_out
-            ? check_sam_write1(conf->un_out, conf->header,
+            ? check_sam_write1(conf->un_out, hdr_out,
                                b, conf->fn_un_out, write_error)
-            : check_sam_write1(conf->out, conf->header,
+            : check_sam_write1(conf->out, hdr_out,
                                b, conf->fn_out, write_error);
         if (ret < 0)
             return -1;
     } else {
         if (conf->un_out) {
-            if (check_sam_write1(conf->un_out, conf->header,
+            if (check_sam_write1(conf->un_out, hdr_out,
                                  b, conf->fn_un_out, write_error) < 0) {
                 return -1;
             }
@@ -875,6 +886,98 @@ static int write_counts_to_file(samview_settings_t *settings) {
     return ret;
 }
 
+// Wrap around bam_name2id() to get the right signature for hts_name2id_f
+static int bam_name2id_wrapper(void *vhdr, const char *ref) {
+    return bam_name2id((sam_hdr_t *) vhdr, ref);
+}
+
+/*
+ * Filters a SAM header to keep only SQ that are mentioned either in the specified
+ * BED file or in command line argument regions.
+ *
+ * Returns 0 on success,
+ *        -1 on failure
+ */
+int filter_sq(samview_settings_t *settings, char **regs, int nregs) {
+    strhash_t sqhash = NULL;
+    sam_hdr_t *hdr = sam_hdr_dup(settings->header);
+    if (!hdr)
+        return -1;
+    settings->header_filt = hdr;
+
+    settings->tid_map = hts_malloc_p(sizeof(int), sam_hdr_nref(hdr));
+    if (!settings->tid_map)
+        goto err;
+
+    if (!(sqhash = kh_init(str)))
+        goto err;
+
+    // Regions
+    int unmap_reg = 0;
+    for (int i = 0 ; i < nregs; i++) {
+        int tid, ret;
+        hts_pos_t beg, end;
+
+        if (strcmp("*", regs[i]) == 0) {
+            unmap_reg = 1;
+            continue;
+        }
+
+        if (!hts_parse_region(regs[i], &tid, &beg, &end,
+                              bam_name2id_wrapper, hdr, 0)) {
+            // We'll generate a warning elsewhere: "unknown reference"
+            continue;
+        }
+
+        const char *chr = sam_hdr_tid2name(hdr, tid);
+        kh_put(str, sqhash, chr, &ret);
+        if (ret < 0)
+            goto err;
+    }
+
+    // BED file
+    if (settings->bed) {
+        int nrl;
+        hts_reglist_t *rl = bed_reglist(settings->bed, 0, &nrl);
+        if (!rl) {
+            print_error("view", "Failed to process BED region list");
+            goto err;
+        }
+        for (int i = 0; i < nrl; i++) {
+            int ret;
+            if (kh_put(str, sqhash, rl[i].reg, &ret) < 0) {
+                hts_reglist_free(rl, nrl);
+                goto err;
+            }
+        }
+        hts_reglist_free(rl, nrl);
+    }
+
+    // Filter SQ lines
+    if ((kh_size(sqhash) > 0 || unmap_reg)
+        && sam_hdr_remove_lines(hdr, "SQ", "SN", sqhash) < 0) {
+        print_error("view", "Failed to remove header SQ lines");
+        goto err;
+    }
+
+    // Map old to new "tid" values
+    int nref = sam_hdr_nref(settings->header);
+    for (int i = 0; i < nref; i++) {
+        char *rname = settings->header->target_name[i];
+        int tid = sam_hdr_name2tid(settings->header_filt, rname);
+        settings->tid_map[i] = tid;
+    }
+
+    kh_destroy(str, sqhash);
+    return 0;
+
+ err:
+    print_error("view", "--filter-sq failure");
+    if (sqhash)
+        kh_destroy(str, sqhash);
+    return -1;
+}
+
 int main_samview(int argc, char *argv[])
 {
     samview_settings_t settings;
@@ -951,6 +1054,7 @@ int main_samview(int argc, char *argv[])
         {"with-header", no_argument, NULL, 'h'},
         {"sanitize", required_argument, NULL, 'z'},
         {"remove-ur", no_argument, NULL, LONGOPT('U')},
+        {"filter-sq", no_argument, NULL, LONGOPT('Q')},
         {NULL, 0, NULL, 0}
     };
 
@@ -1300,6 +1404,10 @@ int main_samview(int argc, char *argv[])
         case LONGOPT('U'):
             settings.remove_ur = 1; break;
 
+        case LONGOPT('Q'):
+            settings.filter_sq = 1;
+            break;
+
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
                 return usage(stderr, EXIT_FAILURE, 0);
@@ -1410,6 +1518,29 @@ int main_samview(int argc, char *argv[])
         settings.subsam_seed = rand();
     }
 
+    // Initialize BAM/CRAM index
+    char **regs = NULL;
+    int nregs = 0;
+    if ( has_index_file && optind <= argc - 2 ) {
+        regs = optind < argc-2 ? &argv[optind+2] : NULL;
+        nregs = argc - optind - 2;
+        settings.fn_idx_in = argv[optind+1];
+    } else if (!has_index_file && optind < argc - 1 ) {
+        regs = &argv[optind+1];
+        nregs = argc - optind - 1;
+    } else if ( has_index_file && argc-optind < 2) {
+        print_error("view", "Incorrect number of arguments for -X option. Aborting.");
+        ret = 1;
+        goto view_end;
+    }
+
+    if (settings.filter_sq) {
+        if (filter_sq(&settings, regs, nregs) < 0) {
+            ret = 1;
+            goto view_end;
+        }
+    }
+
     if (!settings.is_count) {
         if ((settings.out = sam_open_format(settings.fn_out? settings.fn_out : "-", out_mode, &ga.out)) == 0) {
             print_error_errno("view", "failed to open \"%s\" for writing", settings.fn_out? settings.fn_out : "standard output");
@@ -1425,13 +1556,17 @@ int main_samview(int argc, char *argv[])
         }
         autoflush_if_stdout(settings.out, settings.fn_out);
 
+        sam_hdr_t *hdr_out = settings.header_filt
+            ? settings.header_filt
+            : settings.header;
+
         if (!no_pg) {
             if (!(arg_list = stringify_argv(argc+1, argv-1))) {
                 print_error("view", "failed to create arg_list");
                 ret = 1;
                 goto view_end;
             }
-            if (samtools_add_pg_line(settings.header, arg_list, 0)) {
+            if (samtools_add_pg_line(hdr_out, arg_list, 0)) {
                 print_error("view", "failed to add PG line to the header");
                 ret = 1;
                 goto view_end;
@@ -1446,7 +1581,7 @@ int main_samview(int argc, char *argv[])
         if (ga.write_index || is_header ||
             out_mode[1] == 'b' || out_mode[1] == 'c' ||
             (ga.out.format != sam && ga.out.format != unknown_format))  {
-            if (sam_hdr_write(settings.out, settings.header) != 0) {
+            if (sam_hdr_write(settings.out, hdr_out) != 0) {
                 fprintf(stderr, "[main_samview] failed to write the SAM header\n");
                 ret = 1;
                 goto view_end;
@@ -1476,7 +1611,7 @@ int main_samview(int argc, char *argv[])
             if (ga.write_index || is_header ||
                 out_un_mode[1] == 'b' || out_un_mode[1] == 'c' ||
                 (ga.out.format != sam && ga.out.format != unknown_format))  {
-                if (sam_hdr_write(settings.un_out, settings.header) != 0) {
+                if (sam_hdr_write(settings.un_out, hdr_out) != 0) {
                     fprintf(stderr, "[main_samview] failed to write the SAM header\n");
                     ret = 1;
                     goto view_end;
@@ -1514,21 +1649,6 @@ int main_samview(int argc, char *argv[])
     if (is_header_only) goto view_end; // no need to print alignments
 
 
-    // Initialize BAM/CRAM index
-    char **regs = NULL;
-    int nregs = 0;
-    if ( has_index_file && optind <= argc - 2 ) {
-        regs = optind < argc-2 ? &argv[optind+2] : NULL;
-        nregs = argc - optind - 2;
-        settings.fn_idx_in = argv[optind+1];
-    } else if (!has_index_file && optind < argc - 1 ) {
-        regs = &argv[optind+1];
-        nregs = argc - optind - 1;
-    } else if ( has_index_file && argc-optind < 2) {
-        print_error("view", "Incorrect number of arguments for -X option. Aborting.");
-        ret = 1;
-        goto view_end;
-    }
     if (regs)
         settings.count_rf |= SAM_POS | SAM_RNAME | SAM_CIGAR;
 
@@ -1653,6 +1773,10 @@ view_end:
 
     aux_list_free(&settings);
 
+    free(settings.tid_map);
+    if (settings.header_filt)
+        sam_hdr_destroy(settings.header_filt);
+
     return ret;
 }
 
@@ -1680,6 +1804,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "                             then write to output file.\n"
 "  -P, --fetch-pairs          Retrieve complete pairs even when outside of region\n"
 "      --remove-ur            Remove the UR tags from SQ header lines.\n"
+"      --filter-sq            Remove SQ lines not specified in query region(s)\n"
 "\n"
 "Input options:\n"
 "  -t, --fai-reference FILE   FILE listing reference names and lengths\n"
