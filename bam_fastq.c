@@ -1303,7 +1303,7 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
         }
 
         // Prefer a copy of the read that has base qualities
-        int b_score = bam_get_qual(b[n])[0] != 0xff? 2 : 1;
+        int b_score = b[n]->core.l_qseq && bam_get_qual(b[n])[0] != 0xff? 2 : 1;
         readpart rp = which_readpart(b[n]);
         if (score[rp] < b_score) {
             score[rp] = b_score;
