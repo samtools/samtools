@@ -620,44 +620,77 @@ int trim_MM(bam1_t *pre, bam1_t *cur, int end5, int end3,
             uint8_t *MM, uint8_t *ML, uint8_t *MN) {
     // Count number of bases
     int counts5[16] = {0}, counts3[16] = {0};
+    uint8_t *tag_end = cur->data + cur->l_data;
+
+    static const int rc[16] = {0,8,4,12,2,10,6,14,1,9,5,13,3,11,7,15};
+    int rev = pre->core.flag & BAM_FREVERSE, len = pre->core.l_qseq;
+#   define BASE(i) (rev ? rc[bam_seqi(seq, len-1-(i))] : bam_seqi(seq, (i)))
 
     uint8_t *seq = bam_get_seq(pre);
     int i;
-    for (i = 0; i < end5; i++)
-        counts5[bam_seqi(seq, i)]++;
+    for (i = 0; i < end5; i++) {
+        counts5[BASE(i)]++;
+        counts5[15] += BASE(i) != 15; // ACGT -> N
+    }
     memcpy(counts3, counts5, 16 * sizeof(*counts3));
-    for (; i < pre->core.l_qseq - end3; i++)
-        counts3[bam_seqi(seq, i)]++;
+    for (; i < pre->core.l_qseq - end3; i++) {
+        counts3[BASE(i)]++;
+        counts3[15] += BASE(i) != 15; // ACGT -> N
+    }
 
     // "p" is position in pre.
     // "q" is position in cur.
     // Hence move up "p" to start and copy from there to "q".
-    uint8_t *MMp, *MLp, *MMq = NULL, *MLq = NULL;
+    uint8_t *MMp, *MLp, *MMq = NULL, *MLq = NULL, *MLp_end;
     if (ML && ML[0] == 'B' && ML[1] == 'C') {
+        uint32_t ML_len = le_to_u32(ML+2);
         MLp = ML+6;
+        MLp_end = MLp + ML_len;
     } else {
-        ML = MLp = NULL;
+        ML = MLp = MLp_end = NULL;
     }
     MMq = MM+1;
     MLq = MLp;
     for (MMp = MM+1; *MMp; ) {
         int fundamental = seq_nt16_table[*MMp];
-        while (*MMp && *MMp != ',')
+
+        // Minimal parsing of MM tag to identify the stride.  Ie
+        // 1 for C+m and 2 for C+mh.
+        *MMq++ = *MMp++;
+        if (*MMp == '+' || *MMp == '-')
             *MMq++ = *MMp++;
-        if (*MMp)
+        int stride = 1;
+        if (isalpha(*MMp)) {
+            stride = 0;
+            while (*MMp && *MMp != ',' && *MMp != ';') {
+                *MMq++ = *MMp++;
+                stride++;
+            }
+        } else {
+            while (*MMp && *MMp != ',' && *MMp != ';')
+                *MMq++ = *MMp++;
+        }
+
+        if (*MMp && *MMp != ';')
             *MMq++ = *MMp++;
 
         // Now on comma separated list for MM and BC array for ML. Skip
         int n = 0;
-        while (*MMp != ';' && n < counts5[fundamental]) {
+        while (*MMp && *MMp != ';' && n < counts5[fundamental]) {
             char *endptr;
             long delta = strtol((char *)MMp, &endptr, 10);
+
+            if (ML && MLp >= MLp_end) {
+                print_error("fixmate", "Incorrect ML length");
+                goto err;
+            }
+
             if (counts5[fundamental] - n > delta) {
                 // Skip entire delta in MM and ML.
                 // Eg counts[]=10, MM=3,10 ML=<10><20> => MM=10 ML=<20>
                 n += delta+1;
-                if(ML) MLp++;
-            } else if (counts3[fundamental] > counts5[fundamental]) {
+                if(ML) MLp+=stride;
+            } else if (counts3[fundamental] -n > delta) {
                 // Shrink delta, writing MM and ML is unchanged.
                 // Eg counts[]=3, MM=10,4 ML=<10><20> => MM=7,4 ML=<10><20>
                 char num[50];
@@ -667,8 +700,11 @@ int trim_MM(bam1_t *pre, bam1_t *cur, int end5, int end3,
                 MMq += l;
                 *MMq++ = *endptr;
                 n += delta+1;
-                if (ML)
-                    *MLq++ = *MLp++;
+                if (ML && MLp+stride <= MLp_end) {
+                    memcpy(MLq, MLp, stride);
+                    MLq += stride;
+                    MLp += stride;
+                }
             } else {
                 // next base mod is on boundary of 3' clip point
                 break;
@@ -682,21 +718,30 @@ int trim_MM(bam1_t *pre, bam1_t *cur, int end5, int end3,
         }
 
         // Copy
-        while (*MMp != ';' && n < counts3[fundamental]) {
+        while (*MMp && *MMp != ';' && n < counts3[fundamental]) {
             char *endptr;
             long delta = strtol((char *)MMp, &endptr, 10);
+
+            if (ML && MLp >= MLp_end) {
+                print_error("fixmate", "Incorrect ML length");
+                goto err;
+            }
+
             if (counts3[fundamental] - n > delta) {
                 // Copy entire delta in MM and ML including [,;]
                 memmove(MMq, MMp, (uint8_t *)endptr - MMp + 1);
                 MMq += (uint8_t *)endptr - MMp + 1;
                 n += delta+1;
-                if (ML)
-                    *MLq++ = *MLp++;
+                if (ML && MLp+stride <= MLp_end) {
+                    memcpy(MLq, MLp, stride);
+                    MLq += stride;
+                    MLp += stride;
+                }
             } else {
                 // Next mod is into 3' cutoff, so can terminate MM/ML now
                 n = counts3[fundamental];
                 if (ML)
-                    MLp++;
+                    MLp+=stride;
             }
 
             MMp = (uint8_t *)endptr;
@@ -707,21 +752,35 @@ int trim_MM(bam1_t *pre, bam1_t *cur, int end5, int end3,
 
         // Skip
         while (*MMp && *MMp != ';') {
+            if (ML && MLp >= MLp_end) {
+                print_error("fixmate", "Incorrect ML length");
+                goto err;
+            }
+
             while (*MMp && *MMp != ',' && *MMp != ';')
                 MMp++;
             if (*MMp == ',')
                 MMp++;
 
             if (ML)
-                MLp++;
+                MLp+=stride;
         }
-        MMq[-1] = ';'; // replaces , with ; if clipping right
+        if (MMq[-1] == ',')
+            MMq[-1] = ';'; // replaces , with ; if clipping right
+        else if (MMq[-1] != ';' && *MMq == ';')
+            MMq++;
+
         if (*MMp)
             MMp++;
     }
 
     MMp++; // skip nul
     *MMq++ = 0;
+
+    if (MLp != MLp_end) {
+        print_error("fixmate", "Incorrect ML length");
+        goto err;
+    }
 
     // Adjust ML B array length
     if (ML)
@@ -738,20 +797,23 @@ int trim_MM(bam1_t *pre, bam1_t *cur, int end5, int end3,
     // Eg XXXXXXmmmmm--YYYlllll-ZZ (m and l are edited MM and ML tags)
     // => XXXXXXmmmmmYYYlllllZZ
 
-    uint8_t *tag = bam_get_aux(cur), *tag_end = cur->data + cur->l_data;
+    uint8_t *tag = bam_get_aux(cur);
     uint8_t *to = tag;
     while (tag && tag < tag_end) {
-        if (tag[0] == 'M' && (tag[1] == 'M' || tag[1] == 'm')) {
+        if (tag[0] == 'M' && (tag[1] == 'M' || tag[1] == 'm')
+            && tag[2] == 'Z') {
             // Slow but easy
             memmove(to, MM, MMq-MM); // length of new tag
             to += MMq-MM;
             tag = MMp; // size of old tag
-        } else if (tag[0] == 'M' && (tag[1] == 'L' || tag[1] == 'l')) {
+        } else if (tag[0] == 'M' && (tag[1] == 'L' || tag[1] == 'l')
+                   && tag[2] == 'B') {
             memmove(to, ML, MLq-ML);
             to += MLq-ML;
             tag = MLp;
         } else if (tag[0] == 'M' && tag[1] == 'N') {
             tag = bam_aux_next(cur, tag+2);
+            tag = tag ? tag-2 : tag_end;
             // Skip it as we'll overwrite this later, although this
             // does change the tag order.  Instead we could do:
             //
@@ -771,6 +833,23 @@ int trim_MM(bam1_t *pre, bam1_t *cur, int end5, int end3,
     cur->l_data = to - cur->data;
 
     return 0;
+
+ err:
+    // Error part way through amending the MMq tag.  End it and copy the other
+    // tags to get to a valid aux tag state.  We then remove the
+    // base mod tags to move from syntactic validity to semantic consistency.
+    tag = MMq;
+    while (*tag && tag < tag_end)
+        tag++;
+    if (tag < tag_end)
+        tag++;
+
+    if (MMq > MM+1 && MMq[-1] != 0)
+        *MMq++ = 0;
+    memmove(MMq, tag, tag_end-tag);
+    cur->l_data = MMq + (tag_end-tag) - cur->data;
+
+    return -1;
 }
 
 // Removes base modification tags: MM, ML and MN.
@@ -863,7 +942,7 @@ int fix_MM(bam1_t *pre, bam1_t *cur, MM_state *state) {
         MNi = -1;
         get_mod_info(cur, &cur_MM, &cur_ML, &cur_MN, &MNi, &end5, &end3);
 
-        if (!cur_MM) {
+        if (!cur_MM || *cur_MM != 'Z') {
             delete_mod_tags(cur);
             return 0;
         }
@@ -878,7 +957,8 @@ int fix_MM(bam1_t *pre, bam1_t *cur, MM_state *state) {
             return 0;
         } else if (end5 || end3) {
              if (MNi < 0 || MNi == pre->core.l_qseq)
-                 trim_MM(pre, cur, end5, end3, cur_MM, cur_ML, cur_MN);
+                 if (trim_MM(pre, cur, end5, end3, cur_MM, cur_ML, cur_MN) < 0)
+                     delete_mod_tags(cur);
         } // else no hard clips so MM is already valid
 
         // Set MN so we've validated it, provided seq isn't "*".
