@@ -925,12 +925,13 @@ int filter_sq(samview_settings_t *settings, char **regs, int nregs) {
 
         if (!hts_parse_region(regs[i], &tid, &beg, &end,
                               bam_name2id_wrapper, hdr, 0)) {
-            print_error("view", "Unknown region '%s'", regs[i]);
-            goto err;
+            // We'll generate a warning elsewhere: "unknown reference"
+            continue;
         }
 
         const char *chr = sam_hdr_tid2name(hdr, tid);
-        if (kh_put(str, sqhash, chr, &ret) < 0)
+        kh_put(str, sqhash, chr, &ret);
+        if (ret < 0)
             goto err;
     }
 
@@ -1555,13 +1556,17 @@ int main_samview(int argc, char *argv[])
         }
         autoflush_if_stdout(settings.out, settings.fn_out);
 
+        sam_hdr_t *hdr_out = settings.header_filt
+            ? settings.header_filt
+            : settings.header;
+
         if (!no_pg) {
             if (!(arg_list = stringify_argv(argc+1, argv-1))) {
                 print_error("view", "failed to create arg_list");
                 ret = 1;
                 goto view_end;
             }
-            if (samtools_add_pg_line(settings.header, arg_list, 0)) {
+            if (samtools_add_pg_line(hdr_out, arg_list, 0)) {
                 print_error("view", "failed to add PG line to the header");
                 ret = 1;
                 goto view_end;
@@ -1572,10 +1577,6 @@ int main_samview(int argc, char *argv[])
             // stop cram from writing out any UR tags
             hts_set_opt(settings.out, CRAM_OPT_RM_UR, 1);
         }
-
-        sam_hdr_t *hdr_out = settings.header_filt
-            ? settings.header_filt
-            : settings.header;
 
         if (ga.write_index || is_header ||
             out_mode[1] == 'b' || out_mode[1] == 'c' ||
