@@ -185,13 +185,14 @@ enum format {
 };
 
 typedef unsigned char uc;
+#define MAX_QUAL 101
 
 // Simple recalibration table for substitutions, undercalls and overcalls.
 // In future, we'll update this to be kmer based too.
 typedef struct {
-    int smap[101]; // substitution or SNP
-    int umap[101]; // undercall    or DEL
-    int omap[101]; // overcall     or INS
+    int smap[MAX_QUAL]; // substitution or SNP
+    int umap[MAX_QUAL]; // undercall    or DEL
+    int omap[MAX_QUAL]; // overcall     or INS
 } qcal_t;
 
 // Persistent data used per thread and reused in each job operating in
@@ -362,15 +363,15 @@ typedef struct {
     double prior[25]    ALIGNED(16);  /* Sum to 1.0 */
     double lprior15[15] ALIGNED(16);  /* 15 combinations of {ACGT*} */
 
-    double pMM[101] ALIGNED(16);
-    double pxx[101] ALIGNED(16);
-    double pxM[101] ALIGNED(16);
-    double pox[101] ALIGNED(16);
-    double poM[101] ALIGNED(16);
-    double poo[101] ALIGNED(16);
-    double puu[101] ALIGNED(16);
-    double pum[101] ALIGNED(16);
-    double pmm[101] ALIGNED(16);
+    double pMM[MAX_QUAL] ALIGNED(16);
+    double pxx[MAX_QUAL] ALIGNED(16);
+    double pxM[MAX_QUAL] ALIGNED(16);
+    double pox[MAX_QUAL] ALIGNED(16);
+    double poM[MAX_QUAL] ALIGNED(16);
+    double poo[MAX_QUAL] ALIGNED(16);
+    double puu[MAX_QUAL] ALIGNED(16);
+    double pum[MAX_QUAL] ALIGNED(16);
+    double pmm[MAX_QUAL] ALIGNED(16);
 
     // Multiplier on homopolymer length before reducing phred qual
     double poly_mul;
@@ -686,7 +687,7 @@ int load_qcal(qcal_t *q, const char *fn) {
         return set_qcal(q, QCAL_ULTIMA);
 
     // default
-    for (i = 0; i < 101; i++)
+    for (i = 0; i < MAX_QUAL; i++)
         q->smap[i] = q->umap[i] = q->omap[i] = i;
 
     if (strcmp(fn, ":flat") == 0)
@@ -723,7 +724,7 @@ int load_qcal(qcal_t *q, const char *fn) {
         max = v;
     }
 
-    for (i = max+1; i < 101; i++) {
+    for (i = max+1; i < MAX_QUAL; i++) {
         q->smap[i] = q->smap[max];
         q->umap[i] = q->umap[max];
         q->omap[i] = q->omap[max];
@@ -787,7 +788,7 @@ static void consensus_init(double p_het, double p_indel, double het_scale,
     cp->lprior15[13] = log(cp->prior[19]);
     cp->lprior15[14] = log(cp->prior[24]);
 
-    for (i = 1; i < 101; i++) {
+    for (i = 1; i < MAX_QUAL; i++) {
         double prob = 1 - pow(10, -qcal->smap[i] / 10.0);
 
         // Or is it that prob is 1-p(subst)-p(overcall)?
@@ -1356,6 +1357,8 @@ int calculate_consensus_gap5(hts_pos_t pos, int flags, int depth,
         //qual = qual*qual/40+1;
         if (qual == 255 || (qual == 0 && *qual_arr == 255))
             qual = default_qual;
+        if (qual >= MAX_QUAL) // size of qcal_t arrays
+            qual = MAX_QUAL-1;
 
 #ifdef K2
         //qual = qual * hashN[hb] / hash1[base1];
