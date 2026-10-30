@@ -174,11 +174,20 @@ static inline void HTS_OPT3 incr_hist(int *hist, int oplen) {
 }
 
 static inline void HTS_OPT3
-incr_hist_qual(int *hist, uint8_t *qual, int min_qual, int oplen) {
+incr_hist_qual(int *hist, uint8_t *qual, int min_qual, int oplen,
+               int qual_len) {
     if (!min_qual) {
         incr_hist(hist, oplen);
         return;
     }
+    if (oplen < 0)
+        return;
+
+    // If we have truncated quality strings, or qual of "*", then by definition
+    // anything beyond the limit of qual won't be >= min_qual so doesn't count
+    // to the depth.
+    if (oplen > qual_len)
+        oplen = qual_len;
 
     int k;
     for (k = 0; k < (oplen & ~31); k+=32) {
@@ -444,9 +453,11 @@ static int add_depth(depth_opt *opt, depth_hist *dh, sam_hdr_t *h, bam1_t *b,
             int len = (i & hmask) < ((i+oplen) & hmask)
                 ? oplen                  // doesn't wrap around
                 : dh->size - (i&hmask);  // does wrap around
-            incr_hist_qual(&hist[i & hmask], &qual[spos], min_qual, len);
+            incr_hist_qual(&hist[i & hmask], &qual[spos], min_qual,
+                           len,  b->core.l_qseq-spos);
             if (oplen > len)
-                incr_hist_qual(hist, &qual[spos+len], min_qual, oplen-len);
+                incr_hist_qual(hist, &qual[spos+len], min_qual,
+                               oplen-len, b->core.l_qseq-(spos+len));
             spos += oplen;
             i += oplen;
             break;
