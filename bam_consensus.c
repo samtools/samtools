@@ -706,17 +706,22 @@ int load_qcal(qcal_t *q, const char *fn) {
             continue;
         if (sscanf(line.s, "QUAL %d %d %d %d", &v, &s, &u, &o) != 4)
             goto err;
+        if (v < 0 || v >= MAX_QUAL) {
+            print_error("consensus", "Quality values must be between 0 and %d",
+                        MAX_QUAL-1);
+            goto err;
+        }
         while (v > last_qual) {
             q->smap[last_qual+1] = q->smap[last_qual];
             q->umap[last_qual+1] = q->umap[last_qual];
             q->omap[last_qual+1] = q->omap[last_qual];
             last_qual++;
         }
-        if (v >= 0 && v < 100) {
-            q->smap[v] = s;
-            q->umap[v] = u;
-            q->omap[v] = o;
-        }
+
+        q->smap[v] = s;
+        q->umap[v] = u;
+        q->omap[v] = o;
+
         if (v < max) {
             fprintf(stderr, "Qual calibration file is not in ascending order\n");
             return hclose(fp) ? -2 : -1;
