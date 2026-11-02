@@ -794,6 +794,7 @@ int bam_cat(samFile * const firstfile, int nfn, char * const *fn, sam_hdr_t *h, 
         in = NULL;
     }
     free(buf);
+    buf = NULL;
     if (bgzf_close(fp) < 0) {
         fprintf(stderr, "[%s] Error on closing '%s'.\n", __func__, outbam);
         goto fail;
