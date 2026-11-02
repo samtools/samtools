@@ -1979,11 +1979,15 @@ int main_head(int argc, char *argv[])
         goto err;
     }
 
+    const char *text = sam_hdr_str(hdr);
+    if (!text) {
+        print_error("head", "failed to parse header");
+        goto err;
+    }
     if (all_headers) {
-        fputs(sam_hdr_str(hdr), stdout);
+        fputs(text, stdout);
     }
     else if (nheaders > 0) {
-        const char *text = sam_hdr_str(hdr);
         const char *lim = text;
         uint64_t n;
         for (n = 0; n < nheaders; n++) {
