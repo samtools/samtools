@@ -471,6 +471,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
             a[j].key = hash_X31_Wang(bam_get_qname(a[j].b));
         }
         sam_close(fp);
+        fp = NULL;
         unlink(fnt[i]);
         free(fnt[i]);
         fnt[i] = NULL;
