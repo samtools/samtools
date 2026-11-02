@@ -1,0 +1,94 @@
+This directory contains a few manually created fuzzers (fuzz_*.jkb.c)
+and many LLM generated fuzzers, starting from my own fuzz_view.c as a
+template.  Creating fuzzers for every subcommand is a long and tedious
+task, so using an LLM (Claude in this case) to do that has been
+beneficial.
+
+The basic principle is that command line tools stress test the htslib
+API more than it's own fuzzing (although more fuzzing is coming
+there).  We can also validate the multitude of ways that CLI options
+can interact.  So we generate data and a selected subset of command
+line options per application, use this to build a samtools command
+line, and then execute it in the usual way that bamtk() would.
+
+WARNING: run the LLM code in a sandbox, maybe mine too!  I haven't
+validated what they're doing is sane, and during development it became
+obvious some things were initially escaping a bit.  Early fuzzers
+didn't use -- for argument lists, meaning some fuzz mediated options
+could be problematic (eg an LLM generated ref.fa with a region name
+called "-o foo").  Some tools are inherently problematic too, such as
+split by tag using tag contents in filenames.
+
+The building is clunky.  It "works for me", but it's not designed as
+production ready.  I just have various command lines put into .sh
+files for compiling and linking.
+
+We need to tidy this up, but it's at the case of minimal best efforts
+so we can find and fix the problems at speed without spending time on
+polish.  The aim being to head off the slew of AI generated issues and
+PRs by getting ahead of the curve somewhat.  There will still be a lot
+missed, but this has already proven it's worth as an easy starting
+point.
+
+
+Build Samtools/Htslib
+---------------------
+
+Build samtools and htslib with -fsanitize=fuzzer.  This will fail on command line
+utilities, but we can ignore that.  (TODO: add a method of building the
+object files without the executables.)
+
+make -j8 CC="clang -fsanitize=address,undefined,fuzzer" CFLAGS="-g -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION" -k
+
+You may want to have previously built a full samtools binary so we can
+verify under valgrind.
+
+
+Build the fuzzers
+-----------------
+
+Download the files.zip and unpack
+
+Run build.sh with fuzzer=???.
+
+build.sh is below:
+#fuzzer=markdup
+(CC=clang;cd ../..;$CC -I. -Ihtslib -fsanitize=address,undefined,fuzzer -g -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION -Dexit=fuzz_exit test/fuzz/fuzz_$fuzzer.c -L./lz4 bam_aux.o bam_index.o bam_plcmd.o sam_view.c bam_fastq.o bam_cat.o bam_md.o bam_plbuf.o bam_reheader.o bam_sort.o bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o bam2bcf.o sample.o cut_target.o phase.o bam2depth.o coverage.o padding.o bedcov.o bamshuf.o faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o bam_ampliconclip.o amplicon_stats.o bam_import.o bam_samples.o bam_consensus.o consensus_pileup.o reference.o reset.o cram_size.o bam_checksum.o ./lz4/lz4.o libst.a htslib/libhts.a -lpthread -lz -lm -lbz2 -llzma -ldeflate -lcurl -lcrypto -lncursesw -lm -lz  -lpthread -o test/fuzz/fuzz_$fuzzer)
+
+Run with:
+
+for i in fuzz_*.c;do f=`echo $i | sed 's/fuzz_\(.*\)\.c$/\1/'`;fuzzer=$f bash build.sh;done
+
+
+Create test infrastructure
+--------------------------
+
+Setup PATH to contain samtools binary.
+Run the make_fuzz_data.py script to create fuzz_data directory.
+
+
+Execute
+-------
+
+cd fuzz_data
+fuzzer=depth bash ../setup.sh
+
+# setup.sh is
+#cp -r runtime runtime.$fuzzer
+#cp -r seeds/$fuzzer runtime.$fuzzer/corpus
+
+
+Then run it:
+Change to detect_leaks=1 after fixing the more egregious issues first
+Also add -dict=$fuzzer.dict if available
+
+cd fuzz_data/runtime.$fuzzer
+(for i in `seq 1 1000`;do ASAN_OPTIONS=allow_addr2line=1:abort_on_error=1:detect_leaks=0 ../../fuzz_$fuzzer -detect_leaks=0 corpus -rss_limit_mb=12560 -timeout=1 2>&1 ;done) | tee fuzz.out
+
+Also see ../../run_fuzz.sh
+
+
+Parallel
+--------
+
+for i in fuzz_*.c;do f=`echo $i | sed 's/fuzz_\(.*\)\.c$/\1/'`;export fuzzer=$f;echo fuzzing $fuzzer; (cd fuzz_data;bash ../setup.sh;cd runtime.$fuzzer;../../run_fuzz.sh) & done
