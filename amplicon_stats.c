@@ -1698,8 +1698,22 @@ int main_ampliconstats(int argc, char **argv) {
             break;
         }
 
-        case 'a': args.max_amp = atoi(optarg)+1;break;
-        case 'l': args.max_amp_len = atoi(optarg)+1;break;
+        case 'a':
+            args.max_amp = atoi(optarg)+1;
+            if (args.max_amp-1 <= 0) {
+                print_error("ampliconstats",
+                            "max-amplicons must be a positive integer");
+                return 1;
+            }
+            break;
+        case 'l':
+            args.max_amp_len = atoi(optarg)+1;
+            if (args.max_amp_len-1 <= 0) {
+                print_error("ampliconstats",
+                            "max-amplicon-length must be a positive integer");
+                return 1;
+            }
+            break;
 
         case 'c': args.tcoord_min_count = atoi(optarg);break;
         case 'b':
@@ -1731,6 +1745,12 @@ int main_ampliconstats(int argc, char **argv) {
                 usage(&oargs,stderr, EXIT_FAILURE);
             break;
         }
+    }
+
+    if (args.max_amp > INT32_MAX / args.max_amp_len) {
+        print_error("ampliconstats", "product of max-amplicons and "
+                    "max-amplicon-length is too high");
+        return 1;
     }
 
     if (argc <= optind)
