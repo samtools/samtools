@@ -186,7 +186,7 @@ static int html_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos)
                 while(css<32)
                     {
                     //if(y>1) fprintf(stderr,"css=%d pow2=%d vs %d\n",css,(1 << (css)),ptr->screen[y][x].attributes);
-                    if(( (ptr->screen[y][x].attributes) & (1 << (css)))!=0)
+                    if(( (ptr->screen[y][x].attributes) & (1u << (css)))!=0)
                         {
 
                         fprintf(ptr->out," class='tviewc%s%d'",
@@ -252,7 +252,7 @@ static int text_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos)
                 int css=0;
                 while(css<32)
                     {
-                    if(( (ptr->screen[y][x].attributes) & (1 << (css)))!=0)
+                    if(( (ptr->screen[y][x].attributes) & (1u << (css)))!=0)
                         {
                         break;
                         }
