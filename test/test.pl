@@ -2137,9 +2137,36 @@ sub test_view
     my $bam_with_no_ur_out = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
                   msg => "$test: SAM -> BAM -> SAM",
-                  args => ['-b', '--remove-ur', $sam_with_ur, '--no-PG'],
+                  args => ['-b', '--remove-ur', $sam_with_ur, '--no-PG', '--write-index'],
                   out => $bam_with_no_ur_out,
                   compare_sam => $sam_no_ur);
+    $test++;
+
+    # Generate inputs for --filter-sq tests
+    my $sam_with_no_ur_out = sprintf("%s.test%03d.sam.gz", $out, $test);
+    run_view_test($opts,
+                  msg => "$test: build sam.gz for next test",
+                  args => ['-h', $bam_with_no_ur_out, '--no-PG', '--write-index'],
+                  out => $sam_with_no_ur_out);
+    $test++;
+
+    # --filter-sq option
+    # NB: this returns records aligned against ref1 with MRNAME of ref2,
+    # which we remove from the SQ headers.
+    my $bed2 = "$$opts{path}/dat/view.001.02.bed";
+    my $sam_filtered_sq_out = sprintf("%s.test%03d.sam", $out, $test);
+    run_view_test($opts,
+                  msg => "$test: --filter-sq BAM",
+                  args => ['-h', '--filter-sq', $bam_with_no_ur_out, '--no-PG', '-L', $bed2, 'ref1', 'ref3_unused'],
+                  out => $sam_filtered_sq_out,
+                  compare => "$$opts{path}/dat/view.001.filtersq.expected.sam");
+    $test++;
+
+    run_view_test($opts,
+                  msg => "$test: --filter-sq SAM",
+                  args => ['-h', '--filter-sq', $sam_with_no_ur_out, '--no-PG', '-L', $bed2, 'ref1', 'ref3_unused'],
+                  out => $sam_filtered_sq_out,
+                  compare => "$$opts{path}/dat/view.001.filtersq.expected.sam");
     $test++;
 
 
@@ -2370,7 +2397,7 @@ sub test_view
     cmd("'$$opts{bin}/samtools' index '$cram_with_ur_out2'");
 
     my $bed1 = "$$opts{path}/dat/view.001.01.bed";
-    my $bed2 = "$$opts{path}/dat/view.001.02.bed";
+    # bed2 declared above ...dat/view.001.02.bed
     my $bed3 = "$$opts{path}/dat/view.002.01.bed";
     my $bed4 = "$$opts{path}/dat/view.002.02.bed";
     my $bed5 = "$$opts{path}/dat/view.001.03.bed"; # unsorted
