@@ -1369,7 +1369,14 @@ static int amplicon_stats(astats_args_t *args,
             goto err;
 
         if (!amps) {
-            amps = calloc(nref=sam_hdr_nref(header), sizeof(*amps));
+            nref = sam_hdr_nref(header);
+            if (nref < 0) {
+                print_error_errno("ampliconstats",
+                                  "Couldn't get reference count from \"%s\"",
+                                  filev[0]);
+                goto err;
+            }
+            amps = calloc(nref ? nref : 1, sizeof(*amps));
             if (!amps)
                 goto err;
             fprintf(ofp, "# Summary statistics, used for scaling the plots.\n");
@@ -1381,8 +1388,7 @@ static int amplicon_stats(astats_args_t *args,
             // BED file which may also differ to order of SQ headers.
             // SQ header is canonical ordering (pos sorted file).
             khiter_t k;
-            int bam_nref = sam_hdr_nref(header);
-            for (i = 0; i < bam_nref; i++) {
+            for (i = 0; i < nref; i++) {
                 k = kh_get(bed_list_hash, bed_hash,
                            sam_hdr_tid2name(header, i));
                 if (!kh_exist(bed_hash, k))
@@ -1563,12 +1569,14 @@ static int amplicon_stats(astats_args_t *args,
         if (fp)
             sam_close(fp);
     }
-    for (i = 0; i < nref; i++) {
-        stats_free(amps[i].lstats);
-        stats_free(amps[i].gstats);
-        free(amps[i].amp);
+    if (amps) {
+        for (i = 0; i < nref; i++) {
+            stats_free(amps[i].lstats);
+            stats_free(amps[i].gstats);
+            free(amps[i].amp);
+        }
+        free(amps);
     }
-    free(amps);
     free(pos2start);
     free(pos2end);
     if (ret) {
