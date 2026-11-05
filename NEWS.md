@@ -1,5 +1,69 @@
-Release a.b
+Release a.b (updated to 2026-11-05)
 -----------
+
+This is primarily a bug fix release.  Some of these are low risk
+security issues.  They are limited in scope by relying on the use of
+untrusted data, often requiring the use of specific command line
+arguments or requiring errors to occur at specific times.
+
+New work and changes:
+
+* Added a `samtools view --filter-sq` option to remove `@SQ` header
+  lines for sequences that are not present in the list of regions
+  queried (either directly on the command line or in the supplied BED
+  file).
+  (PR #2405, implements #2383.  Requested by Jim Downie)
+
+Documentation:
+
+Bug fixes:
+
+* SECURITY: READ and WRITE buffer overrun in samtools consensus.
+  Some internal global arrays were of dimension 101, but extra large quality
+  values could read beyond the end of these arrays.  When loading a custom
+  quality recalibration file (`-t`), this could also write beyond the end of
+  those arrays given appropriately malformed calibration tables.
+  (PR #2411)
+
+* SECURITY: DOUBLE FREE in samtools collate.
+  An error between closing the input file and writing output would generate
+  an error, which incorrectly closed the input file a second time. 
+  (PR #2418)
+
+* SECURITY: DOUBLE FREE in samtools cat.
+  Failure to close the output file could cause buf to be freed twice.
+  (PR #2419)
+
+* SECURITY: WRITE buffer overrun in samtools ampliconstats due to integer
+  overflow.  Note this requires specific command line arguments to control
+  the amount of memory allocated with oversized `-a` and `-l` operands.
+  (PR #2420, fixes #2417. Reported by and co-authored by @x4evexnol)
+
+* SECURITY: READ buffer overrun in samtools consensus where the sequence
+  `@SQ` lines differ to a supplied fasta.fai file.
+  (PR #2413)
+
+* SECURITY: READ buffer overrun in samtools depth where the CIGAR tag does
+  not match SEQ and QUAL lengths.
+  (PR #2412)
+
+* READ buffer overrun from NULL in `samtools head` when given malformed
+  headers.
+  (PR #2421)
+
+* READ buffer overrun by a single byte in `samtools markdup`, caused by a
+  malform CIGAR string in an MC aux tag.
+  (PR #2410)
+
+* READ buffer overrun by a single byte in `samtools fastq` when processing
+  barcode tags on records with both sequence and quality of `*`.
+  (PR #2414)
+
+* Remove undefined behavior in `samtools view -d HTML`.
+  This is a technical fix to remove a signed shift left by 31.  We are
+  unaware of any machines producing incorrect outputs due to this error.
+  (PR #2422)
+
 
 Release 1.25 (27th October 2026)
 --------------------------------
