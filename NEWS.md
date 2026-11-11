@@ -1,4 +1,4 @@
-Release a.b (updated to 2026-11-05)
+Release a.b (updated to 2026-11-10 / 4704abe)
 -----------
 
 This is primarily a bug fix release.  Some of these are low risk
@@ -17,6 +17,11 @@ New work and changes:
 Documentation:
 
 Bug fixes:
+
+* Multiple important bug fixes to `fixmate -M` option to correct base
+  modification tags.  The previous implementation has numerous
+  problems and should not be considered as producing correct output.
+  (PR #2409)
 
 * SECURITY: READ and WRITE buffer overrun in samtools consensus.
   Some internal global arrays were of dimension 101, but extra large quality
