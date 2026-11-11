@@ -597,7 +597,8 @@ static int accumulate_stats(astats_args_t *args, amplicons_t *amps,
                 : pos2end[t_end];
     } else {
         // Not paired (see int anum = (REV || !PAIR) ?en :st expr above)
-        oth_anum = pos2start[start];
+        if (start >= 0 && start < len)
+            oth_anum = pos2start[start];
         t_end = end;
     }
 
