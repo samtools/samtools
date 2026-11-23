@@ -116,6 +116,7 @@ typedef struct {
     const mplp_conf_t *conf;
     int curr_tid;   // current tid in pileup
     int failed_tid; // last failed tid lookup (+1)
+    struct baq_reader *baq; // non-NULL when BAQ runs on the thread pool
 } mplp_aux_t;
 
 typedef struct {
@@ -461,34 +462,240 @@ print_empty_pileup(kstring_t *out, const mplp_conf_t *conf, const char *tname,
     return err;
 }
 
-static int mplp_func(void *data, bam1_t *b)
-{
-    char *ref;
-    mplp_aux_t *ma = (mplp_aux_t*)data;
-    int ret, skip = 0;
-    hts_pos_t ref_len;
-    int has_ref = 0, last_tid = -1;
+// Reads the next record and applies the filters that do not depend on BAQ.
+// On return *ref is the reference for the read's contig, or NULL if none.
+static int mplp_read(mplp_aux_t *ma, bam1_t *b, const char **ref, hts_pos_t *ref_len);
 
-    do {
+// BAQ, MAPQ capping and the remaining filters, which only touch b itself and
+// so may run on a worker thread.  Returns 1 if the read is to be skipped.
+static int mplp_realn_filter(const mplp_conf_t *conf, bam1_t *b,
+                             const char *ref, hts_pos_t ref_len)
+{
+    if (ref && (conf->flag&MPLP_REALN)) sam_prob_realn(b, ref, ref_len, (conf->flag & MPLP_REDO_BAQ)? 7 : 3);
+    if (ref && conf->capQ_thres > 10) {
+        int q = sam_cap_mapq(b, ref, ref_len, conf->capQ_thres);
+        if (q < 0) return 1;
+        else if (b->core.qual > q) b->core.qual = q;
+    }
+    if (b->core.qual < conf->min_mq) return 1;
+    if ((conf->flag&MPLP_NO_ORPHAN) && (b->core.flag&BAM_FPAIRED) && !(b->core.flag&BAM_FPROPER_PAIR)) return 1;
+    return 0;
+}
+
+/*
+ * Threaded BAQ.  The main thread reads ahead in batches of up to
+ * BAQ_BATCH_READS reads or BAQ_BATCH_BYTES of record data, all on one
+ * contig, and hands each batch to the thread pool for mplp_realn_filter().
+ * Results come back in submission order, so the pileup sees exactly the
+ * reads, in the same order and with the same qualities, as without threads.
+ * The reference is fetched on the main thread; each batch holds a counted
+ * reference to its contig's sequence so read-ahead onto later contigs
+ * cannot free it while workers are still using it.
+ */
+#define BAQ_BATCH_READS 4096
+#define BAQ_BATCH_BYTES (4<<20)
+
+typedef struct {
+    char *seq;
+    hts_pos_t len;
+    int tid, nref;
+} baq_ref_t;
+
+typedef struct baq_batch {
+    bam1_t b[BAQ_BATCH_READS];
+    uint8_t skip[BAQ_BATCH_READS];
+    int n, next;
+    baq_ref_t *ref;
+    const mplp_conf_t *conf;
+    struct baq_batch *free_next;
+} baq_batch_t;
+
+typedef struct baq_reader {
+    hts_tpool *pool;
+    hts_tpool_process *q;
+    int qsize, n_in_flight;
+    int ret;            // < 0 once the input is exhausted or failed
+    bam1_t pend;        // read that starts the next batch (contig change)
+    int has_pend;
+    baq_ref_t *ref;     // reference for the most recently read contig
+    baq_batch_t *cur, *free_list;
+} baq_reader_t;
+
+static void baq_ref_release(baq_ref_t *r) {
+    if (r && --r->nref == 0) {
+        free(r->seq);
+        free(r);
+    }
+}
+
+static baq_ref_t *baq_ref_get(mplp_aux_t *ma, int tid) {
+    baq_reader_t *br = ma->baq;
+    if (br->ref && br->ref->tid == tid)
+        return br->ref;
+    baq_ref_release(br->ref);
+    if (!(br->ref = calloc(1, sizeof(*br->ref))))
+        return NULL;
+    br->ref->tid = tid;
+    br->ref->nref = 1;
+    br->ref->seq = faidx_fetch_seq64(ma->conf->fai, sam_hdr_tid2name(ma->h, tid),
+                                     0, HTS_POS_MAX, &br->ref->len);
+    if (!br->ref->seq) br->ref->len = 0;
+    return br->ref;
+}
+
+static void *baq_worker(void *arg) {
+    baq_batch_t *bt = (baq_batch_t *)arg;
+    const char *seq = bt->ref ? bt->ref->seq : NULL;
+    hts_pos_t len = bt->ref ? bt->ref->len : 0;
+    int i;
+    for (i = 0; i < bt->n; i++)
+        bt->skip[i] = mplp_realn_filter(bt->conf, &bt->b[i], seq, len);
+    return bt;
+}
+
+static void baq_batch_done(baq_reader_t *br, baq_batch_t *bt) {
+    baq_ref_release(bt->ref);
+    bt->ref = NULL;
+    bt->n = bt->next = 0;
+    bt->free_next = br->free_list;
+    br->free_list = bt;
+}
+
+static void mplp_bam_swap(bam1_t *a, bam1_t *b) {
+    bam1_t t = *a; *a = *b; *b = t;
+}
+
+// Reads and dispatches batches until the queue is full or the input ends.
+static int baq_fill(mplp_aux_t *ma) {
+    baq_reader_t *br = ma->baq;
+    while (br->ret >= 0 && br->n_in_flight < br->qsize) {
+        baq_batch_t *bt = br->free_list;
+        if (bt) br->free_list = bt->free_next;
+        else if (!(bt = calloc(1, sizeof(*bt)))) return -1;
+        bt->conf = ma->conf;
+
+        size_t bytes = 0;
+        while (bt->n < BAQ_BATCH_READS && bytes < BAQ_BATCH_BYTES) {
+            bam1_t *s = &bt->b[bt->n];
+            const char *ref = NULL;
+            hts_pos_t ref_len;
+            if (br->has_pend) {
+                mplp_bam_swap(s, &br->pend);
+                br->has_pend = 0;
+            } else if ((br->ret = mplp_read(ma, s, &ref, &ref_len)) < 0) {
+                if (br->ret < -1) { baq_batch_done(br, bt); return -1; }
+                break;
+            }
+            if (bt->n == 0) {
+                bt->ref = br->ref;
+                if (bt->ref) bt->ref->nref++;
+            } else if (s->core.tid != bt->ref->tid) {
+                mplp_bam_swap(s, &br->pend);
+                br->has_pend = 1;
+                break;
+            }
+            bt->n++;
+            bytes += s->l_data;
+        }
+        if (!bt->n) {
+            baq_batch_done(br, bt);
+            break;
+        }
+        if (hts_tpool_dispatch(br->pool, br->q, baq_worker, bt) < 0)
+            return -1;
+        br->n_in_flight++;
+    }
+    return 0;
+}
+
+static int mplp_func_baq(mplp_aux_t *ma, bam1_t *b) {
+    baq_reader_t *br = ma->baq;
+    for (;;) {
+        baq_batch_t *bt = br->cur;
+        while (bt && bt->next < bt->n) {
+            int i = bt->next++;
+            if (bt->skip[i]) continue;
+            mplp_bam_swap(b, &bt->b[i]); // the old b becomes a free slot
+            return 0;
+        }
+        if (bt) {
+            baq_batch_done(br, bt);
+            br->cur = NULL;
+        }
+        if (baq_fill(ma) < 0)
+            return -2;
+        if (!br->n_in_flight)
+            return br->ret;
+        hts_tpool_result *res = hts_tpool_next_result_wait(br->q);
+        if (!res) return -2;
+        br->cur = hts_tpool_result_data(res);
+        hts_tpool_delete_result(res, 0);
+        br->n_in_flight--;
+    }
+}
+
+static baq_reader_t *baq_reader_init(hts_tpool *pool, int qsize) {
+    baq_reader_t *br = calloc(1, sizeof(*br));
+    if (!br) return NULL;
+    br->pool = pool;
+    br->qsize = qsize;
+    if (!(br->q = hts_tpool_process_init(pool, qsize, 0))) {
+        free(br);
+        return NULL;
+    }
+    return br;
+}
+
+static void baq_batch_free(baq_batch_t *bt) {
+    int i;
+    for (i = 0; i < BAQ_BATCH_READS; i++)
+        free(bt->b[i].data);
+    baq_ref_release(bt->ref);
+    free(bt);
+}
+
+static void baq_reader_destroy(baq_reader_t *br) {
+    if (!br) return;
+    while (br->n_in_flight-- > 0) {
+        hts_tpool_result *res = hts_tpool_next_result_wait(br->q);
+        if (!res) break;
+        baq_batch_free(hts_tpool_result_data(res));
+        hts_tpool_delete_result(res, 0);
+    }
+    hts_tpool_process_destroy(br->q);
+    if (br->cur) baq_batch_free(br->cur);
+    while (br->free_list) {
+        baq_batch_t *next = br->free_list->free_next;
+        baq_batch_free(br->free_list);
+        br->free_list = next;
+    }
+    free(br->pend.data);
+    baq_ref_release(br->ref);
+    free(br);
+}
+
+static int mplp_read(mplp_aux_t *ma, bam1_t *b, const char **ref, hts_pos_t *ref_len)
+{
+    int ret;
+    for (;;) {
         ret = ma->iter? sam_itr_next(ma->fp, ma->iter, b) : sam_read1(ma->fp, ma->h, b);
-        if (ret < 0) break;
+        if (ret < 0) return ret;
+        *ref = NULL;
         // The 'B' cigar operation is not part of the specification, considering as obsolete.
         //  bam_remove_B(b);
-        if (b->core.tid < 0 || (b->core.flag&BAM_FUNMAP)) { // exclude unmapped reads
-            skip = 1;
+        if (b->core.tid < 0 || (b->core.flag&BAM_FUNMAP)) // exclude unmapped reads
             continue;
-        }
-        if (ma->conf->rflag_require && !(ma->conf->rflag_require&b->core.flag)) { skip = 1; continue; }
-        if (ma->conf->rflag_filter && ma->conf->rflag_filter&b->core.flag) { skip = 1; continue; }
+        if (ma->conf->rflag_require && !(ma->conf->rflag_require&b->core.flag)) continue;
+        if (ma->conf->rflag_filter && ma->conf->rflag_filter&b->core.flag) continue;
         if (ma->conf->bed && ma->conf->all == 0) { // test overlap
-            skip = !bed_overlap(ma->conf->bed, sam_hdr_tid2name(ma->h, b->core.tid), b->core.pos, bam_endpos(b));
-            if (skip) continue;
+            if (!bed_overlap(ma->conf->bed, sam_hdr_tid2name(ma->h, b->core.tid), b->core.pos, bam_endpos(b)))
+                continue;
         }
         if (ma->conf->rghash) { // exclude read groups
             uint8_t *rg = bam_aux_get(b, "RG");
-            skip = (rg && *rg=='Z' &&
-               khash_str2int_get(ma->conf->rghash, (const char*)(rg+1), NULL)==0);
-            if (skip) continue;
+            if (rg && *rg=='Z' &&
+                khash_str2int_get(ma->conf->rghash, (const char*)(rg+1), NULL)==0)
+                continue;
         }
         if (ma->conf->flag & MPLP_ILLUMINA13) {
             int i;
@@ -497,31 +704,39 @@ static int mplp_func(void *data, bam1_t *b)
                 qual[i] = qual[i] > 31? qual[i] - 31 : 0;
         }
 
-        if (ma->conf->fai && b->core.tid >= 0) {
-            if (!has_ref || last_tid != b->core.tid) {
-                has_ref = mplp_get_ref(ma, b->core.tid, &ref, &ref_len);
-                last_tid = b->core.tid;
+        if (ma->conf->fai) {
+            if (ma->baq) {
+                baq_ref_t *r = baq_ref_get(ma, b->core.tid);
+                if (!r) return -2;
+                *ref = r->seq;
+                *ref_len = r->len;
+            } else {
+                char *s;
+                if (mplp_get_ref(ma, b->core.tid, &s, ref_len))
+                    *ref = s;
             }
-            if (has_ref && ref_len <= b->core.pos) { // exclude reads outside of the reference sequence
+            if (*ref && *ref_len <= b->core.pos) { // exclude reads outside of the reference sequence
                 fprintf(stderr,"[%s] Skipping because %"PRIhts_pos" is outside of %"PRIhts_pos" [ref:%d]\n",
-                        __func__, (int64_t) b->core.pos, ref_len, b->core.tid);
-                skip = 1;
+                        "mplp_func", (int64_t) b->core.pos, *ref_len, b->core.tid);
                 continue;
             }
-        } else {
-            has_ref = 0;
         }
+        return ret;
+    }
+}
 
-        skip = 0;
-        if (has_ref && (ma->conf->flag&MPLP_REALN)) sam_prob_realn(b, ref, ref_len, (ma->conf->flag & MPLP_REDO_BAQ)? 7 : 3);
-        if (has_ref && ma->conf->capQ_thres > 10) {
-            int q = sam_cap_mapq(b, ref, ref_len, ma->conf->capQ_thres);
-            if (q < 0) skip = 1;
-            else if (b->core.qual > q) b->core.qual = q;
-        }
-        if (b->core.qual < ma->conf->min_mq) skip = 1;
-        else if ((ma->conf->flag&MPLP_NO_ORPHAN) && (b->core.flag&BAM_FPAIRED) && !(b->core.flag&BAM_FPROPER_PAIR)) skip = 1;
-    } while (skip);
+static int mplp_func(void *data, bam1_t *b)
+{
+    mplp_aux_t *ma = (mplp_aux_t*)data;
+    const char *ref;
+    hts_pos_t ref_len = 0;
+    int ret;
+
+    if (ma->baq)
+        return mplp_func_baq(ma, b);
+    do {
+        ret = mplp_read(ma, b, &ref, &ref_len);
+    } while (ret >= 0 && mplp_realn_filter(ma->conf, b, ref, ref_len));
     return ret;
 }
 
@@ -649,6 +864,19 @@ static int mpileup(mplp_conf_t *conf, int nfn, char **fn, char **fn_idx)
     }
     fprintf(stderr, "[%s] %d samples in %d input files\n",
             __func__, sm->n, nfn);
+
+    // Run BAQ / MAPQ capping on the thread pool, keeping the total read-ahead
+    // bounded when there are many input files.
+    if (p.pool && conf->fai && ((conf->flag & MPLP_REALN) || conf->capQ_thres > 10)) {
+        int qsize = 2 * conf->ga.nthreads / nfn;
+        if (qsize < 2) qsize = 2;
+        for (i = 0; i < nfn; ++i) {
+            if (!(data[i]->baq = baq_reader_init(p.pool, qsize))) {
+                fprintf(stderr, "[%s] failed to set up BAQ thread queue\n", __func__);
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
 
     pileup_fp = conf->output_fname? fopen(conf->output_fname, "w") : stdout;
 
@@ -1024,6 +1252,7 @@ fail:
     bam_mplp_destroy(iter);
     sam_hdr_destroy(h);
     for (i = 0; i < nfn; ++i) {
+        baq_reader_destroy(data[i]->baq);
         sam_close(data[i]->fp);
         if (data[i]->iter) hts_itr_destroy(data[i]->iter);
         free(data[i]);

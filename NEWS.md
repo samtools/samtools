@@ -13,6 +13,11 @@ Release a.b
   `-@`/`--threads` option and use a thread pool to decompress their inputs.
   These commands previously had no threading support.
 
+* `samtools mpileup -@` also runs BAQ (and `-C` mapping quality capping) on
+  the thread pool, in batches of reads delivered in their original order, so
+  output is unchanged.  BAQ dominates mpileup's run time when a reference is
+  given, so this gives most of the multi-threaded speed-up.
+
 Release 1.25 (27th October 2026)
 --------------------------------
 

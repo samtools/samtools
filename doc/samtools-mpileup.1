@@ -526,7 +526,10 @@ sometimes operate as if -aa was specified if the reference sequence
 has coverage outside of the region specified in the BED file.
 .TP
 .BI "-@ " INT ", --threads " INT
-Number of input decompression threads to use in addition to the main thread [0].
+Number of additional threads to use [0].
+Threads decompress the input files and, when a reference is given
+(\fB-f\fR), also run BAQ and \fB-C\fR mapping quality capping.
+Output is identical to the unthreaded output.
 .PP
 .B BAQ (Base Alignment Quality)
 .PP
