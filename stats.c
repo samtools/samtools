@@ -138,6 +138,14 @@ barcode_info_t;
 
 typedef struct
 {
+    size_t offset;      // Packed sequence then qualities, in stats_t.pend_data
+    int len;
+    uint8_t reverse, first;
+}
+pending_read_t;
+
+typedef struct
+{
     // Auxiliary data
     int flag_require, flag_filter;
     faidx_t *fai;                   // Reference sequence for GC-depth graph
@@ -161,6 +169,8 @@ typedef struct
     int cov_threshold;
     int ref_stats;      // have statistics on reference data or not, 1 - yes, 0 - no
     int ref_chunksz;    // size of ref base chunks to retrieve, in bytes
+    hts_tpool *tpool;   // Pool for per-cycle counting (-@), or NULL
+    int nthreads;
 }
 stats_info_t;
 
@@ -280,6 +290,13 @@ typedef struct
     uint32_t error_number;
 
     refstats *rstat;                // Reference statistics
+
+    // Reads whose per-cycle counts are deferred to the thread pool (-@)
+    uint8_t *pend_data;
+    size_t pend_len, pend_size;
+    pending_read_t *pend_reads;
+    size_t pend_n, pend_m;
+    int pend_max_len;
 }
 stats_t;
 KHASH_MAP_INIT_STR(c2stats, stats_t*)
@@ -936,6 +953,140 @@ static void collect_barcode_stats(bam1_t* bam_line, stats_t* stats) {
     }
 }
 
+// acgtno_count_t field (a,c,g,t,n,other) for each 4-bit code =ACMGRSVTWYHKDBN,
+// and for its complement.  "=" and ambiguity codes count as other.
+// GCT only reports A/C/G/T, so n and other in acgtno_revcomp are never read.
+static const uint8_t code2idx[16]  = {5,0,1,5,2,5,5,5,3,5,5,5,5,5,5,4};
+static const uint8_t code2comp[16] = {5,3,2,5,1,5,5,5,0,5,5,5,5,5,5,4};
+
+// Number of C (2) and G (4) bases in a packed sequence byte
+#define GC1(c) ((0x14 >> (c)) & 1)
+#define GCB(b) (GC1((b)>>4) + GC1((b)&15))
+#define GCB4(b)  GCB(b), GCB(b+1), GCB(b+2), GCB(b+3)
+#define GCB16(b) GCB4(b), GCB4(b+4), GCB4(b+8), GCB4(b+12)
+#define GCB64(b) GCB16(b), GCB16(b+16), GCB16(b+32), GCB16(b+48)
+static const uint8_t gc_in_byte[256] = { GCB64(0), GCB64(64), GCB64(128), GCB64(192) };
+
+// Base and quality counts of one first or last read at cycles lo..hi-1.
+// Cycle c holds base c of the read as sequenced (approximate, clipping is ignored).
+static void count_cycles(stats_t *stats, const uint8_t *seq, const uint8_t *qual,
+                         int len, int reverse, int first, int lo, int hi)
+{
+    uint64_t (*cycles)[6]  = (uint64_t (*)[6]) (first ? stats->acgtno_cycles_1st : stats->acgtno_cycles_2nd);
+    uint64_t (*revcomp)[6] = (uint64_t (*)[6]) stats->acgtno_revcomp;
+    uint64_t **quals = first ? stats->quals_1st : stats->quals_2nd;
+    const uint8_t *rc_idx = reverse ? code2comp : code2idx;
+    int c;
+
+    if (hi > len) hi = len;
+    for (c = lo; c < hi; c++)
+    {
+        int i = reverse ? len-c-1 : c;
+        int code = bam_seqi(seq, i);
+        cycles[c][code2idx[code]]++;
+        revcomp[c][rc_idx[code]]++;
+        quals[qual[i]][c]++;
+    }
+}
+
+typedef struct
+{
+    stats_t *stats;
+    int lo, hi;
+}
+cycle_slice_t;
+
+static void *count_cycle_slice(void *arg)
+{
+    cycle_slice_t *slice = arg;
+    stats_t *stats = slice->stats;
+    size_t r;
+    for (r = 0; r < stats->pend_n; r++) {
+        pending_read_t *p = &stats->pend_reads[r];
+        const uint8_t *seq = stats->pend_data + p->offset;
+        count_cycles(stats, seq, seq + (p->len+1)/2, p->len, p->reverse,
+                     p->first, slice->lo, slice->hi);
+    }
+    return NULL;
+}
+
+// Counts the pending reads, splitting the cycles into ranges with about
+// equal numbers of bases.  Each range is counted by one thread, so no two
+// threads touch the same counters.  The counts are sums, so the tables
+// are the same as when counting each read as it is read.
+static void flush_cycles(stats_t *stats)
+{
+    if (!stats->pend_n)
+        return;
+
+    int nslices = stats->info->nthreads + 1; // the main thread counts one too
+    int max_len = stats->pend_max_len, n = 0, lo = 0, c, i;
+    cycle_slice_t *slices = malloc(nslices * sizeof(*slices));
+    uint64_t *ending = calloc(max_len + 1, sizeof(*ending));
+    uint64_t total = 0, work = 0, active = stats->pend_n;
+    size_t r;
+    if (!slices || !ending)
+        error("Could not allocate memory for per-cycle counting\n");
+
+    for (r = 0; r < stats->pend_n; r++) {
+        ending[stats->pend_reads[r].len]++;
+        total += stats->pend_reads[r].len;
+    }
+    // Cycle c has a base from every read longer than c
+    uint64_t target = (total + nslices - 1) / nslices;
+    for (c = 0; c < max_len && n < nslices - 1; c++) {
+        active -= ending[c];
+        work += active;
+        if (work >= target) {
+            slices[n++] = (cycle_slice_t) { stats, lo, c + 1 };
+            lo = c + 1;
+            work = 0;
+        }
+    }
+    slices[n++] = (cycle_slice_t) { stats, lo, max_len };
+
+    hts_tpool_process *q = hts_tpool_process_init(stats->info->tpool, n, 1);
+    if (!q)
+        error("Could not create a thread pool queue\n");
+    for (i = 0; i < n - 1; i++)
+        if (hts_tpool_dispatch(stats->info->tpool, q, count_cycle_slice, &slices[i]) < 0)
+            error("Could not dispatch a thread pool job\n");
+    count_cycle_slice(&slices[n - 1]);
+    if (hts_tpool_process_flush(q) < 0)
+        error("Could not flush the thread pool queue\n");
+    hts_tpool_process_destroy(q);
+
+    free(slices);
+    free(ending);
+    stats->pend_n = stats->pend_len = 0;
+    stats->pend_max_len = 0;
+}
+
+// Keeps a copy of the read's sequence and qualities for flush_cycles()
+static void defer_cycles(stats_t *stats, const uint8_t *seq, const uint8_t *qual,
+                         int len, int reverse, int first)
+{
+    size_t nseq = (len+1)/2;
+    if (hts_resize(uint8_t, stats->pend_len + nseq + len, &stats->pend_size, &stats->pend_data, 0) < 0
+        || hts_resize(pending_read_t, stats->pend_n + 1, &stats->pend_m, &stats->pend_reads, 0) < 0)
+        error("Could not allocate memory for per-cycle counting\n");
+
+    pending_read_t *p = &stats->pend_reads[stats->pend_n++];
+    p->offset = stats->pend_len;
+    p->len = len;
+    p->reverse = reverse;
+    p->first = first;
+    memcpy(stats->pend_data + stats->pend_len, seq, nseq);
+    memcpy(stats->pend_data + stats->pend_len + nseq, qual, len);
+    stats->pend_len += nseq + len;
+    if (stats->pend_max_len < len)
+        stats->pend_max_len = len;
+
+    // shortcut: fixed buffer size per stats_t (also per -S split), tune if memory matters
+    if (stats->pend_len >= 16*1024*1024)
+        flush_cycles(stats);
+}
+
 // These stats should only be calculated for the original reads ignoring
 // supplementary artificial reads otherwise we'll accidentally double count
 void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out)
@@ -948,28 +1099,15 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
 
     uint32_t order = IS_PAIRED(bam_line) ? (IS_READ1(bam_line) ? READ_ORDER_FIRST : 0) + (IS_READ2(bam_line) ? READ_ORDER_LAST : 0) : READ_ORDER_FIRST;
 
-    // Count GC and ACGT per cycle. Note that cycle is approximate, clipping is ignored
+    // Count GC; ACGT and qualities per cycle are counted below
     uint8_t *seq  = bam_get_seq(bam_line);
-    int i, read_cycle, gc_count = 0, reverse = IS_REVERSE(bam_line);
+    int i, gc_count = 0, reverse = IS_REVERSE(bam_line);
 
-    acgtno_count_t *acgtno_cycles = (order == READ_ORDER_FIRST) ? stats->acgtno_cycles_1st : (order == READ_ORDER_LAST) ?  stats->acgtno_cycles_2nd : NULL ;
-    if (acgtno_cycles) {
-        // acgtno_count_t field (a,c,g,t,n,other) for each 4-bit code =ACMGRSVTWYHKDBN,
-        // and for its complement.  "=" and ambiguity codes count as other.
-        // GCT only reports A/C/G/T, so n and other in acgtno_revcomp are never read.
-        static const uint8_t code2idx[16]  = {5,0,1,5,2,5,5,5,3,5,5,5,5,5,5,4};
-        static const uint8_t code2comp[16] = {5,3,2,5,1,5,5,5,0,5,5,5,5,5,5,4};
-        const uint8_t *rc_idx = reverse ? code2comp : code2idx;
-        uint64_t (*cycles)[6]  = (uint64_t (*)[6]) acgtno_cycles;
-        uint64_t (*revcomp)[6] = (uint64_t (*)[6]) stats->acgtno_revcomp;
-        for (i=0; i<seq_len; i++)
-        {
-            int code = bam_seqi(seq, i);
-            read_cycle = (reverse ? seq_len-i-1 : i);
-            cycles[read_cycle][code2idx[code]]++;
-            revcomp[read_cycle][rc_idx[code]]++;
-            gc_count += (0x14 >> code) & 1; // C (2) or G (4)
-        }
+    if (order == READ_ORDER_FIRST || order == READ_ORDER_LAST) {
+        for (i=0; i<seq_len/2; i++)
+            gc_count += gc_in_byte[seq[i]];
+        if (seq_len & 1)
+            gc_count += GC1(seq[seq_len/2] >> 4);
     }
     int gc_idx_min = gc_count*(stats->ngc-1)/seq_len;
     int gc_idx_max = (gc_count+1)*(stats->ngc-1)/seq_len;
@@ -1006,26 +1144,24 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
     if (quals) {
         // Bounds are checked once per read, not per base
         int max_q = 0;
-        for (i=0; i<seq_len; i++)
+        uint64_t sum_qual = 0;
+        for (i=0; i<seq_len; i++) {
             if ( bam_quals[i]>max_q ) max_q = bam_quals[i];
+            sum_qual += bam_quals[i];
+        }
         if ( max_q>=stats->nquals )
             error("TODO: quality too high %d>=%d (%s %"PRIhts_pos" %s)\n", max_q, stats->nquals, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
         if ( max_q>stats->max_qual ) {
+            // Table pointers change, but pending counts are added after this
             realloc_qual_buffers(stats, stats->nbases, stats->nbases, max_q);
-            quals = order==READ_ORDER_FIRST
-                ? stats->quals_1st
-                : stats->quals_2nd;
             stats->max_qual = max_q;
         }
-
-        uint64_t sum_qual = 0;
-        for (i=0; i<seq_len; i++)
-        {
-            uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
-            quals[qual][i]++;
-            sum_qual += qual;
-        }
         stats->sum_qual += sum_qual;
+
+        if (stats->info->tpool)
+            defer_cycles(stats, seq, bam_quals, seq_len, reverse, order == READ_ORDER_FIRST);
+        else
+            count_cycles(stats, seq, bam_quals, seq_len, reverse, order == READ_ORDER_FIRST, 0, seq_len);
     }
 
     // Barcode statistics
@@ -1549,6 +1685,8 @@ float gcd_percentile(gc_depth_t *gcd, int N, int p)
 
 void output_stats(FILE *to, stats_t *stats, int sparse)
 {
+    flush_cycles(stats);
+
     // Calculate average insert size and standard deviation (from the main bulk data only)
     int isize, ibulk=0, icov, imapq=0;
     uint64_t nisize=0, nisize_inward=0, nisize_outward=0, nisize_other=0, cov_sum=0;
@@ -2243,6 +2381,8 @@ void cleanup_stats_info(stats_info_t* info){
 
 void cleanup_stats(stats_t* stats)
 {
+    free(stats->pend_data);
+    free(stats->pend_reads);
     free(stats->cov_rbuf.buffer); free(stats->cov);
     for (int q = 0; q < stats->max_qual_alloc; q++) {
         free(stats->quals_1st[q]);
@@ -2859,6 +2999,8 @@ int main_stats(int argc, char *argv[])
         if (info->fai) {
             fai_thread_pool(info->fai, tpool, 0);
         }
+        info->tpool = tpool;
+        info->nthreads = ga.nthreads;
     }
 
     stats_t *all_stats = stats_init();
