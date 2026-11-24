@@ -103,7 +103,8 @@ typedef struct
 {
     hts_pos_t pos;
     int size, start;
-    int *buffer;
+    int depth;      // coverage at pos-1, carried between flushes
+    int *buffer;    // depth changes: +1 where a block starts, -1 where it ends
 }
 round_buffer_t;
 
@@ -323,47 +324,58 @@ static inline int round_buffer_lidx2ridx(int offset, int size, hts_pos_t refpos,
     return (offset + (pos-refpos) % size) % size;
 }
 
+// Add the depths of buf[0, n) to the coverage histogram and clear buf.
+// buf holds depth changes, so the depth is constant between non-zero
+// entries and each such run is counted at once.
+static int round_buffer_count_depths(stats_t *stats, int *buf, int n, int depth)
+{
+    int i = 0;
+    while ( i < n )
+    {
+        depth += buf[i];
+        buf[i] = 0;
+        int j = i + 1;
+        while ( j < n && !buf[j] )
+            j++;
+        if ( depth )
+            stats->cov[coverage_idx(stats->info->cov_min,stats->info->cov_max,stats->ncov,stats->info->cov_step,depth)] += j - i;
+        i = j;
+    }
+    return depth;
+}
+
 void round_buffer_flush(stats_t *stats, hts_pos_t pos)
 {
-    int ibuf,idp;
+    round_buffer_t *rbuf = &stats->cov_rbuf;
 
-    if ( pos==stats->cov_rbuf.pos )
+    if ( pos==rbuf->pos )
         return;
 
     hts_pos_t new_pos = pos;
-    if ( pos==-1 || pos - stats->cov_rbuf.pos >= stats->cov_rbuf.size )
+    if ( pos==-1 || pos - rbuf->pos >= rbuf->size )
     {
         // Flush the whole buffer, but in sequential order,
-        pos = stats->cov_rbuf.pos + stats->cov_rbuf.size - 1;
+        pos = rbuf->pos + rbuf->size;
     }
 
-    if ( pos < stats->cov_rbuf.pos )
-        error("Expected coordinates in ascending order, got %"PRIhts_pos" after %"PRIhts_pos"\n", pos, stats->cov_rbuf.pos);
+    if ( pos < rbuf->pos )
+        error("Expected coordinates in ascending order, got %"PRIhts_pos" after %"PRIhts_pos"\n", pos, rbuf->pos);
 
-    int ifrom = stats->cov_rbuf.start;
-    int ito = round_buffer_lidx2ridx(stats->cov_rbuf.start, stats->cov_rbuf.size, stats->cov_rbuf.pos, pos-1);
-    if ( ifrom>ito )
+    // Prefix-sum the depth changes over [rbuf->pos, pos), in at most two
+    // linear segments of the round buffer
+    int n = pos - rbuf->pos, ibuf = rbuf->start, depth = rbuf->depth;
+    while ( n > 0 )
     {
-        for (ibuf=ifrom; ibuf<stats->cov_rbuf.size; ibuf++)
-        {
-            if ( !stats->cov_rbuf.buffer[ibuf] )
-                continue;
-            idp = coverage_idx(stats->info->cov_min,stats->info->cov_max,stats->ncov,stats->info->cov_step,stats->cov_rbuf.buffer[ibuf]);
-            stats->cov[idp]++;
-            stats->cov_rbuf.buffer[ibuf] = 0;
-        }
-        ifrom = 0;
+        int len = MIN(n, rbuf->size - ibuf);
+        depth = round_buffer_count_depths(stats, rbuf->buffer + ibuf, len, depth);
+        n -= len;
+        ibuf += len;
+        if ( ibuf == rbuf->size )
+            ibuf = 0;
     }
-    for (ibuf=ifrom; ibuf<=ito; ibuf++)
-    {
-        if ( !stats->cov_rbuf.buffer[ibuf] )
-            continue;
-        idp = coverage_idx(stats->info->cov_min,stats->info->cov_max,stats->ncov,stats->info->cov_step,stats->cov_rbuf.buffer[ibuf]);
-        stats->cov[idp]++;
-        stats->cov_rbuf.buffer[ibuf] = 0;
-    }
-    stats->cov_rbuf.start = (new_pos==-1) ? 0 : round_buffer_lidx2ridx(stats->cov_rbuf.start, stats->cov_rbuf.size, stats->cov_rbuf.pos, pos);
-    stats->cov_rbuf.pos   = new_pos;
+    rbuf->depth = depth;
+    rbuf->start = (new_pos==-1) ? 0 : ibuf;
+    rbuf->pos   = new_pos;
 }
 
 // Grow the coverage round buffer so that it can hold the reference
@@ -405,23 +417,14 @@ static void round_buffer_insert_read(round_buffer_t *rbuf, hts_pos_t from, hts_p
 {
     if ( from < rbuf->pos )
         error("The reads are not sorted (%"PRIhts_pos" comes after %"PRIhts_pos").\n", from, rbuf->pos);
-    // The buffer is indexed modulo its size relative to rbuf->pos, so a
-    // block ending beyond rbuf->pos + size (e.g. the far exon of a spliced
-    // alignment) would wrap around onto positions near the read start.
-    if ( to - rbuf->pos > rbuf->size )
-        round_buffer_resize(rbuf, to - rbuf->pos);
+    // The buffer is indexed modulo its size relative to rbuf->pos, so the
+    // end of a block (e.g. the far exon of a spliced alignment) must stay
+    // below rbuf->pos + size, or its -1 would wrap onto pending positions.
+    if ( to - rbuf->pos >= rbuf->size )
+        round_buffer_resize(rbuf, to - rbuf->pos + 1);
 
-    int ifrom, ito, ibuf;
-    ifrom = round_buffer_lidx2ridx(rbuf->start, rbuf->size, rbuf->pos, from);
-    ito   = round_buffer_lidx2ridx(rbuf->start, rbuf->size, rbuf->pos, to);
-    if ( ifrom>ito )
-    {
-        for (ibuf=ifrom; ibuf<rbuf->size; ibuf++)
-            rbuf->buffer[ibuf]++;
-        ifrom = 0;
-    }
-    for (ibuf=ifrom; ibuf<ito; ibuf++)
-        rbuf->buffer[ibuf]++;
+    rbuf->buffer[round_buffer_lidx2ridx(rbuf->start, rbuf->size, rbuf->pos, from)]++;
+    rbuf->buffer[round_buffer_lidx2ridx(rbuf->start, rbuf->size, rbuf->pos, to)]--;
 }
 
 // Calculate the number of bases in the read trimmed by BWA
