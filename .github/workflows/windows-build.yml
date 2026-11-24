@@ -15,26 +15,26 @@ jobs:
       with:
         persist-credentials: false
         fetch-depth: 3
-    - name: Set up MSYS2 MinGW-W64
+    - name: Set up MSYS2 UCRT64
       uses: msys2/setup-msys2@v2
       with:
-        msystem: mingw64
+        msystem: UCRT64
         update: false
         install: >-
-          mingw-w64-x86_64-toolchain
-          mingw-w64-x86_64-autotools
-          mingw-w64-x86_64-curl
-          mingw-w64-x86_64-libdeflate
-          mingw-w64-x86_64-tools-git
-          mingw-w64-x86_64-zlib
-          mingw-w64-x86_64-bzip2
-          mingw-w64-x86_64-xz
-          mingw-w64-x86_64-ncurses
+          mingw-w64-ucrt-x86_64-toolchain
+          mingw-w64-ucrt-x86_64-autotools
+          mingw-w64-ucrt-x86_64-curl
+          mingw-w64-ucrt-x86_64-libdeflate
+          mingw-w64-ucrt-x86_64-tools
+          mingw-w64-ucrt-x86_64-zlib
+          mingw-w64-ucrt-x86_64-bzip2
+          mingw-w64-ucrt-x86_64-xz
+          mingw-w64-ucrt-x86_64-ncurses
     - name: Clone htslib
       shell: msys2 {0}
       run: |
-        export PATH="$PATH:/mingw64/bin:/c/Program Files/Git/bin"
-        export MSYSTEM=MINGW64
+        export PATH="$PATH:/c/Program Files/Git/bin"
+        export MSYSTEM=UCRT64
         .ci_helpers/clone ${GITHUB_REPOSITORY_OWNER} htslib htslib ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME} ${{ github.sha }}
         pushd .
         cd htslib
@@ -43,8 +43,8 @@ jobs:
     - name: Compile samtools
       shell: msys2 {0}
       run: |
-        export PATH="$PATH:/mingw64/bin:/c/Program Files/Git/bin"
-        export MSYSTEM=MINGW64
+        export PATH="$PATH:/c/Program Files/Git/bin"
+        export MSYSTEM=UCRT64
         autoheader
         autoconf -Wno-syntax
         ./configure --disable-ref-cache --enable-werror
@@ -52,7 +52,7 @@ jobs:
     - name: Check samtools
       shell: msys2 {0}
       run: |
-        export PATH="$PATH:/mingw64/bin:/c/Program Files/Git/bin"
-        export MSYSTEM=MINGW64
+        export PATH="$PATH:/c/Program Files/Git/bin"
+        export MSYSTEM=UCRT64
         make check
 
