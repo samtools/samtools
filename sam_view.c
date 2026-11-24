@@ -1664,9 +1664,13 @@ int main_samview(int argc, char *argv[])
         }
     }
 
-    if (settings.is_count)
+    if (settings.is_count) {
         // Won't fail, but also wouldn't matter if it did
         hts_set_opt(settings.in, CRAM_OPT_REQUIRED_FIELDS, settings.count_rf);
+        // -d/-D only need their own tag (-e may need any, so INT_MAX)
+        if (settings.tag && settings.count_rf != INT_MAX)
+            hts_set_opt(settings.in, CRAM_OPT_REQUIRED_TAGS, settings.tag);
+    }
 
     if ( settings.fetch_pairs )
     {
