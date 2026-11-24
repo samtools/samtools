@@ -116,14 +116,41 @@ static int template_coordinate_keys_realloc(template_coordinate_keys_t *keys, in
 // Struct which contains the a record, and the pointer to the sort tag (if any) or
 // a combined ref / position / strand.
 // Used to speed up sorts (coordinate, by-tag, and template-coordinate).
+typedef union {
+    const uint8_t *tag;
+    uint8_t pos_tid[12];
+    template_coordinate_key_t *key;
+} sort_key_t;
+
 typedef struct bam1_tag {
     bam1_t *bam_record;
-    union {
-        const uint8_t *tag;
-        uint8_t pos_tid[12];
-        template_coordinate_key_t *key;
-    } u;
+    sort_key_t u;
 } bam1_tag;
+
+// A record held in the sort buffer: only the fields of bam1_t that matter
+// once it has been read, followed by its data, to fit more records in -m.
+typedef struct {
+    bam1_core_t core;
+    int l_data;
+    uint8_t data[];
+} sort_rec_t;
+
+// Sort buffer entry: like bam1_tag, but pointing to a sort_rec_t
+typedef struct {
+    sort_rec_t *rec;
+    sort_key_t u;
+} sort_buf_t;
+
+// Make b a view of r, sharing its data
+static inline void sort_rec_view(bam1_t *b, sort_rec_t *r)
+{
+    b->core = r->core;
+    b->data = r->data;
+    b->l_data = r->l_data;
+    b->m_data = r->l_data;
+    b->id = 0;
+    bam_set_mempolicy(b, bam_get_mempolicy(b) | BAM_USER_OWNS_DATA);
+}
 
 /* Minimum memory required in megabytes before sort will attempt to run. This
    is to prevent accidents where failing to use the -m option correctly results
@@ -1833,7 +1860,7 @@ typedef struct {
 
 static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
                                 int num_in_mem, buf_region *in_mem,
-                                bam1_tag *buf, template_coordinate_keys_t *keys,
+                                sort_buf_t *buf, template_coordinate_keys_t *keys,
                                 uint64_t *idx, sam_hdr_t *hout,
                                 khash_t(const_c2c) *lib_lookup) {
     int i = heap->i, res;
@@ -1848,7 +1875,7 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
     } else { // read from memory
         if (in_mem[i - nfiles].from < in_mem[i - nfiles].to) {
             size_t from = in_mem[i - nfiles].from;
-            heap->entry.bam_record = buf[from].bam_record;
+            sort_rec_view(heap->entry.bam_record, buf[from].rec);
             if (g_sam_order == TemplateCoordinate) heap->entry.u.key = buf[from].u.key;
             in_mem[i - nfiles].from++;
             res = 0;
@@ -1869,7 +1896,7 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
         }
     } else if (res == -1) {
         heap->pos = HEAP_EMPTY;
-        if (i < nfiles) bam_destroy1(heap->entry.bam_record);
+        bam_destroy1(heap->entry.bam_record);
         heap->entry.bam_record = NULL;
         heap->entry.u.tag = NULL;
         heap->entry.u.key = NULL;
@@ -1882,7 +1909,7 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
 static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
                             const char *mode, sam_hdr_t *hout,
                             int n, char * const *fn, int num_in_mem,
-                            buf_region *in_mem, bam1_tag *buf,
+                            buf_region *in_mem, sort_buf_t *buf,
                             template_coordinate_keys_t *keys,
                             khash_t(const_c2c) *lib_lookup,
                             htsThreadPool *htspool,
@@ -1940,10 +1967,9 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
         h->i = i;
         h->entry.u.tag = NULL;
         h->entry.u.key = NULL;
-        if (i < n) {
-            h->entry.bam_record = bam_init1();
-            if (!h->entry.bam_record) goto mem_fail;
-        }
+        // In-memory blocks get a bam1_t that views their records' data
+        h->entry.bam_record = bam_init1();
+        if (!h->entry.bam_record) goto mem_fail;
         if (heap_add_read(h, n, fp, num_in_mem, in_mem, buf, keys, &idx, hout,
                           lib_lookup) < 0) {
             assert(i < n);
@@ -2035,7 +2061,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
         if (fp && fp[i]) sam_close(fp[i]);
     }
     for (i = 0; i < heap_size; i++) {
-        if (heap && heap[i].i < n && heap[i].entry.bam_record)
+        if (heap && heap[i].entry.bam_record)
             bam_destroy1(heap[i].entry.bam_record);
     }
     free(fp);
@@ -2049,34 +2075,35 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
 // Handle sort-by-pos and sort-by-name. Used as the secondary sort in bam1_lt_by_tag, if reads are equivalent by tag.
 // Returns a value less than, equal to or greater than zero if a is less than,
 // equal to or greater than b, respectively.
-static inline int bam1_cmp_core(const bam1_tag a, const bam1_tag b)
+// The comparison functions below take each record as its core and data, so
+// that they work both on bam1_t (merging) and on sort_rec_t (sort buffer).
+static inline int core_cmp(const bam1_core_t *a, const uint8_t *a_data,
+                           const bam1_core_t *b, const uint8_t *b_data)
 {
     uint64_t pa, pb;
-    if (!a.bam_record) return 1;
-    if (!b.bam_record) return 0;
 
     if (g_sam_order == QueryName || g_sam_order == TagQueryName) {
-        int t = strnum_cmp(bam_get_qname(a.bam_record), bam_get_qname(b.bam_record));
+        int t = strnum_cmp((const char *) a_data, (const char *) b_data);
         if (t != 0) return t;
-        int af = a.bam_record->core.flag;
-        int bf = b.bam_record->core.flag;
+        int af = a->flag;
+        int bf = b->flag;
         // Sort order is READ1, READ2, (PRIMARY), SUPPLEMENTARY, SECONDARY
         // Get the bits in this order so sort is a natural a-b
         af = ((af&0xc0)<<8)|((af&0x100)<<3)|((af&0x800)>>3);
         bf = ((bf&0xc0)<<8)|((bf&0x100)<<3)|((bf&0x800)>>3);
         return af - bf;
     } else {
-        pa = a.bam_record->core.tid;
-        pb = b.bam_record->core.tid;
+        pa = a->tid;
+        pb = b->tid;
 
         if (pa == pb) {
-            pa = (uint64_t)(a.bam_record->core.pos+1);
-            pb = (uint64_t)(b.bam_record->core.pos+1);
+            pa = (uint64_t)(a->pos+1);
+            pb = (uint64_t)(b->pos+1);
         }
 
         if (pa == pb) {
-            pa = bam_is_rev(a.bam_record);
-            pb = bam_is_rev(b.bam_record);
+            pa = (a->flag & BAM_FREVERSE) != 0;
+            pb = (b->flag & BAM_FREVERSE) != 0;
         }
 
         return pa < pb ? -1 : (pa > pb ? 1 : 0);
@@ -2099,17 +2126,16 @@ uint8_t normalize_type(const uint8_t* aux) {
 // Tags are first sorted by the type character (in case the types differ), or by the appropriate comparator for that type if they agree.
 // Returns a value less than, equal to or greater than zero if a is less than,
 // equal to or greater than b, respectively.
-static inline int bam1_cmp_by_tag(const bam1_tag a, const bam1_tag b)
+static inline int tag_cmp(const uint8_t *aux_a, const uint8_t *aux_b,
+                          const bam1_core_t *a, const uint8_t *a_data,
+                          const bam1_core_t *b, const uint8_t *b_data)
 {
-    const uint8_t* aux_a = a.u.tag;
-    const uint8_t* aux_b = b.u.tag;
-
     if (aux_a == NULL && aux_b != NULL) {
         return -1;
     } else if (aux_a != NULL && aux_b == NULL) {
         return 1;
     } else if (aux_a == NULL && aux_b == NULL) {
-        return bam1_cmp_core(a,b);
+        return core_cmp(a, a_data, b, b_data);
     }
 
     // 'Normalize' the letters of the datatypes to a canonical letter,
@@ -2134,24 +2160,30 @@ static inline int bam1_cmp_by_tag(const bam1_tag a, const bam1_tag b)
         int64_t va = bam_aux2i(aux_a);
         int64_t vb = bam_aux2i(aux_b);
         if (va != vb) return va < vb ? -1 : 1;
-        return bam1_cmp_core(a, b);
+        return core_cmp(a, a_data, b, b_data);
     } else if (a_type == 'f') {
         double va = bam_aux2f(aux_a);
         double vb = bam_aux2f(aux_b);
         if (va != vb) return va < vb ? -1 : 1;
-        return bam1_cmp_core(a, b);
+        return core_cmp(a, a_data, b, b_data);
     } else if (a_type == 'A') {
         unsigned char va = bam_aux2A(aux_a);
         unsigned char vb = bam_aux2A(aux_b);
         if (va != vb) return va < vb ? -1 : 1;
-        return bam1_cmp_core(a, b);
+        return core_cmp(a, a_data, b, b_data);
     } else if (a_type == 'H') {
         int t = strcmp(bam_aux2Z(aux_a), bam_aux2Z(aux_b));
         if (t) return t;
-        return bam1_cmp_core(a, b);
+        return core_cmp(a, a_data, b, b_data);
     } else {
-        return bam1_cmp_core(a,b);
+        return core_cmp(a, a_data, b, b_data);
     }
+}
+
+static inline int bam1_cmp_by_tag(const bam1_tag a, const bam1_tag b)
+{
+    return tag_cmp(a.u.tag, b.u.tag, &a.bam_record->core, a.bam_record->data,
+                   &b.bam_record->core, b.bam_record->data);
 }
 
 // Sort by minimiser (stored in bam1_tag.u.pos).
@@ -2164,18 +2196,13 @@ static inline int bam1_cmp_by_tag(const bam1_tag a, const bam1_tag b)
 static int ntot = 0, nmis = 0, ndup = 0;
 #endif
 
-static inline int bam1_cmp_by_minhash(const bam1_tag a, const bam1_tag b)
+static inline int minhash_cmp(const bam1_core_t *A, const uint8_t *a_data,
+                              const bam1_core_t *B, const uint8_t *b_data)
 {
-    const bam1_t *A = a.bam_record;
-    const bam1_t *B = b.bam_record;
+    if (A->tid != -1 || B->tid != -1) return core_cmp(A, a_data, B, b_data);
 
-    if (!A) return 1;
-    if (!B) return 0;
-
-    if (A->core.tid != -1 || B->core.tid != -1) return bam1_cmp_core(a,b);
-
-    const uint64_t m_a = (((uint64_t)A->core.pos)<<31)|(uint32_t)A->core.mpos;
-    const uint64_t m_b = (((uint64_t)B->core.pos)<<31)|(uint32_t)B->core.mpos;
+    const uint64_t m_a = (((uint64_t)A->pos)<<31)|(uint32_t)A->mpos;
+    const uint64_t m_b = (((uint64_t)B->pos)<<31)|(uint32_t)B->mpos;
 
     if (m_a < m_b) // by hash
         return -1;
@@ -2183,12 +2210,20 @@ static inline int bam1_cmp_by_minhash(const bam1_tag a, const bam1_tag b)
         return 1;
 
     // Bigger pos with size minhash means starts further to left
-    else if (A->core.isize > B->core.isize) // by hash location in seq
+    else if (A->isize > B->isize) // by hash location in seq
         return -1;
-    else if (A->core.isize < B->core.isize)
+    else if (A->isize < B->isize)
         return 1;
     else
-        return bam1_cmp_core(a,b);
+        return core_cmp(A, a_data, B, b_data);
+}
+
+static inline int bam1_cmp_by_minhash(const bam1_tag a, const bam1_tag b)
+{
+    if (!a.bam_record) return 1;
+    if (!b.bam_record) return 0;
+    return minhash_cmp(&a.bam_record->core, a.bam_record->data,
+                       &b.bam_record->core, b.bam_record->data);
 }
 
 // compares to molecular identifiers, ignoring any trailing slash and subsequent single-character
@@ -2312,14 +2347,9 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
 // 7. if unpaired, or if R1 has the lower coordinates of the pair
 // Returns a value less than, equal to or greater than zero if a is less than,
 // equal to or greater than b, respectively.
-static inline int bam1_cmp_template_coordinate(const bam1_tag a, const bam1_tag b)
+static inline int template_coordinate_cmp(const template_coordinate_key_t* key_a,
+                                          const template_coordinate_key_t* key_b)
 {
-    if (!a.bam_record) return 1;
-    if (!b.bam_record) return 0;
-
-    const template_coordinate_key_t* key_a = a.u.key;
-    const template_coordinate_key_t* key_b = b.u.key;
-
     int retval = 0;
     if (0 == retval) retval = key_a->tid1 - key_b->tid1;
     if (0 == retval) retval = key_a->tid2 - key_b->tid2;
@@ -2335,34 +2365,40 @@ static inline int bam1_cmp_template_coordinate(const bam1_tag a, const bam1_tag 
     return retval < 0 ? -1 : (retval > 0 ? 1 : 0);
 }
 
+static inline int bam1_cmp_template_coordinate(const bam1_tag a, const bam1_tag b)
+{
+    if (!a.bam_record) return 1;
+    if (!b.bam_record) return 0;
+    return template_coordinate_cmp(a.u.key, b.u.key);
+}
+
 
 // Function to compare reads and determine which one is < the other
 // Handle sort-by-pos, sort-by-name, sort-by-tag, or sort-by-template-coordinate.
-static inline int bam1_lt(const bam1_tag a, const bam1_tag b)
+static inline int sort_buf_lt(const sort_buf_t a, const sort_buf_t b)
 {
+    const sort_rec_t *A = a.rec, *B = b.rec;
     switch (g_sam_order) {
-        case Coordinate:
-        case QueryName:
-            return bam1_cmp_core(a, b) < 0;
         case TagQueryName:
         case TagCoordinate:
-            return bam1_cmp_by_tag(a, b) < 0;
+            return tag_cmp(a.u.tag, b.u.tag, &A->core, A->data,
+                           &B->core, B->data) < 0;
         case MinHash:
-            return bam1_cmp_by_minhash(a, b) < 0;
+            return minhash_cmp(&A->core, A->data, &B->core, B->data) < 0;
         case TemplateCoordinate:
-            return bam1_cmp_template_coordinate(a, b) < 0;
+            return template_coordinate_cmp(a.u.key, b.u.key) < 0;
         default:
-            return bam1_cmp_core(a,b) < 0;
+            return core_cmp(&A->core, A->data, &B->core, B->data) < 0;
     }
 }
 
 
 
-KSORT_INIT(sort, bam1_tag, bam1_lt)
+KSORT_INIT(sort, sort_buf_t, sort_buf_lt)
 
 typedef struct {
     size_t buf_len;
-    bam1_tag *buf;
+    sort_buf_t *buf;
     const sam_hdr_t *h;
     int error;
     int large_pos;
@@ -2373,7 +2409,7 @@ typedef struct {
 
 // Returns 0 for success
 //        -1 for failure
-static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *buf,
+static int write_buffer(const char *fn, const char *mode, size_t l, sort_buf_t *buf,
                         const sam_hdr_t *h, int n_threads, const htsFormat *fmt,
                         int clear_minhash, char *arg_list, int no_pg, int write_index)
 {
@@ -2393,8 +2429,9 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
         if (!(out_idx_fn = auto_index(fp, fn, (sam_hdr_t *)h))) goto fail;
 
     if (n_threads > 1) hts_set_threads(fp, n_threads);
+    bam1_t view = { 0 }, *b = &view;
     for (i = 0; i < l; ++i) {
-        bam1_t *b = buf[i].bam_record;
+        sort_rec_view(b, buf[i].rec);
         if (clear_minhash && b->core.tid == -1) {
             // To see the position for debugging
             // b->core.pos = ((((uint64_t)b->core.pos)<<31)|(uint32_t)b->core.mpos) + b->core.isize;
@@ -2425,11 +2462,11 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
 
 #define NUMBASE 256
 
-static int ks_radixsort(size_t n, bam1_tag *buf, const sam_hdr_t *h)
+static int ks_radixsort(size_t n, sort_buf_t *buf, const sam_hdr_t *h)
 {
     int curr = 0, ret = -1;
     ssize_t i;
-    bam1_tag *buf_ar2[2], *bam_a, *bam_b;
+    sort_buf_t *buf_ar2[2], *bam_a, *bam_b;
     uint64_t max_pos = 1;
     uint32_t max_tid = 1, tid_bytes = 0, pos_bytes = 0, byte = 0;
     uint32_t tid_shift_l, tid_shift_r;
@@ -2440,9 +2477,9 @@ static int ks_radixsort(size_t n, bam1_tag *buf, const sam_hdr_t *h)
     //         Convert unmapped tid (-1) to number of references so unmapped
     //         sort to the end.
     for (i = 0; i < n; i++) {
-        bam1_t *b = buf[i].bam_record;
-        uint32_t tid = b->core.tid == -1 ? nref : b->core.tid;
-        uint64_t pos = ((uint64_t)(b->core.pos + 1) << 1) | bam_is_rev(b);
+        const bam1_core_t *c = &buf[i].rec->core;
+        uint32_t tid = c->tid == -1 ? nref : c->tid;
+        uint64_t pos = ((uint64_t)(c->pos + 1) << 1) | ((c->flag & BAM_FREVERSE) != 0);
         if (max_tid < tid)
             max_tid = tid;
         if (max_pos < pos)
@@ -2460,13 +2497,13 @@ static int ks_radixsort(size_t n, bam1_tag *buf, const sam_hdr_t *h)
     // of bytes required.  Values are stored little-endian so that we
     // get a least-significant digit (byte) radix sort.
     for (i = 0; i < n; i++) {
-        bam1_t *b = buf[i].bam_record;
-        uint32_t tid = b->core.tid == -1 ? nref : b->core.tid;
+        const bam1_core_t *c = &buf[i].rec->core;
+        uint32_t tid = c->tid == -1 ? nref : c->tid;
         // 'pos' here includes as many bytes of tid as will fit
         // in the space remaining above pos_bytes.  The rest of tid
         // is written out separately.
-        uint64_t pos = (bam_is_rev(b) |
-                        ((uint64_t)(b->core.pos + 1) << 1) |
+        uint64_t pos = (((c->flag & BAM_FREVERSE) != 0) |
+                        ((uint64_t)(c->pos + 1) << 1) |
                         (tid_shift_l < 64 ? (uint64_t) tid << tid_shift_l : 0));
         u64_to_le(pos, buf[i].u.pos_tid);
         u32_to_le(tid_shift_r < 32 ? tid >> tid_shift_r : 0,
@@ -2474,7 +2511,7 @@ static int ks_radixsort(size_t n, bam1_tag *buf, const sam_hdr_t *h)
     }
 
     buf_ar2[0] = buf;
-    buf_ar2[1] = (bam1_tag *)malloc(sizeof(bam1_tag) * n);
+    buf_ar2[1] = (sort_buf_t *)malloc(sizeof(sort_buf_t) * n);
     if (buf_ar2[1] == NULL) {
         print_error("sort", "couldn't allocate memory for temporary buf");
         goto err;
@@ -2495,7 +2532,7 @@ static int ks_radixsort(size_t n, bam1_tag *buf, const sam_hdr_t *h)
         curr = 1 - curr;
     }
     if (curr == 1) {
-        bam1_tag *end = buf + n;
+        sort_buf_t *end = buf + n;
         bam_a = buf_ar2[0]; bam_b = buf_ar2[1];
         while (bam_a < end) *bam_a++ = *bam_b++;
     }
@@ -3117,10 +3154,12 @@ static int reverse_complement(bam1_t *b) {
 
 static inline void worker_minhash(worker_t *w) {
     int i;
+    bam1_t view = { 0 }, *b = &view;
     for (i = 0; i < w->buf_len; i++) {
-        bam1_t *b = w->buf[i].bam_record;
-        if (b->core.tid != -1)
+        sort_rec_t *r = w->buf[i].rec;
+        if (r->core.tid != -1)
             continue;
+        sort_rec_view(b, r);
 
         int pos = 0, rev = 0;
         uint64_t mh = kmer_h
@@ -3152,6 +3191,7 @@ static inline void worker_minhash(worker_t *w) {
         b->core.pos = (mh>>31) & 0x7fffffff;
         b->core.mpos = mh&0x7fffffff;
         b->core.isize = pos;
+        r->core = b->core;
     }
 }
 
@@ -3177,7 +3217,7 @@ static void *worker(void *data)
     return 0;
 }
 
-static int sort_blocks(size_t k, bam1_tag *buf, const sam_hdr_t *h,
+static int sort_blocks(size_t k, sort_buf_t *buf, const sam_hdr_t *h,
                        int n_threads, buf_region *in_mem,
                        int large_pos, int minimiser_kmer, bool try_rev,
                        bool no_squash)
@@ -3421,7 +3461,8 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     size_t max_k, k, max_mem, bam_mem_offset;
     sam_hdr_t *header = NULL;
     samFile *fp = NULL;
-    bam1_tag *buf = NULL;
+    sort_buf_t *buf = NULL;
+    sort_rec_t *overflow_rec = NULL; // the record that did not fit in bam_mem
     template_coordinate_keys_t *keys = NULL;
     bam1_t *b = bam_init1();
     uint8_t *bam_mem = NULL;
@@ -3519,15 +3560,16 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     k = max_k = bam_mem_offset = 0;
     size_t name_len = strlen(prefix) + 30;
     int placed = 0;
+    bam1_t rec_view = { 0 };
     while ((res = sam_read1(fp, header, b)) >= 0) {
         int mem_full = 0;
 
         placed |= b->core.tid >= 0;
 
         if (k == max_k) {
-            bam1_tag *new_buf;
+            sort_buf_t *new_buf;
             max_k = max_k? max_k<<1 : 0x10000;
-            if ((new_buf = realloc(buf, max_k * sizeof(bam1_tag))) == NULL) {
+            if ((new_buf = realloc(buf, max_k * sizeof(sort_buf_t))) == NULL) {
                 print_error("sort", "couldn't allocate memory for buf");
                 goto err;
             }
@@ -3540,31 +3582,37 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         }
 
         // Check if the BAM record will fit in the memory limit
-        if (bam_mem_offset + sizeof(*b) + b->l_data < max_mem) {
+        size_t rec_size = offsetof(sort_rec_t, data) + b->l_data;
+        if (bam_mem_offset + rec_size < max_mem) {
             // Copy record into the memory block
-            buf[k].bam_record = (bam1_t *)(bam_mem + bam_mem_offset);
-            *buf[k].bam_record = *b;
-            buf[k].bam_record->data = (uint8_t *)((char *)buf[k].bam_record + sizeof(bam1_t));
-            memcpy(buf[k].bam_record->data, b->data, b->l_data);
+            buf[k].rec = (sort_rec_t *)(bam_mem + bam_mem_offset);
             // store next BAM record in next 8-byte-aligned address after
             // current one
-            bam_mem_offset = (bam_mem_offset + sizeof(*b) + b->l_data + 8 - 1) & ~((size_t)(8 - 1));
+            bam_mem_offset = (bam_mem_offset + rec_size + 8 - 1) & ~((size_t)(8 - 1));
         } else {
-            // Add a pointer to the remaining record
-            buf[k].bam_record = b;
+            // Keep the remaining record aside until the buffer is written
+            if (!(overflow_rec = malloc(rec_size))) {
+                print_error("sort", "couldn't allocate memory for a record");
+                goto err;
+            }
+            buf[k].rec = overflow_rec;
             mem_full = 1;
         }
+        buf[k].rec->core = b->core;
+        buf[k].rec->l_data = b->l_data;
+        memcpy(buf[k].rec->data, b->data, b->l_data);
+        sort_rec_view(&rec_view, buf[k].rec);
 
         // Set the tag if sorting by tag, or the key for template coordinate sorting
         switch (g_sam_order) {
             case TagQueryName:
             case TagCoordinate:
-                buf[k].u.tag = bam_aux_get(buf[k].bam_record, g_sort_tag);
+                buf[k].u.tag = bam_aux_get(&rec_view, g_sort_tag);
                 break;
             case TemplateCoordinate:
                 ++keys->n;
                 template_coordinate_key_t *key = template_coordinate_keys_get(keys, k);
-                buf[k].u.key = template_coordinate_key(buf[k].bam_record, key, header, lib_lookup);
+                buf[k].u.key = template_coordinate_key(&rec_view, key, header, lib_lookup);
                 if (buf[k].u.key == NULL) goto err;
                 break;
             default:
@@ -3641,6 +3689,8 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             k = 0;
             if (keys != NULL) keys->n = 0;
             bam_mem_offset = 0;
+            free(overflow_rec);
+            overflow_rec = NULL;
 
         }
     }
@@ -3711,6 +3761,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     }
     bam_destroy1(b);
     free(buf);
+    free(overflow_rec);
     if (keys != NULL) {
         for (i = 0; i < keys->m; ++i) {
             free(keys->buffers[i]);
