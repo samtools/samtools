@@ -123,7 +123,7 @@ typedef struct
     uint64_t n;
     uint64_t other;
 }
-acgtno_count_t;
+acgtno_count_t; // collect_orig_read_stats indexes these fields as uint64_t[6]
 
 typedef struct
 {
@@ -954,44 +954,21 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
 
     acgtno_count_t *acgtno_cycles = (order == READ_ORDER_FIRST) ? stats->acgtno_cycles_1st : (order == READ_ORDER_LAST) ?  stats->acgtno_cycles_2nd : NULL ;
     if (acgtno_cycles) {
+        // acgtno_count_t field (a,c,g,t,n,other) for each 4-bit code =ACMGRSVTWYHKDBN,
+        // and for its complement.  "=" and ambiguity codes count as other.
+        // GCT only reports A/C/G/T, so n and other in acgtno_revcomp are never read.
+        static const uint8_t code2idx[16]  = {5,0,1,5,2,5,5,5,3,5,5,5,5,5,5,4};
+        static const uint8_t code2comp[16] = {5,3,2,5,1,5,5,5,0,5,5,5,5,5,5,4};
+        const uint8_t *rc_idx = reverse ? code2comp : code2idx;
+        uint64_t (*cycles)[6]  = (uint64_t (*)[6]) acgtno_cycles;
+        uint64_t (*revcomp)[6] = (uint64_t (*)[6]) stats->acgtno_revcomp;
         for (i=0; i<seq_len; i++)
         {
-            // Read cycle for current index
+            int code = bam_seqi(seq, i);
             read_cycle = (reverse ? seq_len-i-1 : i);
-
-            // Conversion from uint8_t coding:
-            //      -12-4---8------5
-            //      =ACMGRSVTWYHKDBN
-            switch (bam_seqi(seq, i)) {
-            case 1:
-                acgtno_cycles[ read_cycle ].a++;
-                reverse ? stats->acgtno_revcomp[ read_cycle ].t++ : stats->acgtno_revcomp[ read_cycle ].a++;
-                break;
-            case 2:
-                acgtno_cycles[ read_cycle ].c++;
-                reverse ? stats->acgtno_revcomp[ read_cycle ].g++ : stats->acgtno_revcomp[ read_cycle ].c++;
-                gc_count++;
-                break;
-            case 4:
-                acgtno_cycles[ read_cycle ].g++;
-                reverse ? stats->acgtno_revcomp[ read_cycle ].c++ : stats->acgtno_revcomp[ read_cycle ].g++;
-                gc_count++;
-                break;
-            case 8:
-                reverse ? stats->acgtno_revcomp[ read_cycle ].a++ : stats->acgtno_revcomp[ read_cycle ].t++;
-                acgtno_cycles[ read_cycle ].t++;
-                break;
-            case 15:
-                acgtno_cycles[ read_cycle ].n++;
-                break;
-            default:
-                /*
-                 * count "=" sequences in "other" along
-                 * with MRSVWYHKDB ambiguity codes
-                 */
-                acgtno_cycles[ read_cycle ].other++;
-                break;
-            }
+            cycles[read_cycle][code2idx[code]]++;
+            revcomp[read_cycle][rc_idx[code]]++;
+            gc_count += (0x14 >> code) & 1; // C (2) or G (4)
         }
     }
     int gc_idx_min = gc_count*(stats->ngc-1)/seq_len;
@@ -1027,22 +1004,28 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
 
     // Quality histogram and average quality. Clipping is neglected.
     if (quals) {
+        // Bounds are checked once per read, not per base
+        int max_q = 0;
+        for (i=0; i<seq_len; i++)
+            if ( bam_quals[i]>max_q ) max_q = bam_quals[i];
+        if ( max_q>=stats->nquals )
+            error("TODO: quality too high %d>=%d (%s %"PRIhts_pos" %s)\n", max_q, stats->nquals, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
+        if ( max_q>stats->max_qual ) {
+            realloc_qual_buffers(stats, stats->nbases, stats->nbases, max_q);
+            quals = order==READ_ORDER_FIRST
+                ? stats->quals_1st
+                : stats->quals_2nd;
+            stats->max_qual = max_q;
+        }
+
+        uint64_t sum_qual = 0;
         for (i=0; i<seq_len; i++)
         {
             uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
-            if ( qual>=stats->nquals )
-                error("TODO: quality too high %d>=%d (%s %"PRIhts_pos" %s)\n", qual, stats->nquals, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
-            if ( qual>stats->max_qual ) {
-                realloc_qual_buffers(stats, stats->nbases, stats->nbases, qual);
-                quals = order==READ_ORDER_FIRST
-                    ? stats->quals_1st
-                    : stats->quals_2nd;
-                stats->max_qual = qual;
-            }
-
             quals[qual][i]++;
-            stats->sum_qual += qual;
+            sum_qual += qual;
         }
+        stats->sum_qual += sum_qual;
     }
 
     // Barcode statistics
