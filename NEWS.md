@@ -1,6 +1,23 @@
 Release a.b
 -----------
 
+* `samtools merge` now decompresses its input files using the thread pool as
+  well as compressing the output.  Previously only the output was threaded, so
+  merging many compressed files did not scale beyond about two CPUs regardless
+  of the `-@` value.
+
+* `samtools view -U` now also uses the thread pool for the unaccounted-reads
+  output file, so that stream is no longer compressed single-threaded.
+
+* `samtools mpileup`, `samtools bedcov` and `samtools coverage` now accept the
+  `-@`/`--threads` option and use a thread pool to decompress their inputs.
+  These commands previously had no threading support.
+
+* `samtools mpileup -@` also runs BAQ (and `-C` mapping quality capping) on
+  the thread pool, in batches of reads delivered in their original order, so
+  output is unchanged.  BAQ dominates mpileup's run time when a reference is
+  given, so this gives most of the multi-threaded speed-up.
+
 Release 1.25 (27th October 2026)
 --------------------------------
 

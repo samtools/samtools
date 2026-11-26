@@ -115,6 +115,9 @@ copied to the output. When it is not available, a header is created with field
 names matching the fields listed in the GA4GH BED specification.
 The \fB-c\fR and \fB-d\fR options can add further per-file columns named
 .IR in1.sam "_count and " in1.sam "_depth along with " in1.sam "_count."
+.TP
+.BI "-@ " INT ", --threads " INT
+Number of input decompression threads to use in addition to the main thread [0].
 
 .SH AUTHOR
 .PP
