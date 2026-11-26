@@ -150,36 +150,24 @@ typedef struct {
 
 static khint32_t do_hash(unsigned char *key, khint32_t len);
 
+static inline uint64_t mix64(uint64_t h, uint64_t v) {
+    h ^= v;
+    h *= 0x9e3779b97f4a7c15ULL;
+    return h ^ (h >> 32);
+}
+
+/* Hashes the same fields as key_equal compares, a word at a time. */
 static khint_t hash_key(key_data_t key) {
-    int i = 0;
-    khint_t hash;
+    uint64_t h = mix64(0, (uint64_t)key.this_coord);
+    h = mix64(h, ((uint64_t)(uint32_t)key.this_ref << 32) | (uint32_t)key.barcode);
+    h = mix64(h, ((uint64_t)(uint32_t)key.read_group << 32) | (uint8_t)key.orientation);
 
-    if (key.single) {
-        unsigned char sig[21];
-
-        memcpy(sig + i, &key.this_ref, 4);      i += 4;
-        memcpy(sig + i, &key.this_coord, 8);    i += 8;
-        memcpy(sig + i, &key.orientation, 1);   i += 1;
-        memcpy(sig + i, &key.barcode, 4);       i += 4;
-        memcpy(sig + i, &key.read_group, 4);    i += 4;
-
-        hash = do_hash(sig, i);
-    } else {
-        unsigned char sig[34];
-
-        memcpy(sig + i, &key.this_ref, 4);      i += 4;
-        memcpy(sig + i, &key.this_coord, 8);    i += 8;
-        memcpy(sig + i, &key.other_ref, 4);     i += 4;
-        memcpy(sig + i, &key.other_coord, 8);   i += 8;
-        memcpy(sig + i, &key.leftmost, 1);      i += 1;
-        memcpy(sig + i, &key.orientation, 1);   i += 1;
-        memcpy(sig + i, &key.barcode, 4);       i += 4;
-        memcpy(sig + i, &key.read_group, 4);    i += 4;
-
-        hash = do_hash(sig, i);
+    if (!key.single) {
+        h = mix64(h, (uint64_t)key.other_coord);
+        h = mix64(h, ((uint64_t)(uint32_t)key.other_ref << 32) | (uint8_t)key.leftmost);
     }
 
-    return hash;
+    return (khint_t)h;
 }
 
 
@@ -212,7 +200,8 @@ static int key_equal(key_data_t a, key_data_t b) {
 }
 
 
-#define __free_queue_element(p)
+// queue entries keep their bam1_t for reuse; it is freed with the queue
+#define __free_queue_element(p) bam_destroy1((p)->data.b)
 
 // Orientations (prime numbers to feed to hashing algorithm)
 #define O_FF 2
@@ -1964,7 +1953,6 @@ static int write_out_of_scope_reads(md_param_t *param, bam_hdr_t *header, tmp_fi
         }
 
         kl_shift(read_queue, read_buffer, NULL);
-        bam_destroy1(in_read->b);
         rq = kl_begin(read_buffer);
     }
 
@@ -1986,7 +1974,7 @@ static int write_out_end_of_list(md_param_t *param, bam_hdr_t *header, tmp_file_
     while (rq != kl_end(read_buffer)) {
         in_read = &kl_val(rq);
 
-        if (bam_get_qname(in_read->b)) { // last entry will be blank
+        if (in_read->b->l_data) { // last entry will be blank
             if (param->check_chain && !in_read->dup_checked && (in_read->original || in_read->duplicate)) {
                 if (find_duplicate_chains(param, in_read, hashes->dup_hash, dup_list, &warnings->opt, stat_array)) {
                     print_error("markdup", "error, duplicate checking failed.\n");
@@ -2001,7 +1989,6 @@ static int write_out_end_of_list(md_param_t *param, bam_hdr_t *header, tmp_file_
         }
 
         kl_shift(read_queue, read_buffer, NULL);
-        bam_destroy1(in_read->b);
         rq = kl_begin(read_buffer);
     }
 
@@ -2190,7 +2177,6 @@ static int bam_mark_duplicates(md_param_t *param) {
     bam_hdr_t *header = NULL;
     khiter_t k;
     klist_t(read_queue) *read_buffer = kl_init(read_queue);
-    kliter_t(read_queue) *rq;
     position_t positions = {0, 0};
     read_queue_t *in_read;
     int ret;
@@ -2271,7 +2257,7 @@ static int bam_mark_duplicates(md_param_t *param) {
         }
     }
 
-    if ((in_read->b = bam_init1()) == NULL) {
+    if (!in_read->b && (in_read->b = bam_init1()) == NULL) {
         print_error("markdup", "error, unable to allocate memory for alignment.\n");
         goto fail;
     }
@@ -2373,7 +2359,7 @@ static int bam_mark_duplicates(md_param_t *param) {
             goto fail;
         }
 
-        if ((in_read->b = bam_init1()) == NULL) {
+        if (!in_read->b && (in_read->b = bam_init1()) == NULL) {
             print_error("markdup", "error, unable to allocate memory for alignment.\n");
             goto fail;
         }
@@ -2383,6 +2369,8 @@ static int bam_mark_duplicates(md_param_t *param) {
         print_error("markdup", "error, truncated input file.\n");
         goto fail;
     }
+
+    in_read->b->l_data = 0; // the entry that failed to read may hold a reused record
 
     // write out the end of the list
     if (write_out_end_of_list(param, header, &temp, read_buffer, &hashes, &dup_list, stat_array, &warnings))
@@ -2439,8 +2427,6 @@ static int bam_mark_duplicates(md_param_t *param) {
     return 0;
 
  fail:
-    for (rq = kl_begin(read_buffer); rq != kl_end(read_buffer); rq = kl_next(rq))
-        bam_destroy1(kl_val(rq).b);
     kl_destroy(read_queue, read_buffer);
 
     for (k = kh_begin(hashes.dup_hash); k != kh_end(hashes.dup_hash); ++k) {
